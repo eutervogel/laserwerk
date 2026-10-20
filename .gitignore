@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.nc
+*.gcode
+
+# Konfiguration und Token liegen in ~/.config/laserwerk/ und gehoeren
+# ohnehin nicht ins Projekt - hier nur zur Sicherheit:
+telegram.json
+config.json
+presets.json

@@ -1,7 +1,7 @@
 """
 Material-Presets und Einstellungen, gespeichert unter ~/.config/laserwerk/.
 
-ACHTUNG: Die Werte stammen von EINER Maschine (450 nm Diode, GRBL 1.1f).
+ACHTUNG: Die Werte stammen von EINER Maschine (450 nm, 5,5 W, GRBL 1.1f).
 Anderer Laser, andere Linse, anderer Fokus - andere Werte. Sie sind ein
 Startpunkt fuer einen eigenen Materialtest, kein Rezept. Uebertragbar ist
 das Verhaeltnis S/F, also die Energie je Millimeter; die Leistungen selbst

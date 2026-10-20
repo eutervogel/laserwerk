@@ -5,6 +5,8 @@ Bild oder SVG hineinwerfen, auf dem simulierten Werkstück platzieren, Achsen
 fahren, Fokus suchen, gravieren oder schneiden — in einem Fenster, ohne
 Abonnement und ohne Cloud.
 
+![Motiv auf dem Werkstück platzieren](bilder/01-platzieren.png)
+
 Entstanden, weil es auf Linux wenig dazwischen gibt: LightBurn kostet Geld,
 LaserGRBL läuft nur unter Windows, und der Weg über Inkscape-Erweiterungen und
 einen reinen G-Code-Sender ist umständlich, sobald man Graustufen rastern oder
@@ -35,6 +37,22 @@ Material ausprobieren will.
   am Werkstück steht. Meldet sich, wenn ein Job fertig ist oder in Alarm geht.
 - **Fortsetzen** — `fortsetzen.py` findet nach einem hängengebliebenen Job die
   genaue Stoppstelle über die Position und streamt den Rest.
+
+## So sieht das aus
+
+Erzeugter G-Code mit Laufzeitschätzung — das Motiv liegt als Brandspur auf dem
+simulierten Brettchen, der Rahmen mit den Anfassern lässt sich mit der Maus
+schieben und skalieren:
+
+![G-Code erzeugt](bilder/02-gcode.png)
+
+Materialwerte als Preset, Achsensteuerung und die Tests:
+
+| | |
+|---|---|
+| ![Material](bilder/03-material.png) | ![Maschine](bilder/04-maschine.png) |
+
+![Tests](bilder/05-tests.png)
 
 ## Braucht
 
@@ -74,10 +92,11 @@ Papier und Staub. Dieses Programm nimmt einem davon nichts ab.
 
 ## Die Materialwerte sind nicht deine
 
-Die mitgelieferten Presets wurden auf **einer** Maschine gemessen — anderer
-Laser, andere Linse, anderer Fokus, andere Werte. Sie sind ein Startpunkt für
-einen eigenen Materialtest, kein Rezept. Zu viel Leistung bei zu wenig Vorschub
-heißt nicht „dunkler", sondern irgendwann „brennt".
+Die mitgelieferten Presets wurden auf **einer** Maschine gemessen: 450 nm,
+5,5 W optisch. Anderer Laser, andere Linse, anderer Fokus, andere Werte. Sie
+sind ein Startpunkt für einen eigenen Materialtest, kein Rezept. Zu viel
+Leistung bei zu wenig Vorschub heißt nicht „dunkler", sondern irgendwann
+„brennt".
 
 Was übertragbar ist, ist das **Verhältnis S/F**: Leistung geteilt durch
 Vorschub, also die Energie je Millimeter. Auf der Referenzmaschine hat sich
@@ -93,10 +112,10 @@ Stillstand weiter, und jede Pause frisst ein Loch.
 
 ## Getestet mit
 
-GRBL 1.1f auf einem CH340-Board, Diodenlaser mit 450 nm, 200 × 200 mm
-Verfahrweg, Z-Achse mit Motor. Dort gelaufen: Schichtplatte, Schiefer,
-Wildleder, Papier (geschnitten). Weißes PLA ist mit einem blauen Laser nicht
-zu markieren — das Licht wird reflektiert.
+GRBL 1.1f auf einem CH340-Board, Diodenlaser mit 450 nm und 5,5 W optischer
+Leistung, 200 × 200 mm Verfahrweg, Z-Achse mit Motor. Dort gelaufen:
+Schichtplatte, Schiefer, Wildleder, Papier (geschnitten). Weißes PLA ist mit
+einem blauen Laser nicht zu markieren — das Licht wird reflektiert.
 
 Der Verfahrweg steht im Reiter *Maschine* und lässt sich aus `$130`/`$131`
 übernehmen.

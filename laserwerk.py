@@ -101,7 +101,7 @@ class App:
                    command=self.reset_view).pack(fill="x", padx=4, pady=(0, 4))
 
         # Reiter
-        nb = ttk.Notebook(main)
+        nb = self.nb = ttk.Notebook(main)
         nb.grid(row=0, column=1, sticky="nsew")
         self.tab_motiv = self._scrollbereich(nb, "Motiv")
         self.tab_mat = self._scrollbereich(nb, "Material")
@@ -160,7 +160,12 @@ class App:
         cv.configure(yscrollcommand=sb.set)
         cv.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-        innen.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        def passend(e):
+            # Breite mitwachsen lassen: sonst schneidet die Spalte Knoepfe
+            # und Hinweise am rechten Rand ab.
+            cv.configure(scrollregion=cv.bbox("all"),
+                         width=max(400, innen.winfo_reqwidth()))
+        innen.bind("<Configure>", passend)
         cv.bind("<Configure>", lambda e: cv.itemconfigure(fen, width=e.width))
         for ev, d in (("<Button-4>", -1), ("<Button-5>", 1)):
             cv.bind_all(ev, lambda e, d=d: (cv.yview_scroll(d, "units")
@@ -1628,6 +1633,11 @@ class App:
             return
         import io
         im = self.preview_pil.resize((w, h), Image.LANCZOS)
+        # Helle Stellen durchsichtig lassen, sonst deckt ein weisser Kasten
+        # das Brettchen zu und man sieht die Lage nicht mehr.
+        alpha = im.point(lambda v: 255 - v)
+        im = Image.merge("RGBA", (im.point(lambda v: 60), im.point(lambda v: 38),
+                                  im.point(lambda v: 24), alpha))
         b = io.BytesIO(); im.save(b, format="PNG")
         self.preview_img = tk.PhotoImage(data=base64.b64encode(b.getvalue()))
         self._prev_cache = ((w, h), self.preview_img)

@@ -18,6 +18,8 @@ import lw_job as J
 import lw_presets as P
 import lw_vector as V
 import lw_telegram as TG
+import lw_text
+from lw_text import T
 
 AREA = 200.0          # mm, Voreinstellung; wirklich gilt cfg["x_max"]/["y_max"]
 CANVAS = 540          # px
@@ -79,7 +81,8 @@ class App:
         main.rowconfigure(0, weight=1)
 
         # Arbeitsfeld
-        lf = ttk.LabelFrame(main, text="Arbeitsbereich (200 x 200 mm, Nullpunkt unten links)")
+        self.lf_flaeche = lf = ttk.LabelFrame(main)
+        self._flaeche_titel()
         lf.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self.cv = tk.Canvas(lf, width=CANVAS, height=CANVAS, bg=S.CANVAS_BG,
                             highlightthickness=1, highlightbackground=S.LINE)
@@ -97,7 +100,7 @@ class App:
         self.cv.bind("<Button-1>", self._press)
         self.cv.bind("<B1-Motion>", self._drag_move)
         self.cv.bind("<ButtonRelease-1>", lambda e: setattr(self, "drag", None))
-        ttk.Button(lf, text="Ansicht zurücksetzen (Doppelklick)",
+        ttk.Button(lf, text=T("Ansicht zurücksetzen (Doppelklick)"),
                    command=self.reset_view).pack(fill="x", padx=4, pady=(0, 4))
 
         # Reiter
@@ -123,18 +126,17 @@ class App:
         # Jobleiste
         jb = ttk.Frame(main, padding=(0, 6, 0, 0))
         jb.grid(row=1, column=0, columnspan=2, sticky="ew")
-        for i, (t, f) in enumerate([("Rahmen fahren", self.frame),
-                                     ("Start", self.start),
-                                     ("Pause", self.pause),
-                                     ("Weiter", self.resume),
-                                     ("STOPP", self.stop)]):
-            st = {"Start": "Accent.TButton", "STOPP": "Danger.TButton"}.get(t, "TButton")
-            ttk.Button(jb, text=t, command=f, style=st).grid(row=0, column=i, padx=3)
-        ttk.Checkbutton(jb, text="Rahmen sichtbar", variable=self.v_frame_laser
+        for i, (t, f, st) in enumerate([("Rahmen fahren", self.frame, "TButton"),
+                                        ("Start", self.start, "Accent.TButton"),
+                                        ("Pause", self.pause, "TButton"),
+                                        ("Weiter", self.resume, "TButton"),
+                                        ("STOPP", self.stop, "Danger.TButton")]):
+            ttk.Button(jb, text=T(t), command=f, style=st).grid(row=0, column=i, padx=3)
+        ttk.Checkbutton(jb, text=T("Rahmen sichtbar"), variable=self.v_frame_laser
                         ).grid(row=0, column=5, padx=(8, 0))
         self.prog = ttk.Progressbar(jb, length=300, maximum=1000)
         self.prog.grid(row=0, column=6, padx=8)
-        self.lbl_prog = ttk.Label(jb, text="kein Job", width=34)
+        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=34)
         self.lbl_prog.grid(row=0, column=7)
         self.btn_theme = ttk.Button(jb, command=self.toggle_theme, width=8)
         self.btn_theme.grid(row=0, column=8, padx=(6, 0))
@@ -144,7 +146,7 @@ class App:
         if TG.lade().get("auto") and self.v_tg_token.get().strip():
             self.root.after(800, self.fern_start)
 
-        self.lbl_status = ttk.Label(main, text="nicht verbunden", anchor="w",
+        self.lbl_status = ttk.Label(main, text=T("nicht verbunden"), anchor="w",
                                     style="Status.TLabel")
         self.lbl_status.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
@@ -152,7 +154,7 @@ class App:
         """Reiterinhalt in einen scrollbaren Bereich packen - die Spalte ist
         laenger als mancher Bildschirm."""
         aussen = ttk.Frame(nb)
-        nb.add(aussen, text=titel)
+        nb.add(aussen, text=T(titel))
         cv = tk.Canvas(aussen, highlightthickness=0, bg=S.BG, width=400)
         sb = ttk.Scrollbar(aussen, orient="vertical", command=cv.yview)
         innen = ttk.Frame(cv, padding=12)
@@ -173,11 +175,11 @@ class App:
         return innen
 
     def _row(self, parent, r, label, var, width=8, unit=""):
-        ttk.Label(parent, text=label).grid(row=r, column=0, sticky="w", pady=2)
+        ttk.Label(parent, text=T(label)).grid(row=r, column=0, sticky="w", pady=2)
         e = ttk.Entry(parent, textvariable=var, width=width)
         e.grid(row=r, column=1, sticky="w")
         if unit:
-            ttk.Label(parent, text=unit).grid(row=r, column=2, sticky="w")
+            ttk.Label(parent, text=T(unit)).grid(row=r, column=2, sticky="w")
         return e
 
     # ---------------------------------------------------------------- Motiv
@@ -185,9 +187,9 @@ class App:
         f = self.tab_motiv
         ob = ttk.Frame(f)
         ob.grid(row=0, column=0, columnspan=3, sticky="ew")
-        ttk.Button(ob, text="Datei öffnen …", command=self.open_image
+        ttk.Button(ob, text=T("Datei öffnen …"), command=self.open_image
                    ).pack(side="left", fill="x", expand=True)
-        ttk.Button(ob, text="Motiv entfernen", command=self.clear_motif
+        ttk.Button(ob, text=T("Motiv entfernen"), command=self.clear_motif
                    ).pack(side="left", padx=(4, 0))
         self.lbl_src = ttk.Label(f, text="-", wraplength=260)
         self.lbl_src.grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 8))
@@ -201,109 +203,109 @@ class App:
         ew.bind("<Return>", lambda e: self._keep_ratio("w"))
         eh.bind("<FocusOut>", lambda e: self._keep_ratio("h"))
         eh.bind("<Return>", lambda e: self._keep_ratio("h"))
-        ttk.Checkbutton(f, text="Seitenverhältnis halten", variable=self.v_lock
+        ttk.Checkbutton(f, text=T("Seitenverhältnis halten"), variable=self.v_lock
                         ).grid(row=4, column=0, columnspan=3, sticky="w")
 
-        wk = ttk.LabelFrame(f, text="Werkstück (Nullpunkt = linke untere Ecke)", padding=4)
+        wk = ttk.LabelFrame(f, text=T("Werkstück (Nullpunkt = linke untere Ecke)"), padding=4)
         wk.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 2))
-        ttk.Label(wk, text="Länge X").grid(row=0, column=0, sticky="w")
+        ttk.Label(wk, text=T("Länge X")).grid(row=0, column=0, sticky="w")
         ttk.Spinbox(wk, from_=1, to=200, increment=1, width=6,
                     textvariable=self.v_bw).grid(row=0, column=1, sticky="w")
-        ttk.Label(wk, text="Breite Y").grid(row=0, column=2, sticky="e", padx=(8, 2))
+        ttk.Label(wk, text=T("Breite Y")).grid(row=0, column=2, sticky="e", padx=(8, 2))
         ttk.Spinbox(wk, from_=1, to=200, increment=1, width=6,
                     textvariable=self.v_bh).grid(row=0, column=3, sticky="w")
         ttk.Label(wk, text="mm").grid(row=0, column=4, sticky="w")
-        ttk.Checkbutton(wk, text="anzeigen", variable=self.v_board
+        ttk.Checkbutton(wk, text=T("anzeigen"), variable=self.v_board
                         ).grid(row=1, column=0, columnspan=2, sticky="w")
-        ttk.Checkbutton(wk, text="einrasten", variable=self.v_snap
+        ttk.Checkbutton(wk, text=T("einrasten"), variable=self.v_snap
                         ).grid(row=1, column=2, columnspan=2, sticky="w")
-        ttk.Button(wk, text="Motiv mittig setzen", command=self.center_motif
+        ttk.Button(wk, text=T("Motiv mittig setzen"), command=self.center_motif
                    ).grid(row=2, column=0, columnspan=5, sticky="ew", pady=(4, 0))
-        ttk.Label(wk, text="Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren.",
+        ttk.Label(wk, text=T("Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren."),
                   style="Muted.TLabel").grid(row=3, column=0, columnspan=5, sticky="w")
 
-        box = ttk.LabelFrame(f, text="Größe, Anlauf und Versatz", padding=4)
+        box = ttk.LabelFrame(f, text=T("Größe, Anlauf und Versatz"), padding=4)
         box.grid(row=6, column=0, columnspan=3, sticky="ew", pady=6)
         self.v_maxw = tk.DoubleVar(value=190.0)
         self.v_maxh = tk.DoubleVar(value=110.0)
-        ttk.Label(box, text="max.").grid(row=0, column=0)
+        ttk.Label(box, text=T("max.")).grid(row=0, column=0)
         ttk.Entry(box, textvariable=self.v_maxw, width=6).grid(row=0, column=1)
         ttk.Label(box, text="x").grid(row=0, column=2)
         ttk.Entry(box, textvariable=self.v_maxh, width=6).grid(row=0, column=3)
         ttk.Label(box, text="mm").grid(row=0, column=4)
-        ttk.Button(box, text="Einpassen", command=self.fit).grid(row=0, column=5, padx=4)
-        ttk.Button(box, text="Originalgröße 1:1 (SVG/DXF)", command=self.original_size
+        ttk.Button(box, text=T("Einpassen"), command=self.fit).grid(row=0, column=5, padx=4)
+        ttk.Button(box, text=T("Originalgröße 1:1 (SVG/DXF)"), command=self.original_size
                    ).grid(row=1, column=0, columnspan=6, sticky="ew", pady=(4, 6))
-        ttk.Label(box, text="Anlauf").grid(row=2, column=0, sticky="w")
+        ttk.Label(box, text=T("Anlauf")).grid(row=2, column=0, sticky="w")
         ttk.Spinbox(box, from_=0, to=10, increment=0.5, width=5,
                     textvariable=self.v_over).grid(row=2, column=1, sticky="w")
-        ttk.Label(box, text="Versatz X").grid(row=2, column=2, columnspan=2, sticky="e")
+        ttk.Label(box, text=T("Versatz X")).grid(row=2, column=2, columnspan=2, sticky="e")
         ttk.Spinbox(box, from_=0, to=50, increment=0.5, width=5,
                     textvariable=self.v_xoff).grid(row=2, column=4, sticky="w")
         ttk.Label(box, text="mm").grid(row=2, column=5, sticky="w")
-        ttk.Label(box, text="Versatz Y").grid(row=3, column=2, columnspan=2, sticky="e")
+        ttk.Label(box, text=T("Versatz Y")).grid(row=3, column=2, columnspan=2, sticky="e")
         ttk.Spinbox(box, from_=0, to=200, increment=0.5, width=5,
                     textvariable=self.v_yoff).grid(row=3, column=4, sticky="w")
         ttk.Label(box, text="mm").grid(row=3, column=5, sticky="w")
-        ttk.Label(box, text="Der Anlauf macht die Zeilenränder gleichmäßig,\n"
-                            "der Versatz hält ihn rechts vom Nullpunkt.",
+        ttk.Label(box, text=T("Der Anlauf macht die Zeilenränder gleichmäßig,\n"
+                              "der Versatz hält ihn rechts vom Nullpunkt."),
                   style="Muted.TLabel").grid(row=4, column=0, columnspan=6,
                                              sticky="w", pady=(4, 0))
 
-        rs = ttk.LabelFrame(f, text="Rückseite (zweiseitig gravieren)", padding=4)
+        rs = ttk.LabelFrame(f, text=T("Rückseite (zweiseitig gravieren)"), padding=4)
         rs.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         for i, (t, v) in enumerate((("Vorderseite", "nein"),
                                     ("Rückseite, Wenden links/rechts", "x"),
                                     ("Rückseite, Wenden oben/unten", "y"))):
-            ttk.Radiobutton(rs, text=t, value=v, variable=self.v_spiegel
+            ttk.Radiobutton(rs, text=T(t), value=v, variable=self.v_spiegel
                             ).grid(row=i, column=0, columnspan=3, sticky="w")
-        ttk.Label(rs, text="Wendeachse bei").grid(row=3, column=0, sticky="w")
+        ttk.Label(rs, text=T("Wendeachse bei")).grid(row=3, column=0, sticky="w")
         ttk.Spinbox(rs, from_=0, to=200, increment=0.5, width=6,
                     textvariable=self.v_achse).grid(row=3, column=1, sticky="w")
         ttk.Label(rs, text="mm").grid(row=3, column=2, sticky="w")
-        ttk.Label(rs, text="Mittellinie der Aufspannung, nicht des Motivs.",
+        ttk.Label(rs, text=T("Mittellinie der Aufspannung, nicht des Motivs."),
                   style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
 
         self.v_rot = tk.IntVar(value=0)
-        ttk.Label(f, text="Drehen").grid(row=8, column=0, sticky="w")
+        ttk.Label(f, text=T("Drehen")).grid(row=8, column=0, sticky="w")
         cb = ttk.Combobox(f, textvariable=self.v_rot, values=[0, 90, 180, 270],
                           width=5, state="readonly")
         cb.grid(row=8, column=1, sticky="w")
         cb.bind("<<ComboboxSelected>>", lambda e: self._rotated())
 
         self.v_inv = tk.BooleanVar(value=False)
-        ttk.Checkbutton(f, text="Invertieren (Hell und Dunkel tauschen)", variable=self.v_inv
+        ttk.Checkbutton(f, text=T("Invertieren (Hell und Dunkel tauschen)"), variable=self.v_inv
                         ).grid(row=9, column=0, columnspan=3, sticky="w")
         self.v_mode = tk.StringVar(value="schwelle")
-        ttk.Radiobutton(f, text="Schwarzweiß (Strichgrafik)", value="schwelle",
+        ttk.Radiobutton(f, text=T("Schwarzweiß (Strichgrafik)"), value="schwelle",
                         variable=self.v_mode).grid(row=11, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="Graustufen (Leistung variiert)", value="grau",
+        ttk.Radiobutton(f, text=T("Graustufen (Leistung variiert)"), value="grau",
                         variable=self.v_mode).grid(row=10, column=0, columnspan=3, sticky="w")
         self.v_schw = tk.DoubleVar(value=0.5)
-        ttk.Label(f, text="Schwelle").grid(row=12, column=0, sticky="w")
+        ttk.Label(f, text=T("Schwelle")).grid(row=12, column=0, sticky="w")
         ttk.Scale(f, from_=0.1, to=0.9, variable=self.v_schw, length=140
                   ).grid(row=12, column=1, columnspan=2, sticky="w")
 
-        jb = ttk.LabelFrame(f, text="Bearbeitung", padding=4)
+        jb = ttk.LabelFrame(f, text=T("Bearbeitung"), padding=4)
         jb.grid(row=13, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_job = tk.StringVar(value="gravur")
-        ttk.Radiobutton(jb, text="Gravieren (Flächen, zeilenweise)", value="gravur",
+        ttk.Radiobutton(jb, text=T("Gravieren (Flächen, zeilenweise)"), value="gravur",
                         variable=self.v_job, command=self._job_changed).grid(row=0, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(jb, text="Schneiden (Konturen, SVG/DXF)", value="schnitt",
+        ttk.Radiobutton(jb, text=T("Schneiden (Konturen, SVG/DXF)"), value="schnitt",
                         variable=self.v_job, command=self._job_changed).grid(row=1, column=0, columnspan=3, sticky="w")
-        ttk.Label(jb, text="Durchgänge").grid(row=2, column=0, sticky="w")
+        ttk.Label(jb, text=T("Durchgänge")).grid(row=2, column=0, sticky="w")
         self.v_passes = tk.IntVar(value=1)
         ttk.Spinbox(jb, from_=1, to=10, textvariable=self.v_passes, width=4
                     ).grid(row=2, column=1, sticky="w")
 
-        ttk.Button(f, text="Vorschau + G-Code erzeugen", command=self.generate, style="Accent.TButton"
+        ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
                    ).grid(row=14, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         self.lbl_info = ttk.Label(f, text="", justify="left")
         self.lbl_info.grid(row=15, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
         bb.grid(row=16, column=0, columnspan=3, sticky="ew", pady=6)
-        ttk.Button(bb, text="G-Code speichern", command=self.save_gcode).pack(side="left")
-        ttk.Button(bb, text="G-Code laden", command=self.load_gcode).pack(side="left", padx=4)
+        ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
+        ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
 
     # ---------------------------------------------------------------- Material
     def _build_material(self):
@@ -329,21 +331,21 @@ class App:
         for v in (self.v_s, self.v_f):
             v.trace_add("write", lambda *a: self._show_sf())
         self.v_notiz = tk.StringVar()
-        ttk.Label(f, text="Notiz").grid(row=7, column=0, sticky="w")
+        ttk.Label(f, text=T("Notiz")).grid(row=7, column=0, sticky="w")
         ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=8, column=0, columnspan=3, sticky="ew")
 
-        ttk.Button(f, text="Übernehmen + Z-Höhe anfahren", command=self.apply_preset, style="Accent.TButton"
+        ttk.Button(f, text=T("Übernehmen + Z-Höhe anfahren"), command=self.apply_preset, style="Accent.TButton"
                    ).grid(row=9, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         ttk.Separator(f).grid(row=10, column=0, columnspan=3, sticky="ew", pady=8)
         self.v_pname = tk.StringVar()
-        ttk.Label(f, text="Speichern als").grid(row=11, column=0, sticky="w")
+        ttk.Label(f, text=T("Speichern als")).grid(row=11, column=0, sticky="w")
         ttk.Entry(f, textvariable=self.v_pname, width=20).grid(row=11, column=1, columnspan=2, sticky="w")
         bb = ttk.Frame(f)
         bb.grid(row=12, column=0, columnspan=3, sticky="ew", pady=4)
-        ttk.Button(bb, text="Speichern", command=self.save_preset).pack(side="left")
-        ttk.Button(bb, text="Löschen", command=self.delete_preset).pack(side="left", padx=4)
-        ttk.Label(f, text="Z fährt auf Materialdicke + Korrektur.\n"
-                          "Dafuer muss unter 'Maschine' eine\nZ-Referenz gesetzt sein.", style="Muted.TLabel").grid(row=13, column=0, columnspan=3, sticky="w", pady=8)
+        ttk.Button(bb, text=T("Speichern"), command=self.save_preset).pack(side="left")
+        ttk.Button(bb, text=T("Löschen"), command=self.delete_preset).pack(side="left", padx=4)
+        ttk.Label(f, text=T("Z fährt auf Materialdicke + Korrektur.\n"
+                            "Dafuer muss unter 'Maschine' eine\nZ-Referenz gesetzt sein."), style="Muted.TLabel").grid(row=13, column=0, columnspan=3, sticky="w", pady=8)
         self._show_sf()
 
     # ---------------------------------------------------------------- Maschine
@@ -353,25 +355,25 @@ class App:
         self.cb_port = ttk.Combobox(f, textvariable=self.v_port, width=22,
                                     values=G.ports())
         self.cb_port.grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Button(f, text="neu suchen", command=lambda: self.cb_port.configure(
+        ttk.Button(f, text=T("neu suchen"), command=lambda: self.cb_port.configure(
             values=G.ports())).grid(row=0, column=2)
-        self.btn_conn = ttk.Button(f, text="Verbinden", command=self.toggle_connect, style="Accent.TButton")
+        self.btn_conn = ttk.Button(f, text=T("Verbinden"), command=self.toggle_connect, style="Accent.TButton")
         self.btn_conn.grid(row=1, column=0, columnspan=3, sticky="ew", pady=4)
 
-        self.lbl_pos = ttk.Label(f, text="X -  Y -  Z -", style="Pos.TLabel")
+        self.lbl_pos = ttk.Label(f, text=T("X -  Y -  Z -"), style="Pos.TLabel")
         self.lbl_pos.grid(row=2, column=0, columnspan=3, sticky="w")
         self.lbl_ref = ttk.Label(f, text="")
         self.lbl_ref.grid(row=3, column=0, columnspan=3, sticky="w")
 
-        jg = ttk.LabelFrame(f, text="Verfahren", padding=4)
+        jg = ttk.LabelFrame(f, text=T("Verfahren"), padding=4)
         jg.grid(row=4, column=0, columnspan=3, sticky="ew", pady=6)
         self.v_step = tk.DoubleVar(value=1.0)
         sr = ttk.Frame(jg)
         sr.grid(row=0, column=0, columnspan=5)
         for s in (0.1, 1.0, 10.0, 50.0):
-            ttk.Radiobutton(sr, text=f"{s:g} mm", value=s, variable=self.v_step
+            ttk.Radiobutton(sr, text=T('{0:g} mm').format(s), value=s, variable=self.v_step
                             ).pack(side="left")
-        B = lambda t, c, r, col: ttk.Button(jg, text=t, width=8 if "Z" in t else 5,
+        B = lambda t, c, r, col: ttk.Button(jg, text=T(t), width=9 if "Z" in t else 5,
                                             command=c).grid(row=r, column=col, padx=1, pady=1)
         B("Y+", lambda: self.jog(0, 1, 0), 1, 1)
         B("X-", lambda: self.jog(-1, 0, 0), 2, 0)
@@ -380,92 +382,103 @@ class App:
         B("Z hoch", lambda: self.jog(0, 0, 1), 1, 4)
         B("Z runter", lambda: self.jog(0, 0, -1), 3, 4)
         self.v_zinv = tk.BooleanVar(value=self.cfg.get("z_invert", False))
-        ttk.Checkbutton(jg, text="Z-Richtung umkehren", variable=self.v_zinv,
+        ttk.Checkbutton(jg, text=T("Z-Richtung umkehren"), variable=self.v_zinv,
                         command=self._save_cfg).grid(row=4, column=0, columnspan=5, sticky="w")
 
-        vw = ttk.LabelFrame(f, text="Verfahrweg der Maschine", padding=4)
+        vw = ttk.LabelFrame(f, text=T("Verfahrweg der Maschine"), padding=4)
         vw.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 2))
         self.v_xmax = tk.DoubleVar(value=self.cfg["x_max"])
         self.v_ymax = tk.DoubleVar(value=self.cfg["y_max"])
         ttk.Label(vw, text="X").grid(row=0, column=0, sticky="w")
         ttk.Entry(vw, textvariable=self.v_xmax, width=6).grid(row=0, column=1)
-        ttk.Label(vw, text="x  Y").grid(row=0, column=2)
+        ttk.Label(vw, text=T("x  Y")).grid(row=0, column=2)
         ttk.Entry(vw, textvariable=self.v_ymax, width=6).grid(row=0, column=3)
         ttk.Label(vw, text="mm").grid(row=0, column=4, sticky="w")
-        ttk.Button(vw, text="übernehmen", command=self.set_area
+        ttk.Button(vw, text=T("übernehmen"), command=self.set_area
                    ).grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 0))
-        ttk.Button(vw, text="aus der Maschine ($130/$131)", command=self.area_von_maschine
+        ttk.Button(vw, text=T("aus der Maschine ($130/$131)"), command=self.area_von_maschine
                    ).grid(row=1, column=3, columnspan=2, sticky="ew", padx=(4, 0), pady=(4, 0))
-        ttk.Label(vw, text="Bestimmt die gezeichnete Arbeitsfläche und die\n"
-                           "Warnung, wenn ein Job nicht hineinpasst.",
+        ttk.Label(vw, text=T("Bestimmt die gezeichnete Arbeitsfläche und die\n"
+                             "Warnung, wenn ein Job nicht hineinpasst."),
                   style="Muted.TLabel").grid(row=2, column=0, columnspan=5, sticky="w")
 
-        ttk.Button(f, text="Nullpunkt XY = hier", command=self.set_zero
+        ttk.Button(f, text=T("Nullpunkt XY = hier"), command=self.set_zero
                    ).grid(row=6, column=0, columnspan=3, sticky="ew", pady=2)
         zr = ttk.Frame(f)
         zr.grid(row=7, column=0, columnspan=3, sticky="ew", pady=2)
-        ttk.Label(zr, text="Fokus sitzt auf Material").pack(side="left")
+        ttk.Label(zr, text=T("Fokus sitzt auf Material")).pack(side="left")
         self.v_zref = tk.DoubleVar(value=12.0)
         ttk.Entry(zr, textvariable=self.v_zref, width=5).pack(side="left", padx=2)
         ttk.Label(zr, text="mm").pack(side="left")
-        ttk.Button(zr, text="Z-Referenz", command=self.set_zref).pack(side="left", padx=4)
-        ttk.Button(f, text="Zum Nullpunkt fahren", command=self.goto_zero
+        ttk.Button(zr, text=T("Z-Referenz"), command=self.set_zref).pack(side="left", padx=4)
+        ttk.Button(f, text=T("Zum Nullpunkt fahren"), command=self.goto_zero
                    ).grid(row=8, column=0, columnspan=3, sticky="ew", pady=2)
-        zg = ttk.LabelFrame(f, text="Position zeigen", padding=4)
+        zg = ttk.LabelFrame(f, text=T("Position zeigen"), padding=4)
         zg.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(8, 2))
-        ttk.Label(zg, text="Leistung S").grid(row=0, column=0, sticky="w")
+        ttk.Label(zg, text=T("Leistung S")).grid(row=0, column=0, sticky="w")
         ttk.Spinbox(zg, from_=5, to=120, increment=5, width=5,
                     textvariable=self.v_zeig_s).grid(row=0, column=1, sticky="w")
-        ttk.Label(zg, text="Kreuz +/- mm").grid(row=1, column=0, sticky="w")
+        ttk.Label(zg, text=T("Kreuz +/- mm")).grid(row=1, column=0, sticky="w")
         ttk.Spinbox(zg, from_=0.5, to=8, increment=0.5, width=5,
                     textvariable=self.v_zeig_a).grid(row=1, column=1, sticky="w")
-        ttk.Button(zg, text="Kreuz fahren", command=self.zeigen
+        ttk.Button(zg, text=T("Kreuz fahren"), command=self.zeigen
                    ).grid(row=0, column=2, rowspan=2, padx=(8, 0), sticky="nsew")
-        ttk.Label(zg, text="Kurzes Kreuz mit schwacher Leistung, danach\n"
-                           "exakt zurück. Gilt auch für 'Rahmen sichtbar'.",
+        ttk.Label(zg, text=T("Kurzes Kreuz mit schwacher Leistung, danach\n"
+                             "exakt zurück. Gilt auch für 'Rahmen sichtbar'."),
                   style="Muted.TLabel").grid(row=2, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
         bb.grid(row=9, column=0, columnspan=3, sticky="ew", pady=2)
-        ttk.Button(bb, text="Entsperren ($X)", command=self.unlock).pack(side="left")
-        ttk.Button(bb, text="Laser aus (M5)", command=self.laser_off).pack(side="left", padx=4)
+        ttk.Button(bb, text=T("Entsperren ($X)"), command=self.unlock).pack(side="left")
+        ttk.Button(bb, text=T("Laser aus (M5)"), command=self.laser_off).pack(side="left", padx=4)
 
-        ttk.Label(f, text="Befehl:").grid(row=11, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(f, text=T("Befehl:")).grid(row=11, column=0, sticky="w", pady=(8, 0))
         self.v_cmd = tk.StringVar()
         ec = ttk.Entry(f, textvariable=self.v_cmd, width=22)
         ec.grid(row=12, column=0, columnspan=2, sticky="ew")
         ec.bind("<Return>", lambda e: self.send_cmd())
-        ttk.Button(f, text="senden", command=self.send_cmd).grid(row=12, column=2)
-        tg = ttk.LabelFrame(f, text="Fernsteuerung über Telegram", padding=4)
+        ttk.Button(f, text=T("senden"), command=self.send_cmd).grid(row=12, column=2)
+        sp = ttk.LabelFrame(f, text=T("Sprache"), padding=4)
+        sp.grid(row=15, column=0, columnspan=3, sticky="ew", pady=(8, 2))
+        self.v_sprache = tk.StringVar(
+            value=lw_text.SPRACHEN.get(self.cfg.get("sprache", "de"), "Deutsch"))
+        cbs = ttk.Combobox(sp, textvariable=self.v_sprache, state="readonly",
+                           width=12, values=list(lw_text.SPRACHEN.values()))
+        cbs.grid(row=0, column=0, sticky="w")
+        cbs.bind("<<ComboboxSelected>>", lambda e: self.set_sprache())
+        ttk.Label(sp, text=T("Gilt nach einem Neustart des Programms."),
+                  style="Muted.TLabel").grid(row=0, column=1, padx=(8, 0), sticky="w")
+
+        tg = ttk.LabelFrame(f, text=T("Fernsteuerung über Telegram"), padding=4)
         tg.grid(row=13, column=0, columnspan=3, sticky="ew", pady=(8, 2))
         d = TG.lade()
         self.v_tg_token = tk.StringVar(value=d.get("token", ""))
         self.v_tg_auto = tk.BooleanVar(value=d.get("auto", False))
-        ttk.Label(tg, text="Token").grid(row=0, column=0, sticky="w")
+        ttk.Label(tg, text=T("Token")).grid(row=0, column=0, sticky="w")
         ttk.Entry(tg, textvariable=self.v_tg_token, width=22, show="•"
                   ).grid(row=0, column=1, columnspan=2, sticky="ew")
-        self.btn_tg = ttk.Button(tg, text="Bot starten", command=self.fern_start)
+        self.btn_tg = ttk.Button(tg, text=T("Bot starten"), command=self.fern_start)
         self.btn_tg.grid(row=1, column=0, columnspan=2, sticky="ew", pady=3)
-        ttk.Button(tg, text="Chat lösen", command=self.fern_loesen
+        ttk.Button(tg, text=T("Chat lösen"), command=self.fern_loesen
                    ).grid(row=1, column=2, padx=(4, 0))
-        self.lbl_tg = ttk.Label(tg, text="aus")
+        self.lbl_tg = ttk.Label(tg, text=T("aus"))
         self.lbl_tg.grid(row=2, column=0, columnspan=3, sticky="w")
-        ttk.Checkbutton(tg, text="beim Programmstart mitstarten",
+        ttk.Checkbutton(tg, text=T("beim Programmstart mitstarten"),
                         variable=self.v_tg_auto, command=self._tg_auto
                         ).grid(row=3, column=0, columnspan=3, sticky="w")
-        ttk.Label(tg, text="Achsen und Sichtkreuz vom Handy. Gravur und\n"
-                           "Schnitt starten absichtlich nur hier.",
+        ttk.Label(tg, text=T("Achsen und Sichtkreuz vom Handy. Gravur und\n"
+                             "Schnitt starten absichtlich nur hier."),
                   style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
         tg.columnconfigure(1, weight=1)
 
         self.log = tk.Text(f, width=36, height=6, font=("DejaVu Sans Mono", 8),
                            bg=S.PANEL, fg=S.TEXT, relief="flat", highlightthickness=1,
                            highlightbackground=S.LINE, padx=6, pady=4)
-        self.log.grid(row=14, column=0, columnspan=3, sticky="ew", pady=4)
+        self.log.grid(row=16, column=0, columnspan=3, sticky="ew", pady=4)
 
     # ---------------------------------------------------------------- Tests
     def _build_tests(self):
         f = self.tab_test
-        fb = ttk.LabelFrame(f, text="Fokustest über Z", padding=6)
+        fb = ttk.LabelFrame(f, text=T("Fokustest über Z"), padding=6)
         fb.grid(row=0, column=0, sticky="ew")
         self.v_ft_span = tk.DoubleVar(value=4.0)
         self.v_ft_step = tk.DoubleVar(value=0.5)
@@ -475,33 +488,34 @@ class App:
         self._row(fb, 1, "Schritt", self.v_ft_step, unit="mm")
         self._row(fb, 2, "Leistung S", self.v_ft_s)
         self._row(fb, 3, "Vorschub F", self.v_ft_f)
-        ttk.Label(fb, text="Mitte = Materialdicke + Korrektur\n"
-                           "(Reiter Material). Striche von links\n"
-                           "nach rechts = Z aufsteigend.", style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
-        ttk.Button(fb, text="Fokustest starten", command=self.fokustest
+        ttk.Label(fb, text=T("Mitte = Materialdicke + Korrektur\n"
+                             "(Reiter Material). Striche von links\n"
+                             "nach rechts = Z aufsteigend."), style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+        ttk.Button(fb, text=T("Fokustest starten"), command=self.fokustest
                    ).grid(row=5, column=0, columnspan=3, sticky="ew", pady=4)
         self.lb_fz = tk.Listbox(fb, height=6, width=28)
         self.lb_fz.grid(row=6, column=0, columnspan=3, sticky="ew")
-        ttk.Button(fb, text="Gewählten Strich ins Material übernehmen",
+        ttk.Button(fb, text=T("Gewählten Strich ins Material übernehmen"),
                    command=self.take_focus).grid(row=7, column=0, columnspan=3, sticky="ew", pady=4)
 
-        mb = ttk.LabelFrame(f, text="Materialtest", padding=6)
+        mb = ttk.LabelFrame(f, text=T("Materialtest"), padding=6)
         mb.grid(row=1, column=0, sticky="ew", pady=8)
         self.v_mt_s = tk.StringVar(value="200,400,600,830,1000")
         self.v_mt_f = tk.StringVar(value="600,1000")
         self._row(mb, 0, "Leistungen", self.v_mt_s, width=20)
         self._row(mb, 1, "Vorschübe", self.v_mt_f, width=20)
-        ttk.Button(mb, text="Materialtest starten", command=self.materialtest
+        ttk.Button(mb, text=T("Materialtest starten"), command=self.materialtest
                    ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=4)
-        ttk.Label(mb, text="Spalten = Leistung, Zeilen = Vorschub,\n"
-                           "unten links beginnend. Felder 6 mm.", style="Muted.TLabel").grid(row=3, column=0, columnspan=3, sticky="w")
+        ttk.Label(mb, text=T("Spalten = Leistung, Zeilen = Vorschub,\n"
+                             "unten links beginnend. Felder 6 mm."), style="Muted.TLabel").grid(row=3, column=0, columnspan=3, sticky="w")
 
     # ================================================================ Motiv
     def open_image(self):
         p = filedialog.askopenfilename(
-            title="Bild oder SVG", initialdir=os.path.expanduser("~/Downloads"),
-            filetypes=[("Bilder, SVG, DXF", "*.png *.jpg *.jpeg *.webp *.bmp *.svg *.dxf"),
-                       ("alle", "*")])
+            title=T("Bild oder SVG"), initialdir=os.path.expanduser("~/Downloads"),
+            filetypes=[(T("Bilder, SVG, DXF"),
+                        "*.png *.jpg *.jpeg *.webp *.bmp *.svg *.dxf"),
+                       (T("alle"), "*")])
         if not p:
             return
         ext = os.path.splitext(p)[1].lower()
@@ -514,16 +528,16 @@ class App:
                 except Exception as e:
                     if ext == ".dxf":
                         raise
-                    self._log(f"SVG-Konturen nicht lesbar: {e}")
+                    self._log(T('SVG-Konturen nicht lesbar: {0}').format(e))
             if ext == ".dxf":
                 if not vec:
-                    raise ValueError("keine Konturen in der DXF gefunden")
+                    raise ValueError(T("keine Konturen in der DXF gefunden"))
                 # DXF hat keine Flaechen - Vorschau aus den Konturen zeichnen
                 im = V.render_preview(V.flatten(vec, 1.0))
             else:
                 im = J.autocrop(J.load_source(p, 3000 if ext == ".svg" else None), 245)
         except Exception as e:
-            messagebox.showerror("Laden fehlgeschlagen", str(e))
+            messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
             return
         self.clear_motif()
         self.src, self.src_path, self.vec = im, p, vec
@@ -533,13 +547,13 @@ class App:
         elif not vec and self.v_job.get() == "schnitt":
             self.v_job.set("gravur")
         self.v_rot.set(0)
-        self.lbl_src.configure(text=f"{os.path.basename(p)}\n{im.width} x {im.height} px")
+        self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(os.path.basename(p), im.width, im.height))
         self.fit()
 
     def clear_motif(self):
         """Bild, Vorschau und erzeugten/geladenen G-Code verwerfen."""
         if self.grbl.job_running:
-            messagebox.showinfo("Motiv", "Während eines Jobs nicht möglich.")
+            messagebox.showinfo(T("Motiv"), T("Während eines Jobs nicht möglich."))
             return
         self.src = self.src_path = None
         self.vec = self.cut_polys = self.vec_bb = None
@@ -557,32 +571,32 @@ class App:
     def original_size(self):
         """Größe 1:1 aus SVG/DXF übernehmen - für Schablonen."""
         if not self.vec:
-            messagebox.showinfo("Originalgröße",
-                "Nur bei SVG und DXF möglich - Pixelbilder haben keine\n"
-                "verlässliche Größe in Millimetern.")
+            messagebox.showinfo(T("Originalgröße"),
+                T("Nur bei SVG und DXF möglich - Pixelbilder haben keine\n"
+                  "verlässliche Größe in Millimetern."))
             return
         x0, y0, x1, y1 = self._vec_bbox()
         w, h = x1 - x0, y1 - y0
         if self.v_rot.get() in (90, 270):
             w, h = h, w
         self.v_w.set(round(w, 3)); self.v_h.set(round(h, 3))
-        self._log(f"Originalgröße 1:1: {w:.3f} x {h:.3f} mm")
+        self._log(T('Originalgröße 1:1: {0:.3f} x {1:.3f} mm').format(w, h))
         self._stale(); self._draw()
 
     def _job_changed(self):
         if self.v_job.get() == "gravur" and self.src_path and self.src_path.lower().endswith(".dxf"):
-            messagebox.showinfo("DXF", "DXF-Dateien enthalten nur Konturen.\n"
-                                "Zum Nachzeichnen 'Schneiden' mit wenig Leistung nehmen.")
+            messagebox.showinfo(T("DXF"), T("DXF-Dateien enthalten nur Konturen.\n"
+                                "Zum Nachzeichnen 'Schneiden' mit wenig Leistung nehmen."))
             self.v_job.set("schnitt")
             return
         if self.v_job.get() == "schnitt" and not self.vec:
-            messagebox.showinfo("Schneiden", "Schneiden geht nur mit SVG- oder DXF-Dateien,\n"
-                                "weil dafür Konturen nötig sind.")
+            messagebox.showinfo(T("Schneiden"), T("Schneiden geht nur mit SVG- oder DXF-Dateien,\n"
+                                  "weil dafür Konturen nötig sind."))
             self.v_job.set("gravur")
             return
         if self.v_job.get() == "schnitt":
-            self._log("Schnittmodus: passendes Material-Preset wählen "
-                      "(z.B. Papier S500/F600)")
+            self._log(T("Schnittmodus: passendes Material-Preset wählen "
+                        "(z.B. Papier S500/F600)"))
         self.fit()
 
     def _aspect(self):
@@ -619,7 +633,7 @@ class App:
         if self.src is not None and self.lines is not None:
             self.lines = self.info = self.preview_img = self.cut_polys = None
             self.preview_pil = self._prev_cache = None
-            self.lbl_info.configure(text="Einstellung geändert -\nVorschau neu erzeugen.")
+            self.lbl_info.configure(text=T("Einstellung geändert -\nVorschau neu erzeugen."))
 
     def fit(self):
         if self.src is None:
@@ -636,13 +650,13 @@ class App:
 
     def generate(self):
         if self.src is None:
-            messagebox.showinfo("Kein Motiv", "Erst ein Bild oder SVG öffnen.")
+            messagebox.showinfo(T("Kein Motiv"), T("Erst ein Bild oder SVG öffnen."))
             return
         try:
             w, h, line = self.v_w.get(), self.v_h.get(), self.v_line.get()
             s, f = self.v_s.get(), self.v_f.get()
         except tk.TclError:
-            messagebox.showerror("Eingabe", "Zahlenfeld ungültig.")
+            messagebox.showerror(T("Eingabe"), T("Zahlenfeld ungültig."))
             return
         if self.v_job.get() == "schnitt":
             return self._generate_cut(w, h, s, f)
@@ -669,10 +683,11 @@ class App:
             p = p[::-1, :]
             yoff = 2 * achse - yoff - bh
         if xoff < 0 or yoff < 0:
-            messagebox.showerror("Rückseite",
-                f"Gespiegelt landet das Motiv bei X {xoff:.1f} / Y {yoff:.1f} mm,\n"
-                "also links bzw. unter dem Nullpunkt.\n\n"
-                "Wendeachse groesser waehlen oder Nullpunkt weiter links setzen.")
+            messagebox.showerror(T("Rückseite"),
+                T("Gespiegelt landet das Motiv bei X {x:.1f} / Y {y:.1f} mm,\n"
+                  "also links bzw. unter dem Nullpunkt.\n\n"
+                  "Wendeachse groesser waehlen oder Nullpunkt weiter links "
+                  "setzen.").format(x=xoff, y=yoff))
             return
         self.lines, self.info = J.raster_gcode(
             p, line, self._s(s), f,
@@ -681,28 +696,32 @@ class App:
             kommentar=os.path.basename(self.src_path)
                       + ("  RUECKSEITE" if sp != "nein" else ""))
         if xoff < over:
-            self._log(f"Hinweis: Anlauf {over} mm > Versatz {xoff} mm - "
-                      f"der Kopf faehrt bis X {xoff-over:.1f}, also links am Nullpunkt vorbei.")
+            self._log(T("Hinweis: Anlauf {a:g} mm > Versatz {x:g} mm - der Kopf "
+                        "faehrt bis X {bis:.1f}, also links am Nullpunkt vorbei."
+                        ).format(a=over, x=xoff, bis=xoff - over))
         self.preview_pil = J.preview_image(p)
         self.preview_img = None
         self.preview_pos = (xoff, yoff + self.info["hoehe"])
         i = self.info
         warn = ""
         if i["xmax"] > self.cfg["x_max"] or h > self.cfg["y_max"]:
-            warn = "\nACHTUNG: größer als der Verfahrweg!"
+            warn = T("\nACHTUNG: größer als der Verfahrweg!")
         self.lbl_info.configure(text=(
-            ("RÜCKSEITE gespiegelt an " + ("X" if sp == "x" else "Y")
-             + f" = {achse:.1f} mm\n" if sp != "nein" else "")
-            + f"Motiv {i['breite']:.1f} x {i['hoehe']:.1f} mm\n"
-            f"X {i['xmin']:.1f} .. {i['xmax']:.1f} mm (mit Overscan)\n"
-            f"{i['befehle']} Befehle, Brennweg {i['cut_m']:.1f} m\n"
-            f"Laufzeit ca. {i['sekunden']/60:.0f} min\n"
-            f"S{s}/F{f} = S/F {s/f:.2f}{warn}"))
+            (T("RÜCKSEITE gespiegelt an {achse} = {mm:.1f} mm\n").format(
+                achse="X" if sp == "x" else "Y", mm=achse) if sp != "nein" else "")
+            + T("Motiv {b:.1f} x {h:.1f} mm\n"
+                "X {x0:.1f} .. {x1:.1f} mm (mit Overscan)\n"
+                "{n} Befehle, Brennweg {m:.1f} m\n"
+                "Laufzeit ca. {min:.0f} min\n"
+                "S{s}/F{f} = S/F {sf:.2f}{warn}").format(
+                b=i["breite"], h=i["hoehe"], x0=i["xmin"], x1=i["xmax"],
+                n=i["befehle"], m=i["cut_m"], min=i["sekunden"] / 60,
+                s=s, f=f, sf=s / f, warn=warn)))
         self._draw()
 
     def _generate_cut(self, w, h, s, f):
         if not self.vec:
-            messagebox.showinfo("Schneiden", "Keine Konturen - bitte ein SVG oder DXF öffnen.")
+            messagebox.showinfo(T("Schneiden"), T("Keine Konturen - bitte ein SVG oder DXF öffnen."))
             return
         x0, y0, x1, y1 = self._vec_bbox()
         bw, bh = x1 - x0, y1 - y0
@@ -718,9 +737,9 @@ class App:
             polys = V.mirror(polys, sp, achse)
             x0, y0, x1, y1 = V.bbox(polys)
             if x0 < 0 or y0 < 0:
-                messagebox.showerror("Rückseite",
-                    f"Gespiegelt beginnt der Schnitt bei X {x0:.1f} / Y {y0:.1f} mm.\n"
-                    "Wendeachse groesser waehlen.")
+                messagebox.showerror(T("Rückseite"),
+                    T("Gespiegelt beginnt der Schnitt bei X {x:.1f} / Y {y:.1f} mm.\n"
+                      "Wendeachse groesser waehlen.").format(x=x0, y=y0))
                 return
         polys = V.order(polys)
         passes = max(1, self.v_passes.get())
@@ -729,15 +748,18 @@ class App:
         self.cut_polys = polys
         self.preview_img = None
         i = self.info
-        warn = "\nACHTUNG: größer als der Verfahrweg!" if (
+        warn = T("\nACHTUNG: größer als der Verfahrweg!") if (
             i["xmax"] > self.cfg["x_max"] or i["hoehe"] > self.cfg["y_max"]) else ""
         self.lbl_info.configure(text=(
-            ("RÜCKSEITE gespiegelt\n" if sp != "nein" else "")
-            + f"Schnitt {i['breite']:.1f} x {i['hoehe']:.1f} mm\n"
-            f"{i['konturen']} Konturen, innen vor außen\n"
-            f"Schnittlänge {i['cut_m']:.2f} m x {passes} Durchgang/-gänge\n"
-            f"Laufzeit ca. {max(1, i['sekunden']/60):.0f} min\n"
-            f"S{s}/F{f} = S/F {s/f:.2f}{warn}"))
+            (T("RÜCKSEITE gespiegelt\n") if sp != "nein" else "")
+            + T("Schnitt {b:.1f} x {h:.1f} mm\n"
+                "{k} Konturen, innen vor außen\n"
+                "Schnittlänge {m:.2f} m x {p} Durchgang/-gänge\n"
+                "Laufzeit ca. {min:.0f} min\n"
+                "S{s}/F{f} = S/F {sf:.2f}{warn}").format(
+                b=i["breite"], h=i["hoehe"], k=i["konturen"], m=i["cut_m"],
+                p=passes, min=max(1, i["sekunden"] / 60),
+                s=s, f=f, sf=s / f, warn=warn)))
         self._draw()
 
     def save_gcode(self):
@@ -753,14 +775,15 @@ class App:
 
     def load_gcode(self):
         p = filedialog.askopenfilename(initialdir=os.path.expanduser("~/Downloads"),
-                                       filetypes=[("G-Code", "*.nc *.gcode *.gc *.ngc"), ("alle", "*")])
+                                       filetypes=[("G-Code", "*.nc *.gcode *.gc *.ngc"),
+                                                  (T("alle"), "*")])
         if not p:
             return
         self.clear_motif()
         self.lines = [l for l in (x.split(";")[0].strip() for x in open(p)) if l]
         png, (x0, y0, x1, y1), info = J.gcode_preview(self.lines, (CANVAS - 20) / self.area)
         if info is None:
-            messagebox.showerror("G-Code", "Keine Fahrbewegungen in der Datei gefunden.")
+            messagebox.showerror(T("G-Code"), T("Keine Fahrbewegungen in der Datei gefunden."))
             self.lines = None
             return
         self.info = info
@@ -773,12 +796,17 @@ class App:
         m3 = any(l.upper().startswith("M3") for l in self.lines)
         neg = x0 < -0.01 or y0 < -0.01
         self.lbl_info.configure(text=(
-            f"{os.path.basename(p)}\n"
-            f"X {x0:.1f} .. {x1:.1f}   Y {y0:.1f} .. {y1:.1f} mm\n"
-            f"{info['befehle']} Befehle, Brennweg {info['cut_m']:.1f} m\n"
-            f"Laufzeit ca. {max(1, info['sekunden']/60):.0f} min"
-            + ("\nHinweis: nutzt M3 - bei Pause brennt der\nLaser weiter!" if m3 else "")
-            + ("\nHinweis: negative Koordinaten - Nullpunkt\nliegt nicht links unten!" if neg else "")))
+            T("{datei}\n"
+              "X {x0:.1f} .. {x1:.1f}   Y {y0:.1f} .. {y1:.1f} mm\n"
+              "{n} Befehle, Brennweg {m:.1f} m\n"
+              "Laufzeit ca. {min:.0f} min").format(
+                datei=os.path.basename(p), x0=x0, x1=x1, y0=y0, y1=y1,
+                n=info["befehle"], m=info["cut_m"],
+                min=max(1, info["sekunden"] / 60))
+            + (T("\nHinweis: nutzt M3 - bei Pause brennt der\nLaser weiter!")
+               if m3 else "")
+            + (T("\nHinweis: negative Koordinaten - Nullpunkt\n"
+                 "liegt nicht links unten!") if neg else "")))
         self._draw()
 
     # ================================================================ Material
@@ -794,8 +822,7 @@ class App:
 
     def _show_sf(self):
         try:
-            self.lbl_sf.configure(text=f"S/F = {self.v_s.get()/self.v_f.get():.2f}"
-                                       "   (Holz bewährt: 0,83)")
+            self.lbl_sf.configure(text=T('S/F = {0:.2f}   (Holz bewährt: 0,83)').format(self.v_s.get()/self.v_f.get()))
         except (tk.TclError, ZeroDivisionError):
             pass
 
@@ -807,20 +834,22 @@ class App:
 
     def apply_preset(self):
         if not self.grbl.connected:
-            messagebox.showinfo("Material", "Werte übernommen. Z fährt erst,\n"
-                                "wenn die Maschine verbunden ist.")
+            messagebox.showinfo(T("Material"), T("Werte übernommen. Z fährt erst,\n"
+                                  "wenn die Maschine verbunden ist."))
             return
         if not self.zref_ok:
-            messagebox.showwarning("Keine Z-Referenz",
-                "Z-Höhe kann nicht angefahren werden.\n\n"
-                "Unter 'Maschine': Fokus auf ein Material bekannter Dicke\n"
-                "einstellen und 'Z-Referenz' setzen.")
+            messagebox.showwarning(T("Keine Z-Referenz"),
+                T("Z-Höhe kann nicht angefahren werden.\n\n"
+                  "Unter 'Maschine': Fokus auf ein Material bekannter Dicke\n"
+                  "einstellen und 'Z-Referenz' setzen."))
             return
         z = self._z_target()
-        if not messagebox.askokcancel("Z anfahren", f"Z auf {z:.2f} mm fahren?\n"
-                                      "(Kopf muss frei über dem Material stehen)"):
+        if not messagebox.askokcancel(T("Z anfahren"),
+                T("Z auf {z:.2f} mm fahren?\n"
+                  "(Kopf muss frei über dem Material stehen)").format(z=z)):
             return
-        self._bg(lambda: self.grbl.goto(z=self._zv(z)), f"Z -> {z:.2f}")
+        self._bg(lambda: self.grbl.goto(z=self._zv(z)),
+                 T("Z -> {z:.2f}").format(z=z))
 
     def save_preset(self):
         n = self.v_pname.get().strip()
@@ -833,11 +862,11 @@ class App:
         P.save_presets(self.presets)
         self.cb_preset.configure(values=sorted(self.presets))
         self.v_preset.set(n)
-        self._log(f"Preset '{n}' gespeichert")
+        self._log(T("Preset '{0}' gespeichert").format(n))
 
     def delete_preset(self):
         n = self.v_preset.get()
-        if n in self.presets and messagebox.askyesno("Löschen", f"'{n}' löschen?"):
+        if n in self.presets and messagebox.askyesno(T("Löschen"), T("'{0}' löschen?").format(n)):
             del self.presets[n]
             P.save_presets(self.presets)
             self.cb_preset.configure(values=sorted(self.presets))
@@ -847,24 +876,41 @@ class App:
     def toggle_connect(self):
         if self.grbl.connected:
             self.grbl.disconnect()
-            self.btn_conn.configure(text="Verbinden")
-            self.lbl_status.configure(text="getrennt")
+            self.btn_conn.configure(text=T("Verbinden"))
+            self.lbl_status.configure(text=T("getrennt"))
             return
         port = self.v_port.get() or (G.ports() or [""])[0]
         if not port:
-            messagebox.showerror("Kein Port", "Kein serielles Gerät gefunden.")
+            messagebox.showerror(T("Kein Port"), T("Kein serielles Gerät gefunden."))
             return
         try:
             self.grbl.connect(port)
         except Exception as e:
-            messagebox.showerror("Verbinden", str(e))
+            messagebox.showerror(T("Verbinden"), str(e))
             return
         self.cfg["port"] = port
         self._save_cfg()
-        self.btn_conn.configure(text="Trennen")
+        self.btn_conn.configure(text=T("Trennen"))
         self.zero_ok = self.zref_ok = False
-        self._log(f"verbunden: {port}")
-        self._bg(self._lies_einstellungen, "lese Maschineneinstellungen ($$)")
+        self._log(T('verbunden: {0}').format(port))
+        self._bg(self._lies_einstellungen, T("lese Maschineneinstellungen ($$)"))
+
+    def set_sprache(self):
+        kuerzel = {v: k for k, v in lw_text.SPRACHEN.items()}.get(
+            self.v_sprache.get(), "de")
+        if kuerzel == self.cfg.get("sprache", "de"):
+            return
+        self.cfg["sprache"] = kuerzel
+        P.save_config(self.cfg)
+        self._log(T("Sprache: {name} - gilt nach einem Neustart.").format(
+            name=lw_text.SPRACHEN[kuerzel]))
+        messagebox.showinfo(T("Sprache"),
+            T("Die Sprache gilt, sobald Laserwerk neu gestartet wird."))
+
+    def _flaeche_titel(self):
+        self.lf_flaeche.configure(text=T(
+            "Arbeitsbereich ({x:.0f} x {y:.0f} mm, Nullpunkt unten links)").format(
+                x=self.cfg["x_max"], y=self.cfg["y_max"]))
 
     def set_area(self):
         """Verfahrweg uebernehmen: Anzeige, Warnschwelle und Raster danach."""
@@ -873,20 +919,21 @@ class App:
         except tk.TclError:
             return
         if not (10 <= x <= 2000 and 10 <= y <= 2000):
-            messagebox.showerror("Verfahrweg", "Werte zwischen 10 und 2000 mm.")
+            messagebox.showerror(T("Verfahrweg"), T("Werte zwischen 10 und 2000 mm."))
             return
         self.cfg["x_max"], self.cfg["y_max"] = x, y
         P.save_config(self.cfg)
         self.area = max(x, y)
-        self._log(f"Verfahrweg {x:.0f} x {y:.0f} mm")
+        self._flaeche_titel()
+        self._log(T('Verfahrweg {0:.0f} x {1:.0f} mm').format(x, y))
         self.reset_view()
 
     def area_von_maschine(self):
         d = self.grbl.settings
         if not d.get("130"):
-            messagebox.showinfo("Verfahrweg",
-                "Noch keine $$-Antwort. Erst verbinden - die Werte werden\n"
-                "dann automatisch gelesen.")
+            messagebox.showinfo(T("Verfahrweg"),
+                T("Noch keine $$-Antwort. Erst verbinden - die Werte werden\n"
+                  "dann automatisch gelesen."))
             return
         self.v_xmax.set(round(d["130"], 1))
         self.v_ymax.set(round(d.get("131", d["130"]), 1))
@@ -913,28 +960,31 @@ class App:
             self.cfg["s_max"] = self.s_max
             P.save_config(self.cfg)
         if s30 and abs(s30 - J.S_MAX) > 0.5:
-            hin.append(f"$30 = {s30:.0f} statt {J.S_MAX}: Die Werte hier sind auf "
-                       f"0..{J.S_MAX} bezogen und werden beim Senden umgerechnet "
-                       f"(S{self.v_s.get():.0f} wird S{self._s(self.v_s.get()):.0f}).")
+            hin.append(T("$30 = {ist:.0f} statt {soll}: Die Werte hier sind auf "
+                         "0..{soll} bezogen und werden beim Senden umgerechnet "
+                         "(S{a:.0f} wird S{b:.0f}).").format(
+                ist=s30, soll=J.S_MAX, a=self.v_s.get(),
+                b=self._s(self.v_s.get())))
         if d.get("32") is not None and d["32"] < 0.5:
-            hin.append("$32 = 0: Der Lasermodus ist AUS. Der Strahl brennt dann "
-                       "auch im Stillstand weiter - mit '$32=1' einschalten.")
+            hin.append(T("$32 = 0: Der Lasermodus ist AUS. Der Strahl brennt dann "
+                         "auch im Stillstand weiter - mit '$32=1' einschalten."))
         if d.get("20", 0) >= 0.5:
-            hin.append("$20 = 1: Softlimits sind an. Ohne Referenzfahrt ($H) "
-                       "weist der Controller Fahrten ab.")
+            hin.append(T("$20 = 1: Softlimits sind an. Ohne Referenzfahrt ($H) "
+                         "weist der Controller Fahrten ab."))
         x, y = d.get("130"), d.get("131")
         if x and y:
-            self._log(f"Verfahrweg laut Maschine: {x:.0f} x {y:.0f} mm")
+            self._log(T('Verfahrweg laut Maschine: {0:.0f} x {1:.0f} mm').format(x, y))
             if abs(x - self.cfg["x_max"]) > 1 or abs(y - self.cfg["y_max"]) > 1:
-                hin.append(f"Verfahrweg laut $130/$131 ist {x:.0f} x {y:.0f} mm, "
-                           f"eingestellt sind {self.cfg['x_max']:.0f} x "
-                           f"{self.cfg['y_max']:.0f} mm (Reiter Maschine).")
+                hin.append(T("Verfahrweg laut $130/$131 ist {x:.0f} x {y:.0f} mm, "
+                             "eingestellt sind {cx:.0f} x {cy:.0f} mm "
+                             "(Reiter Maschine).").format(
+                    x=x, y=y, cx=self.cfg["x_max"], cy=self.cfg["y_max"]))
         self._log(f"$30={d.get('30', 0):.0f}  $32={d.get('32', 0):.0f}  "
                   f"$110={d.get('110', 0):.0f}  $120={d.get('120', 0):.0f}")
         if hin:
             for z in hin:
                 self._log(z)
-            messagebox.showwarning("Maschineneinstellungen", "\n\n".join(hin))
+            messagebox.showwarning(T("Maschineneinstellungen"), "\n\n".join(hin))
 
     def _s(self, wert):
         """Leistung von der Skala 0..1000 auf die der Maschine ($30) bringen."""
@@ -946,15 +996,15 @@ class App:
 
     def _need(self, zero=False):
         if not self.grbl.connected:
-            messagebox.showinfo("Maschine", "Nicht verbunden.")
+            messagebox.showinfo(T("Maschine"), T("Nicht verbunden."))
             return False
         if self.grbl.job_running:
-            messagebox.showinfo("Maschine", "Es läuft gerade ein Job.")
+            messagebox.showinfo(T("Maschine"), T("Es läuft gerade ein Job."))
             return False
         if zero and not self.zero_ok:
-            if not messagebox.askyesno("Nullpunkt",
-                    "In dieser Sitzung wurde noch kein Nullpunkt gesetzt.\n"
-                    "Trotzdem fortfahren?"):
+            if not messagebox.askyesno(T("Nullpunkt"),
+                    T("In dieser Sitzung wurde noch kein Nullpunkt gesetzt.\n"
+                      "Trotzdem fortfahren?")):
                 return False
         return True
 
@@ -966,14 +1016,14 @@ class App:
         try:
             self.grbl.jog(sx * st, sy * st, dz, feed=self.cfg.get("jog_feed", 1000))
         except Exception as e:
-            self._log(f"Jog: {e}")
+            self._log(T('Jog: {0}').format(e))
 
     def set_zero(self):
         if not self._need():
             return
         self.grbl.set_zero_xy()
         self.zero_ok = True
-        self._log("Nullpunkt XY gesetzt")
+        self._log(T("Nullpunkt XY gesetzt"))
 
     def set_zref(self):
         if not self._need():
@@ -981,11 +1031,11 @@ class App:
         z = self.v_zref.get()
         self.grbl.set_z_reference(self._zv(z))
         self.zref_ok = True
-        self._log(f"Z-Referenz: aktuelle Höhe = Fokus für {z:.2f} mm")
+        self._log(T('Z-Referenz: aktuelle Höhe = Fokus für {0:.2f} mm').format(z))
 
     def goto_zero(self):
         if self._need():
-            self._bg(lambda: self.grbl.goto(x=0, y=0), "fahre zum Nullpunkt")
+            self._bg(lambda: self.grbl.goto(x=0, y=0), T("fahre zum Nullpunkt"))
 
     def zeigen(self):
         """Sichtkreuz: im Lasermodus geht Licht nur waehrend einer Fahrt."""
@@ -994,13 +1044,14 @@ class App:
         sv = max(1, min(int(self.v_zeig_s.get()), 120))
         arm = max(0.5, min(float(self.v_zeig_a.get()), 8.0))
         if sv / J.POINTER_FEED > 0.20:
-            messagebox.showwarning("Position zeigen",
-                f"S{sv} bei F{J.POINTER_FEED} ist S/F {sv/J.POINTER_FEED:.2f}.\n"
-                "Ueber 0,20 brennt es sichtbar ein - bitte weniger.")
+            messagebox.showwarning(T("Position zeigen"),
+                T("S{s} bei F{f} ist S/F {sf:.2f}.\n"
+                  "Ueber 0,20 brennt es sichtbar ein - bitte weniger."
+                  ).format(s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED))
             return
         g = J.kreuz_lines(self._s(sv), J.POINTER_FEED, arm)
-        self._log(f"Kreuz {2*arm:.1f} mm bei S{sv}/F{J.POINTER_FEED} "
-                  f"(S/F {sv/J.POINTER_FEED:.2f})")
+        self._log(T("Kreuz {mm:.1f} mm bei S{s}/F{f} (S/F {sf:.2f})").format(
+            mm=2 * arm, s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED))
         self._bg(lambda: [self.grbl.cmd(c) for c in g], None)
 
     def unlock(self):
@@ -1014,7 +1065,7 @@ class App:
     def send_cmd(self):
         c = self.v_cmd.get().strip()
         if c and self._need():
-            self._bg(lambda: self._log(f"{c} -> {self.grbl.cmd(c)}"), None)
+            self._bg(lambda: self._log(T('{0} -> {1}').format(c, self.grbl.cmd(c))), None)
             self.v_cmd.set("")
 
     def _bg(self, fn, msg):
@@ -1024,7 +1075,7 @@ class App:
             try:
                 fn()
             except Exception as e:
-                self.q.put(("msg", f"Fehler: {e}"))
+                self.q.put(("msg", T("Fehler: {e}").format(e=e)))
         threading.Thread(target=run, daemon=True).start()
 
     def _save_cfg(self):
@@ -1036,8 +1087,8 @@ class App:
         if not self._need(zero=True):
             return
         if not self.zref_ok:
-            messagebox.showwarning("Keine Z-Referenz",
-                "Für den Z-Fokustest wird eine Z-Referenz gebraucht\n(Reiter Maschine).")
+            messagebox.showwarning(T("Keine Z-Referenz"),
+                T("Für den Z-Fokustest wird eine Z-Referenz gebraucht\n(Reiter Maschine)."))
             return
         zm = self._z_target()
         g, zs = J.fokustest_z(self._zv(zm), self.v_ft_span.get(), self.v_ft_step.get(),
@@ -1045,8 +1096,8 @@ class App:
         self.fokus_zs = [self._zv(z) for z in zs]
         self.lb_fz.delete(0, "end")
         for i, z in enumerate(self.fokus_zs, 1):
-            self.lb_fz.insert("end", f"Strich {i:>2}:  Z = {z:.2f} mm")
-        self._run(g, f"Fokustest {len(zs)} Striche", confirm=True)
+            self.lb_fz.insert("end", T("Strich {i:>2}:  Z = {z:.2f} mm").format(i=i, z=z))
+        self._run(g, T("Fokustest {n} Striche").format(n=len(zs)), confirm=True)
 
     def take_focus(self):
         sel = self.lb_fz.curselection()
@@ -1054,7 +1105,7 @@ class App:
             return
         z = self.fokus_zs[sel[0]]
         self.v_korr.set(round(z - self.v_dicke.get(), 2))
-        self._log(f"Fokuskorrektur = {self.v_korr.get():+.2f} mm - im Reiter Material speichern")
+        self._log(T('Fokuskorrektur = {0:+.2f} mm - im Reiter Material speichern').format(self.v_korr.get()))
 
     def materialtest(self):
         if not self._need(zero=True):
@@ -1063,52 +1114,61 @@ class App:
             ps = [int(x) for x in self.v_mt_s.get().split(",")]
             fs = [int(x) for x in self.v_mt_f.get().split(",")]
         except ValueError:
-            messagebox.showerror("Materialtest", "Werte mit Komma trennen, z.B. 200,400,600")
+            messagebox.showerror(T("Materialtest"), T("Werte mit Komma trennen, z.B. 200,400,600"))
             return
         self._run(J.materialtest([self._s(p) for p in ps], fs),
-                  f"Materialtest {len(ps)}x{len(fs)}", confirm=True)
+                  T("Materialtest {a}x{b}").format(a=len(ps), b=len(fs)), confirm=True)
 
     # ================================================================ Job
     def frame(self):
         if not self.lines:
-            messagebox.showinfo("Rahmen", "Erst G-Code erzeugen oder laden.")
+            messagebox.showinfo(T("Rahmen"), T("Erst G-Code erzeugen oder laden."))
             return
         sv = max(1, min(int(self.v_zeig_s.get()), 120)) if self.v_frame_laser.get() else 0
-        name = (f"Rahmenfahrt (Laser schwach, S{sv})" if sv
-                else "Rahmenfahrt (Laser aus)")
+        name = (T("Rahmenfahrt (Laser schwach, S{s})").format(s=sv) if sv
+                else T("Rahmenfahrt (Laser aus)"))
         x0, x1, y0, y1 = J.brenn_extent(self.lines)
-        self._log(f"Rahmen X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} "
-                  f"({x1-x0:.1f} x {y1-y0:.1f} mm)")
+        self._log(T("Rahmen X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} "
+                    "({b:.1f} x {h:.1f} mm)").format(
+            x0=x0, x1=x1, y0=y0, y1=y1, b=x1 - x0, h=y1 - y0))
         if self._need(zero=True):
-            self._run(J.frame_lines(self.lines, self._s(sv), J.POINTER_FEED), name)
+            self._run(J.frame_lines(self.lines, self._s(sv), J.POINTER_FEED),
+                      name, rahmen=True)
 
     def start(self):
         if not self.lines:
-            messagebox.showinfo("Start", "Erst G-Code erzeugen oder laden.")
+            messagebox.showinfo(T("Start"), T("Erst G-Code erzeugen oder laden."))
             return
-        self._run(self.lines, "Gravur", confirm=True)
+        self._run(self.lines, T("Gravur"), confirm=True)
 
-    def _run(self, lines, name, confirm=False):
-        if not self._need(zero=not name.startswith("Rahmenfahrt")):
+    def _run(self, lines, name, confirm=False, rahmen=False):
+        # Der Name ist nur Anzeige - uebersetzt taugt er nicht mehr als
+        # Unterscheidung, deshalb sagt 'rahmen' ausdruecklich Bescheid.
+        if not self._need(zero=not rahmen):
             return
         x0, x1, y0, y1 = J.extent(lines)
         if x1 - x0 > self.cfg["x_max"] or y1 - y0 > self.cfg["y_max"]:
-            messagebox.showerror("Zu groß", f"Spanne {x1-x0:.0f} x {y1-y0:.0f} mm "
-                                 "passt nicht in den Verfahrweg.")
+            messagebox.showerror(T("Zu groß"),
+                T("Spanne {b:.0f} x {h:.0f} mm passt nicht in den Verfahrweg."
+                  ).format(b=x1 - x0, h=y1 - y0))
             return
         if confirm:
             t = ""
             if self.info and lines is self.lines and self.info.get("sekunden"):
-                t = f"\nLaufzeit ca. {self.info['sekunden']/60:.0f} min"
+                t = T("\nLaufzeit ca. {min:.0f} min").format(
+                    min=self.info["sekunden"] / 60)
             if not messagebox.askokcancel(name,
-                    f"{name} starten?\nBereich X {x0:.1f}..{x1:.1f}, Y {y0:.1f}..{y1:.1f} mm{t}\n\n"
-                    "Schutzbrille auf? Absaugung an? Daneben bleiben."
-                    + ("\n\nSCHNEIDEN: Brandgefahr - Material kann weiterglimmen!"
+                    T("{name} starten?\nBereich X {x0:.1f}..{x1:.1f}, "
+                      "Y {y0:.1f}..{y1:.1f} mm{zeit}\n\n"
+                      "Schutzbrille auf? Absaugung an? Daneben bleiben."
+                      ).format(name=name, x0=x0, x1=x1, y0=y0, y1=y1, zeit=t)
+                    + (T("\n\nSCHNEIDEN: Brandgefahr - Material kann "
+                         "weiterglimmen!")
                        if self.cut_polys and lines is self.lines else "")):
                 return
         self.job_t0 = time.time()
         self.prog["value"] = 0
-        self._log(f"{name} gestartet")
+        self._log(T('{0} gestartet').format(name))
 
         def run():
             res = self.grbl.run_job(lines, lambda d, t, el, er: self.q.put(("prog", (d, t, el, er))))
@@ -1118,21 +1178,22 @@ class App:
     def pause(self):
         if self.grbl.connected:
             self.grbl.pause()
-            self._log("Pause (Feed Hold) - Laser aus. 'Weiter' setzt fort.")
+            self._log(T("Pause (Feed Hold) - Laser aus. 'Weiter' setzt fort."))
 
     def resume(self):
         if self.grbl.connected:
             self.grbl.resume()
-            self._log("weiter")
+            self._log(T("weiter"))
 
     def stop(self):
         if self.grbl.connected:
-            self._log("STOPP")
+            self._log(T("STOPP"))
             threading.Thread(target=self.grbl.stop, daemon=True).start()
 
     # ================================================================ Aussehen
     def _theme_label(self):
-        self.btn_theme.configure(text="Hell" if S.THEME == "dunkel" else "Dunkel")
+        self.btn_theme.configure(
+            text=T("Hell") if S.THEME == "dunkel" else T("Dunkel"))
 
     def toggle_theme(self):
         neu = "hell" if S.THEME == "dunkel" else "dunkel"
@@ -1164,14 +1225,17 @@ class App:
             x, y, z = (list(d["wpos"]) + [0, 0, 0])[:3]
             if self.v_zinv.get():
                 z = -z
-            self.lbl_pos.configure(text=f"X{x:8.2f}  Y{y:8.2f}  Z{z:7.2f}")
-            self.lbl_status.configure(text=f"{self.grbl.port}  |  {d['state']}  |  "
-                                           f"Vorschub {d['fs'][0] if d['fs'] else 0:.0f}  "
-                                           f"Leistung {d['fs'][1] if len(d['fs'])>1 else 0:.0f}")
+            self.lbl_pos.configure(text=T('X{0:8.2f}  Y{1:8.2f}  Z{2:7.2f}').format(x, y, z))
+            self.lbl_status.configure(text=T("{port}  |  {zustand}  |  Vorschub {v:.0f}"
+                                             "  Leistung {s:.0f}").format(
+                port=self.grbl.port, zustand=d["state"],
+                v=d["fs"][0] if d["fs"] else 0,
+                s=d["fs"][1] if len(d["fs"]) > 1 else 0))
             self.head = (x, y)
             self._draw_head()
-            self.lbl_ref.configure(text=("Nullpunkt: " + ("gesetzt" if self.zero_ok else "NICHT gesetzt")
-                                         + "   Z-Ref: " + ("gültig" if self.zref_ok else "fehlt")))
+            self.lbl_ref.configure(text=T("Nullpunkt: {null}   Z-Ref: {zref}").format(
+                null=T("gesetzt") if self.zero_ok else T("NICHT gesetzt"),
+                zref=T("gültig") if self.zref_ok else T("fehlt")))
         elif k == "prog":
             done, tot, el, er = d
             self.prog["value"] = done * 1000 / tot
@@ -1179,15 +1243,19 @@ class App:
             if self.info and self.info.get("sekunden") and done > 0:
                 # Modellschaetzung zaehlt mehr als lineare Hochrechnung
                 rest = max(0, self.info["sekunden"] - el) * 0.6 + rest * 0.4
-            self.lbl_prog.configure(text=f"{done*100//tot} %   noch ~{rest/60:.0f} min"
-                                         + (f"   {er} Fehler" if er else ""))
+            self.lbl_prog.configure(
+                text=T("{p} %   noch ~{min:.0f} min").format(p=done * 100 // tot,
+                                                             min=rest / 60)
+                + (T("   {n} Fehler").format(n=er) if er else ""))
         elif k == "jobend":
             name, res = d
-            txt = {"fertig": "fertig", "abgebrochen": "abgebrochen (Laser aus)",
-                   "alarm": "ALARM - gestoppt", "verbindung": "Verbindung verloren",
-                   "fehler": "zu viele Übertragungsfehler"}.get(res, res)
-            self.lbl_prog.configure(text=f"{name}: {txt}")
-            self._log(f"{name}: {txt}")
+            txt = {"fertig": T("fertig"),
+                   "abgebrochen": T("abgebrochen (Laser aus)"),
+                   "alarm": T("ALARM - gestoppt"),
+                   "verbindung": T("Verbindung verloren"),
+                   "fehler": T("zu viele Übertragungsfehler")}.get(res, res)
+            self.lbl_prog.configure(text=T('{0}: {1}').format(name, txt))
+            self._log(T('{0}: {1}').format(name, txt))
             self._melde(f"{name}: {txt}")
             if res != "fertig":
                 # Soft-Reset/Abriss: Offsets sind nicht mehr verlaesslich
@@ -1199,23 +1267,24 @@ class App:
             self._melde(f"ALARM: {d}")
         elif k == "reset":
             if self.zero_ok or self.zref_ok:
-                self._log("Controller neu gestartet - Nullpunkt und Z-Referenz neu setzen!")
+                self._log(T("Controller neu gestartet - Nullpunkt und Z-Referenz neu setzen!"))
             self.zero_ok = self.zref_ok = False
         elif k == "lost":
-            self.btn_conn.configure(text="Verbinden")
+            self.btn_conn.configure(text=T("Verbinden"))
             self.zero_ok = self.zref_ok = False
-            self._log(f"VERBINDUNG VERLOREN: {d}")
-            self._melde("VERBINDUNG VERLOREN - im Zweifel Laserschalter von Hand aus!")
-            messagebox.showwarning("Verbindung verloren",
-                "Die USB-Verbindung ist abgerissen.\nIch versuche Halt + Laser aus zu senden.\n\n"
-                "Im Zweifel: Laserschalter von Hand aus!")
+            self._log(T('VERBINDUNG VERLOREN: {0}').format(d))
+            self._melde(T("VERBINDUNG VERLOREN - im Zweifel Laserschalter "
+                          "von Hand aus!"))
+            messagebox.showwarning(T("Verbindung verloren"),
+                T("Die USB-Verbindung ist abgerissen.\nIch versuche Halt + Laser aus zu senden.\n\n"
+                  "Im Zweifel: Laserschalter von Hand aus!"))
         elif k == "lost_secured":
-            self._log(f"Halt + M5 an {d} gesendet. Neu verbinden, Nullpunkt neu setzen.")
+            self._log(T('Halt + M5 an {0} gesendet. Neu verbinden, Nullpunkt neu setzen.').format(d))
             self.cb_port.configure(values=G.ports())
             self.v_port.set(d)
         elif k == "lost_unsecured":
-            self._log("Controller nicht erreichbar - LASERSCHALTER VON HAND AUS!")
-            messagebox.showerror("Laser", "Controller nicht erreichbar.\nLaserschalter von Hand aus!")
+            self._log(T("Controller nicht erreichbar - LASERSCHALTER VON HAND AUS!"))
+            messagebox.showerror(T("Laser"), T("Controller nicht erreichbar.\nLaserschalter von Hand aus!"))
         elif k == "msg":
             self._log(d)
         elif k == "einstellungen":
@@ -1227,7 +1296,7 @@ class App:
             try:
                 antwort.put(self.fern_tun(aktion, wert))
             except Exception as e:
-                antwort.put(f"Fehler: {e}")
+                antwort.put(T("Fehler: {e}").format(e=e))
 
     # ============================================================ Telegram
     def _melde(self, t):
@@ -1239,30 +1308,33 @@ class App:
         oeffnet nie einen Dialog - den sieht am Werkstueck niemand."""
         g = self.grbl
         if aktion == "status":
-            z = "verbunden" if g.connected else "nicht verbunden"
-            j = "Job laeuft" if g.job_running else "kein Job"
-            return (f"{z} ({g.port or '-'}), {j}\n{self.fern.position()}\n"
-                    f"Nullpunkt: {'gesetzt' if self.zero_ok else 'NICHT gesetzt'}, "
-                    f"Z-Ref: {'gueltig' if self.zref_ok else 'fehlt'}"
+            return (T("{zustand} ({port}), {job}\n{pos}\n"
+                      "Nullpunkt: {null}, Z-Ref: {zref}").format(
+                        zustand=T("verbunden") if g.connected else T("nicht verbunden"),
+                        port=g.port or "-",
+                        job=T("Job laeuft") if g.job_running else T("kein Job"),
+                        pos=self.fern.position(),
+                        null=T("gesetzt") if self.zero_ok else T("NICHT gesetzt"),
+                        zref=T("gültig") if self.zref_ok else T("fehlt"))
                     + (f"\n{self.lbl_prog.cget('text')}" if g.job_running else ""))
         if aktion == "aus":
-            g.laser_off(); self._log("Laser aus (Telegram)")
-            return "M5 gesendet - Laser aus."
+            g.laser_off(); self._log(T("Laser aus (Telegram)"))
+            return T("M5 gesendet - Laser aus.")
         if aktion == "stopp":
             if not g.connected:
-                return "Nicht verbunden."
+                return T("Nicht verbunden.")
             g.stop(); self.zero_ok = self.zref_ok = False
-            self._log("STOPP (Telegram)")
-            return "STOPP: Halt und Soft-Reset. Nullpunkt danach neu setzen."
+            self._log(T("STOPP (Telegram)"))
+            return T("STOPP: Halt und Soft-Reset. Nullpunkt danach neu setzen.")
         if not g.connected:
-            return "Nicht verbunden."
+            return T("Nicht verbunden.")
         if g.job_running:
-            return "Es laeuft ein Job - frei sind nur /status, /aus und /stopp."
+            return T("Es laeuft ein Job - frei sind nur /status, /aus und /stopp.")
         if aktion == "frei":
-            self._log("Entsperrt (Telegram)")
+            self._log(T("Entsperrt (Telegram)"))
             return f"$X -> {g.unlock()}"
         if g.alarm:
-            return f"{g.alarm}\nErst entsperren: /frei"
+            return g.alarm + T("\nErst entsperren: /frei")
         if aktion == "pos":
             return self.fern.position()
         if aktion == "jog":
@@ -1275,34 +1347,35 @@ class App:
             sv = max(1, min(int(self.v_zeig_s.get()), 120))
             arm = max(0.5, min(float(self.v_zeig_a.get()), 8.0))
             if sv / J.POINTER_FEED > 0.20:
-                return (f"S{sv} bei F{J.POINTER_FEED} ist S/F {sv/J.POINTER_FEED:.2f} - "
-                        "ueber 0,20 brennt es ein. Am Rechner kleiner stellen.")
-            self._log(f"Kreuz S{sv} (Telegram)")
+                return T("S{s} bei F{f} ist S/F {sf:.2f} - ueber 0,20 brennt es "
+                         "ein. Am Rechner kleiner stellen.").format(
+                    s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED)
+            self._log(T('Kreuz S{0} (Telegram)').format(sv))
             self._bg(lambda: [g.cmd(c) for c in
                               J.kreuz_lines(self._s(sv), J.POINTER_FEED, arm)], None)
-            return f"Kreuz {2*arm:.1f} mm bei S{sv}"
+            return T("Kreuz {mm:.1f} mm bei S{s}").format(mm=2 * arm, s=sv)
         if aktion == "null":
             g.set_zero_xy(); self.zero_ok = True
-            self._log("Nullpunkt XY gesetzt (Telegram)")
-            return "Nullpunkt XY = hier."
+            self._log(T("Nullpunkt XY gesetzt (Telegram)"))
+            return T("Nullpunkt XY = hier.")
         if aktion == "heim":
-            self._bg(lambda: g.goto(x=0, y=0), "fahre zum Nullpunkt (Telegram)")
-            return "fahre zum Nullpunkt"
-        return "Unbekannter Auftrag."
+            self._bg(lambda: g.goto(x=0, y=0), T("fahre zum Nullpunkt (Telegram)"))
+            return T("fahre zum Nullpunkt")
+        return T("Unbekannter Auftrag.")
 
     def fern_start(self):
         if self.fern is not None and self.fern.aktiv:
             self.fern.stop(); self.fern = None
-            self._fern_label(); self._log("Telegram: angehalten")
+            self._fern_label(); self._log(T("Telegram: angehalten"))
             return
         d = TG.lade()
         # Der Token darf auch von Hand in der Datei stehen - ein leeres Feld
         # loescht ihn dann nicht.
         tok = self.v_tg_token.get().strip() or d.get("token", "").strip()
         if not tok:
-            messagebox.showinfo("Telegram",
-                "Erst den Token vom BotFather eintragen -\nhier im Feld oder in\n"
-                + TG.DATEI)
+            messagebox.showinfo(T("Telegram"),
+                T("Erst den Token vom BotFather eintragen -\n"
+                  "hier im Feld oder in\n") + TG.DATEI)
             return
         self.v_tg_token.set(tok)
         d["token"] = tok; d["auto"] = bool(self.v_tg_auto.get())
@@ -1311,8 +1384,9 @@ class App:
         def an():
             try:
                 name = self.fern.start()
-                self.q.put(("msg", f"Telegram: @{name} laeuft"
-                            + ("" if self.fern.chat else " - jetzt /start im Chat senden")))
+                self.q.put(("msg", T("Telegram: @{name} laeuft").format(name=name)
+                            + ("" if self.fern.chat
+                               else T(" - jetzt /start im Chat senden"))))
             except Exception as e:
                 self.fern = None
                 self.q.put(("msg", f"Telegram: {e}"))
@@ -1327,19 +1401,19 @@ class App:
         d = TG.lade(); d["chat"] = None; TG.sichere(d)
         if self.fern is not None:
             self.fern.chat = None
-        self._log("Telegram: Verknuepfung geloest - der naechste /start uebernimmt.")
+        self._log(T("Telegram: Verknuepfung geloest - der naechste /start uebernimmt."))
         self._fern_label()
 
     def _fern_label(self):
         if self.fern is None or not self.fern.aktiv:
             t = "aus"
         elif not self.fern.chat:
-            t = "wartet auf /start im Chat"
+            t = T("wartet auf /start im Chat")
         else:
-            t = f"laeuft, Chat {self.fern.chat}"
+            t = T("laeuft, Chat {chat}").format(chat=self.fern.chat)
         self.lbl_tg.configure(text=t)
-        self.btn_tg.configure(text="Bot anhalten" if (self.fern and self.fern.aktiv)
-                              else "Bot starten")
+        self.btn_tg.configure(text=T("Bot anhalten") if (self.fern and self.fern.aktiv)
+                              else T("Bot starten"))
 
     def _log(self, t):
         self.log.insert("end", f"{time.strftime('%H:%M:%S')} {t}\n")
@@ -1451,7 +1525,7 @@ class App:
                 cv.create_rectangle(hx - 4, hy - 4, hx + 4, hy + 4,
                                     fill=S.ACCENT, outline="")
             cv.create_text((ax + cx) / 2, ay - 8, fill=S.ACCENT, anchor="s",
-                           text=f"{b:.1f} x {h:.1f} mm")
+                           text=T('{0:.1f} x {1:.1f} mm').format(b, h))
         if self.lines and not box:      # geladener G-Code ohne Motiv
             ex = J.brenn_extent(self.lines)
             a, b = self._mm(ex[0], ex[3]); c, d = self._mm(ex[1], ex[2])
@@ -1459,8 +1533,7 @@ class App:
         cv.create_oval(x0 - 4, y0 - 4, x0 + 4, y0 + 4, outline=S.DANGER, width=2)
         if abs(self.zoom - 1.0) > 0.01:
             cv.create_text(self._cv()[0] - 8, 8, anchor="ne", fill=S.MUTED,
-                           text=f"{self.zoom:.1f}x   Mausrad = Zoom, "
-                                f"mittlere/rechte Taste = schieben")
+                           text=T('{0:.1f}x   Mausrad = Zoom, mittlere/rechte Taste = schieben').format(self.zoom))
         self._draw_head()
 
     def _brett_geaendert(self):
@@ -1653,8 +1726,10 @@ class App:
 
 
 def main():
+    cfg = P.load_config()
+    lw_text.setze(cfg.get("sprache", "de"))
     root = tk.Tk()
-    S.apply(root, P.load_config().get("theme", "dunkel"))
+    S.apply(root, cfg.get("theme", "dunkel"))
     root.minsize(1100, 720)
     App(root)
     root.mainloop()

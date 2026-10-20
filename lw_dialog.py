@@ -8,6 +8,8 @@ wird auf die Tk-Dialoge zurueckgegriffen.
 import os, shutil, subprocess
 from tkinter import filedialog as _tkf, messagebox as _tkm
 
+from lw_text import T
+
 ZENITY = shutil.which("zenity")
 
 
@@ -21,10 +23,11 @@ def _z(args):
 
 
 class _FileDialog:
-    def askopenfilename(self, title="Datei oeffnen", initialdir=None, filetypes=None, **kw):
+    def askopenfilename(self, title=None, initialdir=None, filetypes=None, **kw):
+        title = title or T("Datei öffnen")
         if not ZENITY:
             return _tkf.askopenfilename(title=title, initialdir=initialdir,
-                                        filetypes=filetypes or [("alle", "*")])
+                                        filetypes=filetypes or [(T("alle"), "*")])
         args = ["--file-selection", f"--title={title}"]
         if initialdir:
             args.append(f"--filename={os.path.join(initialdir, '')}")
@@ -33,8 +36,9 @@ class _FileDialog:
         rc, out = _z(args)
         return out if rc == 0 else ""
 
-    def asksaveasfilename(self, title="Speichern unter", initialdir=None,
+    def asksaveasfilename(self, title=None, initialdir=None,
                           initialfile="", defaultextension="", **kw):
+        title = title or T("Speichern unter")
         if not ZENITY:
             return _tkf.asksaveasfilename(title=title, initialdir=initialdir,
                                           initialfile=initialfile,

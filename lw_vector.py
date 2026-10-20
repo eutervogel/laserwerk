@@ -583,7 +583,7 @@ def cut_gcode(polys, s, feed, passes=1, kommentar=""):
     """Polylinien -> G-Code. Rueckgabe (zeilen, info)."""
     g = [f"; Laserwerk Schnitt {kommentar}".rstrip(),
          f"; S{s}/F{feed} = S/F {s/feed:.2f}, {passes} Durchgang/Durchgaenge",
-         "; Nullpunkt = linke untere Ecke", "G21", "G90", "G94", "M4 S0"]
+         "; origin = bottom left corner", "G21", "G90", "G94", "M4 S0"]
     cut = trav = 0.0
     segs = []
     pos = (0.0, 0.0)

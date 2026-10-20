@@ -3,7 +3,7 @@
 Bildschirmfotos fuers README erzeugen - auf einem unsichtbaren Bildschirm,
 damit beim Aufnehmen kein Fenster vor der Arbeit aufspringt.
 
-    xvfb-run -s "-screen 0 1280x880x24" python3 bilder/mach_bilder.py BILD.png
+    xvfb-run -s "-screen 0 1280x880x24" python3 bilder/mach_bilder.py BILD.png [en]
 
 Das Motiv ist ein beliebiges Bild oder SVG; die Bilder im README zeigen eine
 Tuschezeichnung, die nicht mit im Projekt liegt.
@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(HIER))
 
 import lw_style as S
 import lw_job as J
+import lw_text
 import laserwerk as L
 
 
@@ -71,6 +72,9 @@ def schiess(fenster, name):
 
 def main():
     quelle = sys.argv[1] if len(sys.argv) > 1 else None
+    sprache = sys.argv[2] if len(sys.argv) > 2 else "de"
+    lw_text.setze(sprache)
+    vorsatz = "" if sprache == "de" else sprache + "-"
     root = tk.Tk()
     S.apply(root, "dunkel")
     root.geometry("1270x850+0+0")
@@ -93,30 +97,30 @@ def main():
     app.head = (24.0, 18.0)
     app._event("status", app.grbl.status)
     app._draw()
-    schiess(root, "01-platzieren.png")
+    schiess(root, vorsatz + "01-platzieren.png")
 
     app.generate()                      # echte Vorschau aus echtem G-Code
     app._draw()
     root.update()                       # erst die Rollflaeche neu berechnen
     runter(app.tab_motiv)               # dann ans Ende: Infotext mit Laufzeit
     root.update()
-    schiess(root, "02-gcode.png")
+    schiess(root, vorsatz + "02-gcode.png")
     hoch(app.tab_motiv)
 
     app.nb.select(1)                    # Material
     app.v_preset.set("Holz / Schichtplatte")
     app.load_preset()
     root.update()
-    schiess(root, "03-material.png")
+    schiess(root, vorsatz + "03-material.png")
 
     app.nb.select(2)                    # Maschine
     app._einstellungen_pruefen(app.grbl.settings)
     root.update()
-    schiess(root, "04-maschine.png")
+    schiess(root, vorsatz + "04-maschine.png")
 
     app.nb.select(3)                    # Tests
     root.update()
-    schiess(root, "05-tests.png")
+    schiess(root, vorsatz + "05-tests.png")
     root.destroy()
 
 

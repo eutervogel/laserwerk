@@ -17,6 +17,8 @@ Erkenntnisse aus dem Betrieb, die hier eingebaut sind:
 import glob, os, queue, re, threading, time
 import serial
 
+from lw_text import T
+
 RX_BUF = 127
 
 
@@ -75,7 +77,7 @@ class Grbl:
 
     def write(self, data):
         if not self.connected:
-            raise RuntimeError("nicht verbunden")
+            raise RuntimeError(T("nicht verbunden"))
         with self.lock:
             self.s.write(data)
 
@@ -104,7 +106,8 @@ class Grbl:
                         self._handle(t)
                     except Exception as e:
                         # Eine unerwartete Zeile darf nie den Lesethread beenden
-                        self.on_event("msg", f"Zeile nicht verstanden: {t!r} ({e})")
+                        self.on_event("msg", T("Zeile nicht verstanden: {z!r} ({e})"
+                                               ).format(z=t, e=e))
 
     def _poller(self):
         while self.alive:
@@ -186,7 +189,7 @@ class Grbl:
     def cmd(self, line, timeout=10.0):
         """Befehl senden und auf ok/error warten. Nicht waehrend eines Jobs."""
         if self.job_running:
-            raise RuntimeError("Job laeuft")
+            raise RuntimeError(T("Job laeuft"))
         with self.cmd_lock:
             while not self.oks.empty():
                 self.oks.get_nowait()

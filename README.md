@@ -1,144 +1,153 @@
 # Laserwerk
 
-Ein Steuerprogramm für Diodenlaser an GRBL-Controllern, für Linux, auf Deutsch.
-Bild oder SVG hineinwerfen, auf dem simulierten Werkstück platzieren, Achsen
-fahren, Fokus suchen, gravieren oder schneiden — in einem Fenster, ohne
-Abonnement und ohne Cloud.
+***English** · [Deutsch](README.de.md)*
 
-![Motiv auf dem Werkstück platzieren](bilder/01-platzieren.png)
+Control software for diode lasers on GRBL controllers, for Linux. Drop in an
+image or SVG, place it on a simulated workpiece, jog the axes, find the focus,
+engrave or cut — in one window, without a subscription and without a cloud.
 
-Entstanden, weil es auf Linux wenig dazwischen gibt: LightBurn kostet Geld,
-LaserGRBL läuft nur unter Windows, und der Weg über Inkscape-Erweiterungen und
-einen reinen G-Code-Sender ist umständlich, sobald man Graustufen rastern oder
-Material ausprobieren will.
+![Placing the artwork on the workpiece](bilder/en-01-platzieren.png)
 
-> **Die Oberfläche und alle Kommentare im Quelltext sind deutsch.** Wer ein
-> englisches Programm erwartet, ist hier falsch.
+It exists because Linux leaves a gap: LightBurn costs money, LaserGRBL is
+Windows-only, and going through an Inkscape extension plus a plain G-code
+sender gets tedious as soon as you want to raster greyscales or work out
+settings for a new material.
 
-## Kann
+> **The interface speaks English and German** (*Machine* tab → *Language*).
+> Comments and identifiers in the source are German — the project grew that
+> way, and the comments carry hard-won detail that would lose its edge in
+> translation. Pull requests in either language are welcome.
 
-- **Gravieren** — Bilder (PNG, JPG, WEBP, BMP) und SVG als Raster, zeilenweise,
-  wahlweise schwarzweiß mit Schwelle oder Graustufen mit veränderlicher
-  Leistung. Anlauf (Overscan) an den Zeilenenden für saubere Ränder.
-- **Schneiden** — Konturen aus SVG und DXF, innen vor außen, mehrere Durchgänge,
-  Originalgröße 1:1 für Schablonen aus dem CAD.
-- **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
-  darauf schieben und an den Ecken skalieren, mit Einrasten auf Kanten, Ecken
-  und Mitte.
-- **Maschine fahren** — Achsen tippen, Nullpunkt setzen, Z-Referenz,
-  Rahmenfahrt um das Motiv, Sichtkreuz mit schwacher Leistung („wo steht er
-  gerade?"), Entsperren, einzelne G-Code-Befehle.
-- **Material finden** — Fokustest über Z, Materialtest als Feldraster aus
-  Leistungen und Vorschüben, Presets mit Materialdicke, Fokuskorrektur,
-  Leistung, Vorschub und Zeilenabstand.
-- **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
-  gespiegelte Motiv noch im positiven Bereich liegt.
-- **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man
-  am Werkstück steht. Meldet sich, wenn ein Job fertig ist oder in Alarm geht.
-- **Fortsetzen** — `fortsetzen.py` findet nach einem hängengebliebenen Job die
-  genaue Stoppstelle über die Position und streamt den Rest.
+## What it does
 
-## So sieht das aus
+- **Engrave** — images (PNG, JPG, WEBP, BMP) and SVG as a raster, row by row,
+  either black and white with a threshold or greyscale with varying power.
+  Overscan at the row ends keeps the edges even.
+- **Cut** — contours from SVG and DXF, inner before outer, several passes,
+  original size 1:1 for templates straight out of CAD.
+- **Place** — enter the length and width of your workpiece, then drag the
+  artwork onto it with the mouse and resize it by its corners, snapping to
+  edges, corners and centre.
+- **Drive the machine** — jog the axes, set the origin, set a Z reference,
+  trace a frame around the artwork, show where the head stands with a short
+  sight cross at low power, unlock, send single G-code commands.
+- **Find material settings** — a focus test along Z, a material test as a grid
+  of power and feed values, and presets holding thickness, focus correction,
+  power, feed and row pitch.
+- **Engrave both sides** — mirror about a flip axis, with a check that the
+  mirrored artwork still lands in positive coordinates.
+- **Remote control via Telegram** — jog the axes and trace the sight cross from
+  your phone while you stand at the workpiece. It reports back when a job
+  finishes or runs into an alarm.
+- **Resume** — `fortsetzen.py` finds the exact stopping point of a stalled job
+  by matching the position, then streams the rest.
 
-Erzeugter G-Code mit Laufzeitschätzung — das Motiv liegt als Brandspur auf dem
-simulierten Brettchen, der Rahmen mit den Anfassern lässt sich mit der Maus
-schieben und skalieren:
+## How it looks
 
-![G-Code erzeugt](bilder/02-gcode.png)
+Generated G-code with a runtime estimate — the artwork lies on the simulated
+board like a burn mark, and the frame with its handles can be dragged and
+resized with the mouse:
 
-Materialwerte als Preset, Achsensteuerung und die Tests:
+![G-code generated](bilder/en-02-gcode.png)
+
+Material values as a preset, jogging, and the tests:
 
 | | |
 |---|---|
-| ![Material](bilder/03-material.png) | ![Maschine](bilder/04-maschine.png) |
+| ![Material](bilder/en-03-material.png) | ![Machine](bilder/en-04-maschine.png) |
 
-![Tests](bilder/05-tests.png)
+![Tests](bilder/en-05-tests.png)
 
-## Braucht
+## What it needs
 
-- Python 3.10 oder neuer, mit tkinter (`apt install python3-tk`)
+- Python 3.10 or newer, with tkinter (`apt install python3-tk`)
 - `pip install -r requirements.txt` — pyserial, Pillow, numpy
-- optional `zenity` für native GTK-Dialoge; fehlt es, nimmt das Programm die
-  Tk-eigenen
-- einen GRBL-1.1-Controller am USB-Port, Benutzer in der Gruppe `dialout`
+- optionally `zenity` for native GTK dialogs; without it the Tk ones are used
+- a GRBL 1.1 controller on USB, and your user in the `dialout` group
 
 ```sh
-git clone <dieses Repository>
+git clone https://github.com/eutervogel/laserwerk
 cd laserwerk
 pip install -r requirements.txt
 ./laserwerk.sh
 ```
 
-Einstellungen, Presets und der Telegram-Token liegen unter
-`~/.config/laserwerk/`, nicht im Projektordner.
+Settings, presets and the Telegram token live in `~/.config/laserwerk/`, not in
+the project folder.
 
-## Sicherheit
+## Safety
 
-Ein Diodenlaser verbrennt Material, Haut und Netzhaut, und er entzündet Späne,
-Papier und Staub. Dieses Programm nimmt einem davon nichts ab.
+A diode laser burns material, skin and retinas, and it sets fire to chips,
+paper and dust. This program takes none of that off your hands.
 
-- **Nie unbeaufsichtigt laufen lassen.** Eine Gravur läuft eine Stunde; ein
-  Glimmnest braucht keine Minute.
-- **Schutzbrille für die Wellenlänge des Lasers**, auch für alle, die zusehen.
-  Blaues Streulicht an der Brennstelle reicht.
-- **Absaugen oder ins Freie lüften.** Holzrauch ist unangenehm, manches andere
-  giftig.
-- **Kein PVC, kein Kunstleder, kein TPU** — dabei entsteht Chlorwasserstoff
-  beziehungsweise Blausäure. Sie fressen auch die Mechanik.
-- **Löschmittel in Reichweite.**
-- Die Fernsteuerung fährt nur Achsen und das Sichtkreuz. Einen Job startet sie
-  mit Absicht nicht: Volle Leistung gehört dorthin, wo jemand hinsieht. Auch
-  Achsen bitte nur fahren, während man die Maschine im Blick hat.
+- **Never leave it running unattended.** An engraving takes an hour; a
+  smouldering nest takes less than a minute.
+- **Wear goggles matched to the wavelength**, and so should anyone watching.
+  Scattered blue light from the burn spot is enough to do harm.
+- **Extract the fumes or work in the open.** Wood smoke is unpleasant; some
+  other materials are toxic.
+- **No PVC, no imitation leather, no TPU** — they release hydrogen chloride or
+  hydrogen cyanide. They eat the mechanics too.
+- **Keep something to put out a fire within reach.**
+- The remote control only jogs the axes and traces the sight cross. It will not
+  start a job, on purpose: full power belongs where somebody is watching. Even
+  jogging deserves your eyes on the machine.
 
-## Die Materialwerte sind nicht deine
+## The material settings are not yours
 
-Die mitgelieferten Presets wurden auf **einer** Maschine gemessen: 450 nm,
-5,5 W optisch. Anderer Laser, andere Linse, anderer Fokus, andere Werte. Sie
-sind ein Startpunkt für einen eigenen Materialtest, kein Rezept. Zu viel
-Leistung bei zu wenig Vorschub heißt nicht „dunkler", sondern irgendwann
-„brennt".
+The presets shipped here were measured on **one** machine: 450 nm, 5.5 W
+optical. A different laser, lens or focus means different values. Treat them as
+a starting point for your own material test, not as a recipe. Too much power at
+too little feed does not mean "darker", it eventually means "on fire".
 
-Was übertragbar ist, ist das **Verhältnis S/F**: Leistung geteilt durch
-Vorschub, also die Energie je Millimeter. Auf der Referenzmaschine hat sich
-Holz bei S830/F1000 = 0,83 bewährt, Wildleder bei 0,25, das Sichtkreuz läuft bei
-0,08. Über etwa 0,20 brennt der Strahl sichtbar ein — deshalb weigert sich das
-Programm, ein Sichtkreuz oberhalb davon zu fahren.
+What does carry over is the **S/F ratio**: power divided by feed, that is the
+energy per millimetre. On the reference machine wood works at S830/F1000 =
+0.83, suede at 0.25, and the sight cross runs at 0.08. Above roughly 0.20 the
+beam burns in visibly — which is why the program refuses to trace a sight cross
+beyond that.
 
-Alle Leistungen in der Oberfläche beziehen sich auf die Skala **0…1000**. Beim
-Verbinden liest Laserwerk `$30` aus dem Controller und rechnet beim Senden um;
-steht dort 255, wird aus S830 eben S212 — derselbe Anteil. Es warnt außerdem,
-wenn `$32 = 0` ist, also der Lasermodus aus: dann brennt der Strahl auch im
-Stillstand weiter, und jede Pause frisst ein Loch.
+All power values in the interface refer to a **0…1000** scale. On connecting,
+Laserwerk reads `$30` from the controller and converts when sending; if yours
+says 255, S830 goes out as S212 — the same fraction. It also warns when
+`$32 = 0`, meaning laser mode is off: the beam then keeps burning while the
+head stands still, and every pause eats a hole.
 
-## Getestet mit
+## Tested with
 
-GRBL 1.1f auf einem CH340-Board, Diodenlaser mit 450 nm und 5,5 W optischer
-Leistung, 200 × 200 mm Verfahrweg, Z-Achse mit Motor. Dort gelaufen:
-Schichtplatte, Schiefer, Wildleder, Papier (geschnitten). Weißes PLA ist mit
-einem blauen Laser nicht zu markieren — das Licht wird reflektiert.
+GRBL 1.1f on a CH340 board, a 450 nm diode laser of 5.5 W optical power,
+200 × 200 mm of travel, motorised Z axis. Run on it: plywood, slate, suede,
+paper (cut). White PLA cannot be marked with a blue laser — the light is
+reflected.
 
-Der Verfahrweg steht im Reiter *Maschine* und lässt sich aus `$130`/`$131`
-übernehmen.
+Machine travel is set in the *Machine* tab and can be taken from `$130`/`$131`.
 
-## Aufbau
+## Layout
 
-| Datei | wofür |
+| File | Purpose |
 |---|---|
-| `laserwerk.py` | Oberfläche, Ablauf, Jobsteuerung |
-| `lw_grbl.py` | serielle Anbindung, Streaming, Statusberichte |
-| `lw_job.py` | Raster-G-Code, Laufzeitschätzung, Vorschaubilder, Tests |
-| `lw_vector.py` | SVG- und DXF-Einleser, Konturen, Schnitt-G-Code |
-| `lw_presets.py` | Materialwerte und Einstellungen |
-| `lw_style.py` | helles und dunkles Farbschema |
-| `lw_dialog.py` | native Dialoge über zenity, mit Tk als Rückfall |
-| `lw_telegram.py` | Fernsteuerung |
-| `fortsetzen.py` | abgebrochenen Job an der Stoppstelle fortsetzen |
+| `laserwerk.py` | interface, workflow, job control |
+| `lw_grbl.py` | serial link, streaming, status reports |
+| `lw_job.py` | raster G-code, runtime estimate, preview images, tests |
+| `lw_vector.py` | SVG and DXF readers, contours, cutting G-code |
+| `lw_presets.py` | material values and settings |
+| `lw_style.py` | light and dark colour schemes |
+| `lw_text.py` | German and English interface texts |
+| `lw_dialog.py` | native dialogs through zenity, falling back to Tk |
+| `lw_telegram.py` | remote control |
+| `fortsetzen.py` | resume an interrupted job at its stopping point |
+| `bilder/mach_bilder.py` | makes the screenshots above, on a hidden display |
 
-Keine Fremdbibliotheken außer pyserial, Pillow und numpy. SVG, DXF und die
-Telegram-Anbindung sind selbst geschrieben, damit nichts nachinstalliert werden
-muss und nichts im Hintergrund Dialoge öffnet.
+No third-party libraries beyond pyserial, Pillow and numpy. The SVG and DXF
+readers and the Telegram client are written from scratch, so nothing has to be
+installed afterwards and nothing opens dialogs behind your back.
 
-## Lizenz
+## Translations
 
-MIT, siehe [LICENSE](LICENSE). Ohne jede Gewährleistung — besonders für das,
-was deine Maschine damit anstellt.
+`lw_text.py` maps each German source string to its English counterpart. A
+missing entry simply falls back to German, so nothing breaks. To add a
+language, copy the table and extend `SPRACHEN`.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). Without any warranty — in particular for whatever
+your machine does with it.

@@ -26,6 +26,7 @@ import http.client, json, os, queue, threading, time
 import urllib.parse, urllib.request
 
 import lw_presets as P
+from lw_text import T
 
 DATEI = os.path.join(P.DIR, "telegram.json")
 API = "https://api.telegram.org/bot{t}/{m}"
@@ -33,21 +34,21 @@ VERBINDEN = 12.0          # Sekunden fuer den Verbindungsaufbau
 SCHRITTE = [0.1, 0.5, 1.0, 5.0, 10.0, 50.0]
 MAX_SCHRITT = 50.0
 
-HILFE = (
-    "Laserwerk-Fernsteuerung\n\n"
-    "/pad - Steuerkreuz schicken\n"
-    "/pos - Position\n"
-    "/x 5   /y -2.5   /z 0.3 - einzeln fahren (max. 50 mm)\n"
-    "/schritt 1 - Schrittweite fuer das Pad\n"
-    "/kreuz - Sichtkreuz an der Stelle fahren\n"
-    "/null - Nullpunkt XY = hier\n"
-    "/heim - zum Nullpunkt fahren\n"
-    "/aus - Laser aus (M5)\n"
-    "/stopp - Halt und Soft-Reset\n"
-    "/status - Verbindung, Zustand, Job\n"
-    "/zeiten - wo die Wartezeit herkommt\n\n"
-    "Gravur und Schnitt werden absichtlich nur am Rechner gestartet."
-)
+def hilfe():
+    return T(
+        "Laserwerk-Fernsteuerung\n\n"
+        "/pad - Steuerkreuz schicken\n"
+        "/pos - Position\n"
+        "/x 5   /y -2.5   /z 0.3 - einzeln fahren (max. 50 mm)\n"
+        "/schritt 1 - Schrittweite fuer das Pad\n"
+        "/kreuz - Sichtkreuz an der Stelle fahren\n"
+        "/null - Nullpunkt XY = hier\n"
+        "/heim - zum Nullpunkt fahren\n"
+        "/aus - Laser aus (M5)\n"
+        "/stopp - Halt und Soft-Reset\n"
+        "/status - Verbindung, Zustand, Job\n"
+        "/zeiten - wo die Wartezeit herkommt\n\n"
+        "Gravur und Schnitt werden absichtlich nur am Rechner gestartet.")
 
 
 def lade():
@@ -143,7 +144,7 @@ class Fern:
         if self.aktiv:
             return
         if not self.token:
-            raise ValueError("Kein Token hinterlegt.")
+            raise ValueError(T("Kein Token hinterlegt."))
         name = self.pruefe()
         self.aktiv = True
         self._alte_ueberspringen()
@@ -151,7 +152,7 @@ class Fern:
         threading.Thread(target=self._arbeiten, daemon=True).start()
         threading.Thread(target=self._senden, daemon=True).start()
         if self.chat:
-            self.melde("Laserwerk ist da. /pad fuer das Steuerkreuz.")
+            self.melde(T("Laserwerk ist da. /pad fuer das Steuerkreuz."))
         return name
 
     def stop(self):
@@ -189,7 +190,8 @@ class Fern:
                     break
                 except Exception as e:
                     if versuch == 2:
-                        self._log(f"Telegram: Meldung nicht zugestellt ({e}): {t}")
+                        self._log(T("Telegram: Meldung nicht zugestellt ({e}): {t}"
+                                    ).format(e=e, t=t))
                     else:
                         time.sleep(2)
 
@@ -204,10 +206,10 @@ class Fern:
             except Exception as e:
                 self.fehler = str(e)
                 if "409" in str(e):
-                    self._log("Telegram: 409 - der Bot wird anderswo schon "
-                              "abgefragt (zweites Laserwerk offen?)")
+                    self._log(T("Telegram: 409 - der Bot wird anderswo schon "
+                              "abgefragt (zweites Laserwerk offen?)"))
                 else:
-                    self._log(f"Telegram: {e}")
+                    self._log(T('Telegram: {0}').format(e))
                 time.sleep(min(60, ruhe)); ruhe = min(60, ruhe * 2)
                 continue
             ende = time.time()
@@ -229,7 +231,7 @@ class Fern:
             try:
                 self._update(u, empfang, luecke)
             except Exception as e:
-                self._log(f"Telegram: {e}")
+                self._log(T('Telegram: {0}').format(e))
 
     # ---------------------------------------------------------- Eingang
     def _update(self, u, empfang=None, luecke=0.0):
@@ -274,11 +276,11 @@ class Fern:
         Maschine  = Senden und Abwarten der Fahrt."""
         self.messungen.append(
             f"{time.strftime('%H:%M:%S')} {was}: "
-            + (f"unterwegs {alter:.1f}s, " if alter is not None else "")
-            + f"blind {luecke:.1f}s, Schlange {warten:.1f}s, "
-            + (f"Quittung {quittung:.1f}s, " if quittung else "")
-            + f"Maschine {maschine:.1f}s"
-            + (f", Antwort {antwort:.1f}s" if antwort else ""))
+            + (T("unterwegs {s:.1f}s, ").format(s=alter) if alter is not None else "")
+            + T("blind {b:.1f}s, Schlange {w:.1f}s, ").format(b=luecke, w=warten)
+            + (T("Quittung {s:.1f}s, ").format(s=quittung) if quittung else "")
+            + T("Maschine {s:.1f}s").format(s=maschine)
+            + (T(", Antwort {s:.1f}s").format(s=antwort) if antwort else ""))
         del self.messungen[:-12]
 
     def _erlaubt(self, chat, text):
@@ -287,8 +289,8 @@ class Fern:
             if text.startswith("/start"):
                 self.chat = chat
                 d = lade(); d["chat"] = chat; sichere(d)
-                self._log(f"Telegram: verknuepft mit Chat {chat}")
-                self.raus.put("Verknuepft. " + HILFE)
+                self._log(T("Telegram: verknuepft mit Chat {chat}").format(chat=chat))
+                self.raus.put(T("Verknuepft. ") + hilfe())
                 self._pad_neu()
             return False
         if chat != self.chat:
@@ -300,41 +302,41 @@ class Fern:
         c = t[0].lower().lstrip("/").split("@")[0]
         arg = t[1] if len(t) > 1 else None
         if c in ("start", "hilfe", "help"):
-            self.raus.put(HILFE); self._pad_neu(); return
+            self.raus.put(hilfe()); self._pad_neu(); return
         if c == "pad":
             self._pad_neu(); return
         if c == "schritt":
             try:
                 self.schritt = max(0.01, min(MAX_SCHRITT, float(arg.replace(",", "."))))
                 d = lade(); d["schritt"] = self.schritt; sichere(d)
-                self.raus.put(f"Schrittweite {self.schritt:g} mm")
+                self.raus.put(T("Schrittweite {mm:g} mm").format(mm=self.schritt))
             except (TypeError, ValueError):
-                self.raus.put("So: /schritt 1")
+                self.raus.put(T("So: /schritt 1"))
             return
         if c in ("x", "y", "z"):
             try:
                 mm = float((arg or "").replace(",", "."))
             except ValueError:
-                self.raus.put(f"So: /{c} 5"); return
+                self.raus.put(T("So: /{c} 5").format(c=c)); return
             self.raus.put(self._fahren(c, mm)); return
         if c == "zeiten":
-            self.raus.put("Letzte Laufzeiten:\n" + ("\n".join(self.messungen)
-                          or "noch nichts gemessen"))
+            self.raus.put(T("Letzte Laufzeiten:\n") + ("\n".join(self.messungen)
+                          or T("noch nichts gemessen")))
             return
         bekannt = {"pos": "pos", "kreuz": "kreuz", "null": "null", "heim": "heim",
                    "aus": "aus", "stopp": "stopp", "stop": "stopp", "status": "status"}
         if c in bekannt:
             self.raus.put(self._tun(bekannt[c])); return
-        self.raus.put("Kenne ich nicht. /hilfe")
+        self.raus.put(T("Kenne ich nicht. /hilfe"))
 
     def _etikett(self, data):
         """Was der Knopf vorhat - schon vor dem Ausfuehren bekannt."""
         if len(data) == 2 and data[0] in "xyz" and data[1] in "+-":
             mm = self.schritt if data[1] == "+" else -self.schritt
             return f"{data[0].upper()} {mm:+g} mm"
-        return {"kreuz": "Kreuz", "pos": "Position", "null": "Nullpunkt",
-                "heim": "zum Nullpunkt", "aus": "Laser aus", "stopp": "STOPP",
-                "schritt": "Schrittweite"}.get(data, data)
+        return {"kreuz": T("Kreuz"), "pos": T("Position"), "null": T("Nullpunkt"),
+                "heim": T("zum Nullpunkt"), "aus": T("Laser aus"),
+                "stopp": T("STOPP"), "schritt": T("Schrittweite")}.get(data, data)
 
     def _knopf(self, data):
         if data == "schritt":
@@ -342,7 +344,7 @@ class Fern:
                 if self.schritt in SCHRITTE else 2
             self.schritt = SCHRITTE[i]
             d = lade(); d["schritt"] = self.schritt; sichere(d)
-            return f"Schritt {self.schritt:g} mm"
+            return T("Schritt {mm:g} mm").format(mm=self.schritt)
         if len(data) == 2 and data[0] in "xyz" and data[1] in "+-":
             return self._fahren(data[0], self.schritt if data[1] == "+" else -self.schritt)
         return self._tun(data)
@@ -355,22 +357,25 @@ class Fern:
         try:
             return antwort.get(timeout=timeout)
         except queue.Empty:
-            return "Keine Antwort vom Programm."
+            return T("Keine Antwort vom Programm.")
 
     def _log(self, t):
         self.app.q.put(("msg", t))
 
     def _fahren(self, achse, mm):
         if abs(mm) > MAX_SCHRITT:
-            return f"Mehr als {MAX_SCHRITT:g} mm am Stueck gibt es hier nicht."
+            return T("Mehr als {mm:g} mm am Stueck gibt es hier nicht."
+                     ).format(mm=MAX_SCHRITT)
         antwort = self._ruf("jog", (achse, mm))
         if antwort:
             return antwort
-        return self._nach_fahrt(f"{achse.upper()} {mm:+g} mm")
+        return self._nach_fahrt(
+            T("{achse} {mm:+g} mm").format(achse=achse.upper(), mm=mm))
 
     def _tun(self, aktion):
         antwort = self._ruf(aktion)
-        if aktion in ("kreuz", "heim") and not antwort.startswith(("Nicht", "Es laeuft")):
+        g = self.app.grbl
+        if aktion in ("kreuz", "heim") and g.connected and not g.job_running:
             return self._nach_fahrt(antwort)
         return antwort
 
@@ -397,17 +402,19 @@ class Fern:
         x, y, z = (list(st["wpos"]) + [0, 0, 0])[:3]
         if self.app.cfg.get("z_invert"):
             z = -z
-        return f"X {x:.2f}   Y {y:.2f}   Z {z:.2f}   [{st['state']}]"
+        return T("X {x:.2f}   Y {y:.2f}   Z {z:.2f}   [{zustand}]").format(
+            x=x, y=y, z=z, zustand=st["state"])
 
     # ---------------------------------------------------------- Steuerkreuz
     def _tastatur(self):
         k = lambda t, d: {"text": t, "callback_data": d}
         return {"inline_keyboard": [
-            [k("Z +", "z+"), k("Y +", "y+"), k("Position", "pos")],
-            [k("X -", "x-"), k("Kreuz", "kreuz"), k("X +", "x+")],
-            [k("Z -", "z-"), k("Y -", "y-"), k(f"Schritt {self.schritt:g} mm", "schritt")],
-            [k("Nullpunkt = hier", "null"), k("zum Nullpunkt", "heim")],
-            [k("Laser aus", "aus"), k("STOPP", "stopp")],
+            [k("Z +", "z+"), k("Y +", "y+"), k(T("Position"), "pos")],
+            [k("X -", "x-"), k(T("Kreuz"), "kreuz"), k("X +", "x+")],
+            [k("Z -", "z-"), k("Y -", "y-"),
+             k(T("Schritt {mm:g} mm").format(mm=self.schritt), "schritt")],
+            [k(T("Nullpunkt = hier"), "null"), k(T("zum Nullpunkt"), "heim")],
+            [k(T("Laser aus"), "aus"), k(T("STOPP"), "stopp")],
         ]}
 
     def _pad_neu(self):
@@ -416,7 +423,7 @@ class Fern:
                           text=self.position(), reply_markup=self._tastatur())
             self.pad_id = r["result"]["message_id"]
         except Exception as e:
-            self._log(f"Telegram: {e}")
+            self._log(T('Telegram: {0}').format(e))
 
     def _pad_auffrischen(self, letzte):
         if not self.pad_id:
@@ -429,4 +436,4 @@ class Fern:
         except Exception as e:
             # "message is not modified" meldet Telegram mit 400 - kein Fehler.
             if "not modified" not in str(e):
-                self._log(f"Telegram: {e}")
+                self._log(T('Telegram: {0}').format(e))

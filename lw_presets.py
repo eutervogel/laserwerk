@@ -38,7 +38,7 @@ DEFAULTS = {
 CONFIG_DEFAULTS = {"z_invert": False, "jog_feed": 1000, "port": "",
                    "x_max": 200.0, "y_max": 200.0, "theme": "dunkel",
                    "brett_x": 100.0, "brett_y": 50.0, "brett_an": True,
-                   "einrasten": True}
+                   "einrasten": True, "sprache": "de"}
 
 
 def _load(path, default):

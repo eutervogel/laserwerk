@@ -75,9 +75,9 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
     """Leistungsmatrix -> G-Code-Zeilen. Rueckgabe (zeilen, info)."""
     ny, nx = p.shape
     g = [f"; Laserwerk {kommentar}".rstrip(),
-         f"; {nx*line:.1f} x {ny*line:.1f} mm, Zeile {line} mm, "
+         f"; {nx*line:.1f} x {ny*line:.1f} mm, row {line} mm, "
          f"S{s_max}/F{feed} = S/F {s_max/feed:.2f}",
-         "; Nullpunkt = linke untere Ecke", "G21", "G90", "G94", "M4 S0"]
+         "; origin = bottom left corner", "G21", "G90", "G94", "M4 S0"]
     xm = lambda i: x_off + i * line
     cut = trav = 0.0
     xprev = 0.0
@@ -171,7 +171,7 @@ def fokustest_z(z_mitte, spanne, schritt, s, feed, laenge=12.0, abstand=3.0):
     Setzt eine gueltige Z-Referenz voraus (G92 Z = Materialdicke)."""
     n = int(round(spanne / schritt)) + 1
     zs = [round(z_mitte - spanne / 2 + i * schritt, 3) for i in range(n)]
-    g = ["; Fokustest ueber Z", "G21", "G90", "G94", "M4 S0"]
+    g = ["; focus test along Z", "G21", "G90", "G94", "M4 S0"]
     for i, z in enumerate(zs):
         x = 2.0 + i * abstand
         g += [f"G0 Z{z:.3f}", f"G0 X{x:.3f} Y2.000",
@@ -182,7 +182,7 @@ def fokustest_z(z_mitte, spanne, schritt, s, feed, laenge=12.0, abstand=3.0):
 
 def materialtest(powers, feeds, feld=6.0, gap=2.5, line=0.12):
     """Raster aus Feldern: Spalten = Leistung, Zeilen = Vorschub."""
-    g = ["; Materialtest", "G21", "G90", "G94", "M4 S0"]
+    g = ["; material test", "G21", "G90", "G94", "M4 S0"]
     for r, f in enumerate(feeds):
         yb = 3.0 + r * (feld + gap)
         for c, s in enumerate(powers):

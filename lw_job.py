@@ -217,6 +217,16 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
         yb = 3.0 + r * (feld + gap)
         s_min = int(round(s_max * boden))
         g.append(f"; S{s_max} F{feed}")
+        # Striche links: so viele wie die Zeilennummer. Sonst weiss man am
+        # fertigen Brettchen nicht mehr, welche Zeile welche Leistung war.
+        for k in range(r + 1):
+            y = yb + 0.6 + k * 1.2
+            for j in range(3):                   # 0,3 mm dick
+                yy = y + j * line
+                g += [f"G0 X0.6 Y{yy:.2f}",
+                      f"G1 X2.4 S{s_max} F{feed}", "G1 S0"]
+                segs.append(1.8)
+                rows += 1
         for c in range(stufen):
             ton = (c + 1) / stufen                     # hellstes Feld nicht leer
             sv = int(round(s_min + ton * (s_max - s_min)))
@@ -233,7 +243,7 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
     breite = stufen * feld + (stufen - 1) * gap * 0.2
     hoehe = len(powers) * feld + (len(powers) - 1) * gap
     info = dict(rows=rows, cut_m=sum(segs) / 1000, trav_m=0.0, befehle=len(g),
-                xmin=3.0, xmax=3.0 + breite, breite=breite, hoehe=hoehe,
+                xmin=0.6, xmax=3.0 + breite, breite=breite + 2.4, hoehe=hoehe,
                 sekunden=estimate(segs, feed, rows))
     return g, info
 

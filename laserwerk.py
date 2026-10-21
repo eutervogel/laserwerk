@@ -5,7 +5,7 @@ Laserwerk - Oberflaeche fuer GRBL-Diodenlaser.
 Bild oder SVG laden, skalieren, Material waehlen, Achsen steuern,
 Nullpunkt setzen, Fokus testen, gravieren.
 """
-import base64, io, os, queue, threading, time
+import base64, io, math, os, queue, threading, time
 from PIL import Image
 import tkinter as tk
 from tkinter import ttk
@@ -50,6 +50,7 @@ class App:
         self.v_snap = tk.BooleanVar(value=self.cfg["einrasten"])
         self.vec = None            # Konturen (nur bei SVG/DXF)
         self.vec_bb = None         # deren exakte Ausdehnung in mm
+        self._vecdreh = None       # Ausdehnung der gedrehten Konturen
         self.cut_polys = None      # erzeugte Schnittkonturen
         self.zero_ok = False       # Nullpunkt XY in dieser Sitzung gesetzt
         self.zref_ok = False       # Z-Referenz gueltig
@@ -267,12 +268,20 @@ class App:
         ttk.Label(rs, text=T("Mittellinie der Aufspannung, nicht des Motivs."),
                   style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
 
-        self.v_rot = tk.IntVar(value=0)
+        self.v_rot = tk.DoubleVar(value=0.0)
         ttk.Label(f, text=T("Drehen")).grid(row=8, column=0, sticky="w")
-        cb = ttk.Combobox(f, textvariable=self.v_rot, values=[0, 90, 180, 270],
-                          width=5, state="readonly")
-        cb.grid(row=8, column=1, sticky="w")
-        cb.bind("<<ComboboxSelected>>", lambda e: self._rotated())
+        dr = ttk.Frame(f)
+        dr.grid(row=8, column=1, columnspan=2, sticky="w")
+        sb = ttk.Spinbox(dr, from_=0, to=359.9, increment=5, width=6, wrap=True,
+                         textvariable=self.v_rot, command=self._rotated)
+        sb.pack(side="left")
+        sb.bind("<Return>", lambda e: self._rotated())
+        sb.bind("<FocusOut>", lambda e: self._rotated())
+        ttk.Label(dr, text="°").pack(side="left", padx=(2, 6))
+        for grad in (90, 180, 270, 0):
+            ttk.Button(dr, text=f"{grad}°" if grad else "0",
+                       width=4 if grad else 3,
+                       command=lambda g=grad: self._dreh_setzen(g)).pack(side="left")
 
         self.v_inv = tk.BooleanVar(value=False)
         ttk.Checkbutton(f, text=T("Invertieren (Hell und Dunkel tauschen)"), variable=self.v_inv
@@ -527,6 +536,30 @@ class App:
         ttk.Label(mb, text=T("Spalten = Leistung, Zeilen = Vorschub,\n"
                              "unten links beginnend. Felder 6 mm."), style="Muted.TLabel").grid(row=3, column=0, columnspan=3, sticky="w")
 
+        gb = ttk.LabelFrame(f, text=T("Graustufentest"), padding=6)
+        gb.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        self.v_gt_s = tk.StringVar(value="200,400,600,830")
+        self.v_gt_f = tk.IntVar(value=1000)
+        self.v_gt_n = tk.IntVar(value=6)
+        self.v_gt_feld = tk.DoubleVar(value=7.0)
+        self._row(gb, 0, "Leistungen", self.v_gt_s, width=20)
+        self._row(gb, 1, "Vorschub F", self.v_gt_f)
+        self._row(gb, 2, "Stufen", self.v_gt_n)
+        self._row(gb, 3, "Feldgröße", self.v_gt_feld, unit="mm")
+        ttk.Label(gb, text=T("Eine Zeile je Leistung, darin ein Tonwertkeil\n"
+                             "von hell nach dunkel. Unten die kleinste\n"
+                             "Leistung, links der hellste Ton. Jedes Feld\n"
+                             "bekommt genau die Leistung, die eine Gravur\n"
+                             "an dieser Stelle auch bekäme."),
+                  style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+        self.lbl_gt = ttk.Label(gb, text="", style="Muted.TLabel")
+        self.lbl_gt.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ttk.Button(gb, text=T("Graustufentest starten"), command=self.graustufentest
+                   ).grid(row=6, column=0, columnspan=3, sticky="ew", pady=4)
+        for v in (self.v_gt_s, self.v_gt_f, self.v_gt_n, self.v_gt_feld):
+            v.trace_add("write", lambda *a: self._gt_vorschau())
+        self._gt_vorschau()
+
     # ================================================================ Motiv
     def open_image(self):
         p = filedialog.askopenfilename(
@@ -560,6 +593,7 @@ class App:
         self.clear_motif()
         self.src, self.src_path, self.vec = im, p, vec
         self.vec_bb = V.bbox(V.flatten(vec, 1.0)) if vec else None
+        self._vecdreh = None
         if ext == ".dxf":
             self.v_job.set("schnitt")       # DXF = nur Konturen
         elif not vec and self.v_job.get() == "schnitt":
@@ -574,7 +608,7 @@ class App:
             messagebox.showinfo(T("Motiv"), T("Während eines Jobs nicht möglich."))
             return
         self.src = self.src_path = None
-        self.vec = self.cut_polys = self.vec_bb = None
+        self.vec = self.cut_polys = self.vec_bb = self._vecdreh = None
         self.lines = self.info = self.preview_img = None
         self.preview_pil = self._prev_cache = self._live_cache = None
         self.drag = None
@@ -593,10 +627,7 @@ class App:
                 T("Nur bei SVG und DXF möglich - Pixelbilder haben keine\n"
                   "verlässliche Größe in Millimetern."))
             return
-        x0, y0, x1, y1 = self._vec_bbox()
-        w, h = x1 - x0, y1 - y0
-        if self.v_rot.get() in (90, 270):
-            w, h = h, w
+        w, h = self._vec_dreh_bb()               # 1:1 heisst: so, wie gedreht
         self.v_w.set(round(w, 3)); self.v_h.set(round(h, 3))
         self._log(T('Originalgröße 1:1: {0:.3f} x {1:.3f} mm').format(w, h))
         self._stale(); self._draw()
@@ -617,17 +648,40 @@ class App:
                         "(z.B. Papier S500/F600)"))
         self.fit()
 
+    def _vec_dreh_bb(self):
+        """Ausdehnung der GEDREHTEN Konturen. Das gedrehte Rechteck um eine
+        Kontur ist meist groesser als das Rechteck um die gedrehte Kontur -
+        wer damit rechnet, setzt das Motiv nicht wirklich mittig."""
+        if not self.vec:
+            return None
+        try:
+            grad = round(float(self.v_rot.get()), 1)
+        except tk.TclError:
+            grad = 0.0
+        if self._vecdreh and self._vecdreh[0] == grad:
+            return self._vecdreh[1]
+        x0, y0, x1, y1 = V.bbox(V.rotate(V.flatten(self.vec, 1.0), grad))
+        self._vecdreh = (grad, (x1 - x0, y1 - y0))
+        return self._vecdreh[1]
+
+    def _dreh_bb(self, w, h):
+        """Umschliessendes Rechteck nach dem Drehen - fuer jeden Winkel, nicht
+        nur fuer Vielfache von 90 Grad."""
+        try:
+            a = math.radians(float(self.v_rot.get()))
+        except tk.TclError:
+            return w, h
+        c, s = abs(math.cos(a)), abs(math.sin(a))
+        return w * c + h * s, w * s + h * c
+
     def _aspect(self):
         if self.src is None:
             return 1.0
         if self.v_job.get() == "schnitt" and self.vec:
-            x0, y0, x1, y1 = self._vec_bbox()
-            w, h = x1 - x0, y1 - y0
+            w, h = self._vec_dreh_bb()
         else:
-            w, h = self.src.size
-        if self.v_rot.get() in (90, 270):
-            w, h = h, w
-        return w / h
+            w, h = self._dreh_bb(*self.src.size)
+        return w / h if h else 1.0
 
     def _keep_ratio(self, which):
         if not self.v_lock.get() or self.src is None:
@@ -650,7 +704,15 @@ class App:
             return
         self.lbl_gamma.configure(text=f"{g:.1f}")
 
+    def _dreh_setzen(self, grad):
+        self.v_rot.set(float(grad))
+        self._rotated()
+
     def _rotated(self):
+        try:                         # 370 -> 10, -5 -> 355
+            self.v_rot.set(round(float(self.v_rot.get()) % 360, 1))
+        except tk.TclError:
+            return
         self._keep_ratio("w")
 
     def _stale(self):
@@ -749,10 +811,7 @@ class App:
         if not self.vec:
             messagebox.showinfo(T("Schneiden"), T("Keine Konturen - bitte ein SVG oder DXF öffnen."))
             return
-        x0, y0, x1, y1 = self._vec_bbox()
-        bw, bh = x1 - x0, y1 - y0
-        if self.v_rot.get() in (90, 270):
-            bw, bh = bh, bw
+        bw, bh = self._vec_dreh_bb()
         sc = min(w / bw if bw else 1e9, h / bh if bh else 1e9)
         polys = V.flatten(self.vec, sc)
         polys = V.rotate(polys, self.v_rot.get())
@@ -1184,6 +1243,47 @@ class App:
         z = self.fokus_zs[sel[0]]
         self.v_korr.set(round(z - self.v_dicke.get(), 2))
         self._log(T('Fokuskorrektur = {0:+.2f} mm - im Reiter Material speichern').format(self.v_korr.get()))
+
+    def _gt_werte(self):
+        ps = [int(x) for x in self.v_gt_s.get().replace(" ", "").split(",") if x]
+        return (ps, int(self.v_gt_f.get()), max(2, int(self.v_gt_n.get())),
+                max(2.0, float(self.v_gt_feld.get())))
+
+    def _gt_vorschau(self):
+        """Maße und Laufzeit vorab zeigen - der Test frisst sonst unbemerkt
+        eine halbe Stunde und ein halbes Brett."""
+        try:
+            ps, fv, n, feld = self._gt_werte()
+            if not ps:
+                raise ValueError
+        except (tk.TclError, ValueError):
+            self.lbl_gt.configure(text=T("Werte prüfen."))
+            return
+        _, i = J.graustufentest(ps, fv, n, feld, line=self.v_line.get())
+        self.lbl_gt.configure(text=T("{b:.0f} x {h:.0f} mm, Laufzeit ca. "
+                                     "{min:.0f} min").format(
+            b=i["breite"], h=i["hoehe"], min=i["sekunden"] / 60))
+
+    def graustufentest(self):
+        if not self._need(zero=True):
+            return
+        try:
+            ps, fv, n, feld = self._gt_werte()
+            if not ps:
+                raise ValueError
+        except (tk.TclError, ValueError):
+            messagebox.showerror(T("Graustufentest"),
+                                 T("Werte mit Komma trennen, z.B. 200,400,600"))
+            return
+        g, i = J.graustufentest([self._s(p) for p in ps], fv, n, feld,
+                                line=self.v_line.get())
+        self.lines, self.info = g, i
+        self.preview_pil = self.preview_img = self.cut_polys = None
+        self._log(T("Graustufentest: {n} Leistungen x {s} Stufen, "
+                    "{b:.0f} x {h:.0f} mm").format(n=len(ps), s=n,
+                                                   b=i["breite"], h=i["hoehe"]))
+        self._draw()
+        self._run(g, T("Graustufentest"), confirm=True)
 
     def materialtest(self):
         if not self._need(zero=True):
@@ -1651,10 +1751,7 @@ class App:
             # V.fit setzt die Konturen seitenverhaeltnistreu in den Rahmen und
             # legt sie an die linke untere Ecke. Dann ist der gezeichnete
             # Kasten groesser als der Schnitt - und "mittig" waere daneben.
-            x0, y0, x1, y1 = self._vec_bbox()
-            bw, bh = x1 - x0, y1 - y0
-            if self.v_rot.get() in (90, 270):
-                bw, bh = bh, bw
+            bw, bh = self._vec_dreh_bb()
             if bw > 0 and bh > 0:
                 sc = min(b / bw, h / bh)
                 b, h = bw * sc, bh * sc

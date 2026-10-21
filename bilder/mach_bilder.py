@@ -22,6 +22,11 @@ import lw_job as J
 import lw_text
 import laserwerk as L
 
+# Kein Telegram beim Bildermachen: sonst fragt der Bot gegen ein laufendes
+# Laserwerk und beide bekommen 409 von Telegram.
+L.TG.Fern.start = lambda self: "aus"
+
+
 
 class Attrappe:
     """Sieht fuer die Oberflaeche aus wie ein verbundener Controller."""
@@ -119,6 +124,8 @@ def main():
     schiess(root, vorsatz + "04-maschine.png")
 
     app.nb.select(3)                    # Tests
+    root.update()
+    runter(app.tab_test)                # die Spalte ist laenger als das Fenster
     root.update()
     schiess(root, vorsatz + "05-tests.png")
     root.destroy()

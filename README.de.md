@@ -27,13 +27,14 @@ Material ausprobieren will.
   Originalgröße 1:1 für Schablonen aus dem CAD.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
   darauf schieben und an den Ecken skalieren, mit Einrasten auf Kanten, Ecken
-  und Mitte.
+  und Mitte. Drehen in beliebigen Winkeln, nicht nur in 90er-Schritten.
 - **Maschine fahren** — Achsen tippen, Nullpunkt setzen, Z-Referenz,
   Rahmenfahrt um das Motiv, Sichtkreuz mit schwacher Leistung („wo steht er
   gerade?"), Entsperren, einzelne G-Code-Befehle.
 - **Material finden** — Fokustest über Z, Materialtest als Feldraster aus
-  Leistungen und Vorschüben, Presets mit Materialdicke, Fokuskorrektur,
-  Leistung, Vorschub und Zeilenabstand.
+  Leistungen und Vorschüben, Graustufentest mit einem Tonwertkeil je
+  Leistung, Presets mit Materialdicke, Fokuskorrektur, Leistung, Vorschub,
+  Zeilenabstand und Tonwert.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man

@@ -196,6 +196,48 @@ def materialtest(powers, feeds, feld=6.0, gap=2.5, line=0.12):
     return g
 
 
+def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
+                   boden=0.3):
+    """Streifen aus Graustufenfeldern: eine Zeile je Leistung, darin ein
+    Tonwertkeil von hell nach dunkel.
+
+    Jedes Feld bekommt genau die Leistung, die eine Gravur an dieser Stelle
+    auch bekaeme: s = boden*S + ton*(S - boden*S). So zeigt der Streifen,
+    ab welchem Ton das Material ueberhaupt anspricht und ab welchem es
+    zulaeuft - und der Vergleich der Zeilen sagt, welche Leistung passt.
+
+    Unten die kleinste Leistung, links der hellste Ton.
+    Rueckgabe (zeilen, info) wie bei raster_gcode.
+    """
+    g = ["; greyscale test", "; rows = power, columns = tone, light to dark",
+         "G21", "G90", "G94", "M4 S0"]
+    segs = []
+    rows = 0
+    for r, s_max in enumerate(powers):
+        yb = 3.0 + r * (feld + gap)
+        s_min = int(round(s_max * boden))
+        g.append(f"; S{s_max} F{feed}")
+        for c in range(stufen):
+            ton = (c + 1) / stufen                     # hellstes Feld nicht leer
+            sv = int(round(s_min + ton * (s_max - s_min)))
+            xb = 3.0 + c * (feld + gap * 0.2)
+            g.append(f"; Ton {ton:.2f} -> S{sv}")
+            for i in range(int(feld / line)):
+                y = yb + i * line
+                a_, b_ = (xb, xb + feld) if i % 2 == 0 else (xb + feld, xb)
+                g += [f"G0 X{a_:.2f} Y{y:.2f}",
+                      f"G1 X{b_:.2f} S{sv} F{feed}", "G1 S0"]
+                segs.append(feld)
+                rows += 1
+    g += ["M5", "G0 X0 Y0"]
+    breite = stufen * feld + (stufen - 1) * gap * 0.2
+    hoehe = len(powers) * feld + (len(powers) - 1) * gap
+    info = dict(rows=rows, cut_m=sum(segs) / 1000, trav_m=0.0, befehle=len(g),
+                xmin=3.0, xmax=3.0 + breite, breite=breite, hoehe=hoehe,
+                sekunden=estimate(segs, feed, rows))
+    return g, info
+
+
 def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     """Fremden G-Code nachzeichnen: jede Fahrt mit Laser an, Graustufe nach S.
     Beachtet G0/G1/G2/G3 (Boegen als Sehne), G90/G91, M3/M4/M5, modale Werte.

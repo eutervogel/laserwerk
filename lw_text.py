@@ -306,8 +306,6 @@ EN = {
         'Values between 10 and 2000 mm.',
     'Noch keine $$-Antwort. Erst verbinden - die Werte werden\ndann automatisch gelesen.':
         'No $$ answer yet. Connect first - the values are\nread automatically then.',
-    'Arbeitsbereich ({x:.0f} x {y:.0f} mm, Nullpunkt unten links)':
-        'Work area ({x:.0f} x {y:.0f} mm, origin at bottom left)',
     '$30 = {ist:.0f} statt {soll}: Die Werte hier sind auf 0..{soll} bezogen und werden beim Senden umgerechnet (S{a:.0f} wird S{b:.0f}).':
         '$30 = {ist:.0f} instead of {soll}: values here refer to 0..{soll} and are converted when sent (S{a:.0f} becomes S{b:.0f}).',
     "$32 = 0: Der Lasermodus ist AUS. Der Strahl brennt dann auch im Stillstand weiter - mit '$32=1' einschalten.":
@@ -473,8 +471,6 @@ EN = {
     "VERBINDUNG VERLOREN - im Zweifel Laserschalter von Hand aus!":
         "CONNECTION LOST - when in doubt, switch the laser off by hand!",
     # ---- Module ausserhalb der Oberflaeche
-    "nicht verbunden": "not connected",
-    "Job laeuft": "job running",
     "Zeile nicht verstanden: {z!r} ({e})": "line not understood: {z!r} ({e})",
     "Datei öffnen": "Open file",
     "Speichern unter": "Save as",
@@ -603,7 +599,6 @@ EN = {
     "größer = Mitten heller (nur Graustufen)":
         "higher = lighter midtones (greyscale only)",
     # ---- Nullpunkt ueber den Soft-Reset retten
-    "Zum Nullpunkt fahren": "Move to origin",
     "In dieser Sitzung ist kein Nullpunkt gesetzt (oder er ist nach einem "
     "STOPP verloren).\n\nX0 Y0 ist dann der Nullpunkt der MASCHINE, nicht der "
     "des Werkstücks - der Kopf fährt irgendwohin.\n\nTrotzdem fahren?":
@@ -616,4 +611,23 @@ EN = {
         "Origin restored after the STOP (X {x:.2f} / Y {y:.2f}).",
     "Nullpunkt konnte nicht wiederhergestellt werden ({r}) - bitte neu setzen.":
         "Could not restore the origin ({r}) - please set it again.",
+    # ---- Graustufentest
+    "Graustufentest": "Greyscale test",
+    "Graustufentest starten": "Run greyscale test",
+    "Stufen": "Steps", "Feldgröße": "Patch size",
+    "Eine Zeile je Leistung, darin ein Tonwertkeil\n"
+    "von hell nach dunkel. Unten die kleinste\n"
+    "Leistung, links der hellste Ton. Jedes Feld\n"
+    "bekommt genau die Leistung, die eine Gravur\n"
+    "an dieser Stelle auch bekäme.":
+        "One row per power, holding a tonal wedge\n"
+        "from light to dark. Lowest power at the\n"
+        "bottom, lightest tone on the left. Each\n"
+        "patch gets exactly the power an engraving\n"
+        "would give it at that tone.",
+    "{b:.0f} x {h:.0f} mm, Laufzeit ca. {min:.0f} min":
+        "{b:.0f} x {h:.0f} mm, about {min:.0f} min",
+    "Werte prüfen.": "Check the values.",
+    "Graustufentest: {n} Leistungen x {s} Stufen, {b:.0f} x {h:.0f} mm":
+        "Greyscale test: {n} power levels x {s} steps, {b:.0f} x {h:.0f} mm",
 }

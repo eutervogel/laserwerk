@@ -28,13 +28,14 @@ settings for a new material.
   original size 1:1 for templates straight out of CAD.
 - **Place** — enter the length and width of your workpiece, then drag the
   artwork onto it with the mouse and resize it by its corners, snapping to
-  edges, corners and centre.
+  edges, corners and centre. Rotate to any angle, not just multiples of 90°.
 - **Drive the machine** — jog the axes, set the origin, set a Z reference,
   trace a frame around the artwork, show where the head stands with a short
   sight cross at low power, unlock, send single G-code commands.
 - **Find material settings** — a focus test along Z, a material test as a grid
-  of power and feed values, and presets holding thickness, focus correction,
-  power, feed and row pitch.
+  of power and feed values, a greyscale test with one tonal wedge per power,
+  and presets holding thickness, focus correction, power, feed, row pitch and
+  midtones.
 - **Engrave both sides** — mirror about a flip axis, with a check that the
   mirrored artwork still lands in positive coordinates.
 - **Remote control via Telegram** — jog the axes and trace the sight cross from

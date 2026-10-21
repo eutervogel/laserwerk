@@ -117,7 +117,7 @@ class App:
         # jede Aenderung, die den G-Code beeinflusst, macht ihn ungueltig
         for v in (self.v_inv, self.v_mode, self.v_schw, self.v_rot,
                   self.v_s, self.v_f, self.v_line, self.v_job, self.v_passes,
-                  self.v_xoff, self.v_over, self.v_yoff,
+                  self.v_xoff, self.v_over, self.v_yoff, self.v_gamma,
                   self.v_spiegel, self.v_achse):
             v.trace_add("write", lambda *a: self._stale())
         for v in (self.v_bw, self.v_bh, self.v_board, self.v_snap):
@@ -286,8 +286,25 @@ class App:
         ttk.Scale(f, from_=0.1, to=0.9, variable=self.v_schw, length=140
                   ).grid(row=12, column=1, columnspan=2, sticky="w")
 
+        # Tonwertkurve: hebt oder senkt nur die Mitten. Schwarz bleibt schwarz,
+        # Weiss bleibt aus - das Mittel gegen "laeuft alles zu".
+        self.v_gamma = tk.DoubleVar(value=1.0)
+        ttk.Label(f, text=T("Mitten")).grid(row=13, column=0, sticky="w")
+        sg = ttk.Frame(f)
+        sg.grid(row=13, column=1, columnspan=2, sticky="w")
+        ttk.Scale(sg, from_=0.4, to=2.5, variable=self.v_gamma, length=110,
+                  command=lambda v: self._gamma_zeigen()).pack(side="left")
+        self.lbl_gamma = ttk.Label(sg, width=4)
+        self.lbl_gamma.pack(side="left", padx=(4, 0))
+        ttk.Button(sg, text="1:1", width=3,
+                   command=lambda: self.v_gamma.set(1.0)).pack(side="left", padx=(2, 0))
+        self.lbl_gammahilfe = ttk.Label(
+            f, text=T("größer = Mitten heller (nur Graustufen)"), style="Muted.TLabel")
+        self.lbl_gammahilfe.grid(row=14, column=0, columnspan=3, sticky="w")
+        self._gamma_zeigen()
+
         jb = ttk.LabelFrame(f, text=T("Bearbeitung"), padding=4)
-        jb.grid(row=13, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        jb.grid(row=15, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_job = tk.StringVar(value="gravur")
         ttk.Radiobutton(jb, text=T("Gravieren (Flächen, zeilenweise)"), value="gravur",
                         variable=self.v_job, command=self._job_changed).grid(row=0, column=0, columnspan=3, sticky="w")
@@ -299,11 +316,11 @@ class App:
                     ).grid(row=2, column=1, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
-                   ).grid(row=14, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+                   ).grid(row=16, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         self.lbl_info = ttk.Label(f, text="", justify="left")
-        self.lbl_info.grid(row=15, column=0, columnspan=3, sticky="w")
+        self.lbl_info.grid(row=17, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=16, column=0, columnspan=3, sticky="ew", pady=6)
+        bb.grid(row=18, column=0, columnspan=3, sticky="ew", pady=6)
         ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
         ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
 
@@ -625,6 +642,13 @@ class App:
         self._stale()
         self._draw()
 
+    def _gamma_zeigen(self):
+        try:
+            g = float(self.v_gamma.get())
+        except tk.TclError:
+            return
+        self.lbl_gamma.configure(text=f"{g:.1f}")
+
     def _rotated(self):
         self._keep_ratio("w")
 
@@ -668,6 +692,7 @@ class App:
             if need > src.width * 1.2:
                 src = J.autocrop(J.load_source(self.src_path, need), 245)
         p = J.prepare(src, w, h, line, invert=self.v_inv.get(),
+                      gamma=max(0.2, float(self.v_gamma.get())),
                       rotate=self.v_rot.get(), mode=self.v_mode.get(),
                       schwelle=self.v_schw.get())
         over = max(0.0, float(self.v_over.get()))
@@ -818,6 +843,7 @@ class App:
         self.v_s.set(d.get("s", 830)); self.v_f.set(d.get("f", 1000))
         self.v_line.set(d.get("line", 0.1)); self.v_notiz.set(d.get("notiz", ""))
         self.v_mode.set(d.get("mode", "schwelle")); self.v_schw.set(d.get("schwelle", 0.5))
+        self.v_gamma.set(d.get("gamma", 1.0)); self._gamma_zeigen()
         self.v_pname.set(self.v_preset.get())
 
     def _show_sf(self):
@@ -858,6 +884,7 @@ class App:
         self.presets[n] = dict(dicke=self.v_dicke.get(), korrektur=self.v_korr.get(),
                                s=self.v_s.get(), f=self.v_f.get(), line=self.v_line.get(),
                                mode=self.v_mode.get(), schwelle=round(self.v_schw.get(), 2),
+                               gamma=round(self.v_gamma.get(), 2),
                                notiz=self.v_notiz.get())
         P.save_presets(self.presets)
         self.cb_preset.configure(values=sorted(self.presets))

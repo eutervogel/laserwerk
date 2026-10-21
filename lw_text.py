@@ -599,4 +599,7 @@ EN = {
         "(Laserwerk still open, no STOP, cable not pulled). Then the head\n"
         "stands exactly at the end of the last command executed, and the\n"
         "origin (WCO) is still valid.\n",
+    "Mitten": "Midtones",
+    "größer = Mitten heller (nur Graustufen)":
+        "higher = lighter midtones (greyscale only)",
 }

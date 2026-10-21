@@ -21,8 +21,9 @@ settings for a new material.
 ## What it does
 
 - **Engrave** — images (PNG, JPG, WEBP, BMP) and SVG as a raster, row by row,
-  either black and white with a threshold or greyscale with varying power.
-  Overscan at the row ends keeps the edges even.
+  either black and white with a threshold or greyscale with varying power,
+  with a midtone control for the tonal curve. Overscan at the row ends keeps
+  the edges even.
 - **Cut** — contours from SVG and DXF, inner before outer, several passes,
   original size 1:1 for templates straight out of CAD.
 - **Place** — enter the length and width of your workpiece, then drag the
@@ -99,6 +100,14 @@ The presets shipped here were measured on **one** machine: 450 nm, 5.5 W
 optical. A different laser, lens or focus means different values. Treat them as
 a starting point for your own material test, not as a recipe. Too much power at
 too little feed does not mean "darker", it eventually means "on fire".
+
+That goes double for **greyscale**: there every row burns across the whole
+area, and the next row meets material that is already warm. On the reference
+machine S175 worked on cardboard and S130 on plywood — a sixth of what the
+same wood takes as line art. The S value is the maximum, reached at pure
+black; below it sits a floor at 30 %, and near-white areas stay off entirely.
+If an image still fills in, the **Midtones** control helps more than less
+power: it lowers the middle tones only, black stays black.
 
 What does carry over is the **S/F ratio**: power divided by feed, that is the
 energy per millimetre. On the reference machine wood works at S830/F1000 =

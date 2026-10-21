@@ -21,7 +21,8 @@ Material ausprobieren will.
 
 - **Gravieren** — Bilder (PNG, JPG, WEBP, BMP) und SVG als Raster, zeilenweise,
   wahlweise schwarzweiß mit Schwelle oder Graustufen mit veränderlicher
-  Leistung. Anlauf (Overscan) an den Zeilenenden für saubere Ränder.
+  Leistung, samt Tonwertregler für die Mitten. Anlauf (Overscan) an den
+  Zeilenenden für saubere Ränder.
 - **Schneiden** — Konturen aus SVG und DXF, innen vor außen, mehrere Durchgänge,
   Originalgröße 1:1 für Schablonen aus dem CAD.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
@@ -99,6 +100,15 @@ Die mitgelieferten Presets wurden auf **einer** Maschine gemessen: 450 nm,
 sind ein Startpunkt für einen eigenen Materialtest, kein Rezept. Zu viel
 Leistung bei zu wenig Vorschub heißt nicht „dunkler", sondern irgendwann
 „brennt".
+
+Für **Graustufen** gilt das doppelt: Dort brennt jede Zeile über die ganze
+Fläche, und die Nachbarzeile trifft schon vorgewärmtes Material. Gemessen
+wurden auf der Referenzmaschine S175 auf Pappe und S130 auf Schichtplatte —
+ein Sechstel dessen, was dasselbe Holz als Strichgrafik verträgt. Der S-Wert
+ist dabei das Maximum, erreicht bei reinem Schwarz; darunter liegt ein Boden
+bei 30 %, und fast weiße Stellen bleiben ganz aus. Läuft ein Motiv trotzdem
+zu, hilft der Regler **Mitten** mehr als weniger Leistung: Er senkt nur die
+Mitteltöne, Schwarz bleibt schwarz.
 
 Was übertragbar ist, ist das **Verhältnis S/F**: Leistung geteilt durch
 Vorschub, also die Energie je Millimeter. Auf der Referenzmaschine hat sich

@@ -547,4 +547,56 @@ EN = {
     "Maschineneinstellungen": "Machine settings", "Verfahrweg": "Machine travel",
     "Telegram: {0}": "Telegram: {0}",
     "aus": "off",
+    # ---- fortsetzen.py
+    "Position nicht lesbar (kein MPos/WCO empfangen).":
+        "Position not readable (no MPos/WCO received).",
+    "Port {p}": "Port {p}",
+    "Zustand {z}   MPos {m}   WCO {w}": "State {z}   MPos {m}   WCO {w}",
+    "Werkstueckposition  X {x:.3f}  Y {y:.3f}":
+        "Workpiece position  X {x:.3f}  Y {y:.3f}",
+    "Keine Zeile endet an dieser Position - wurde der Controller "
+    "zurueckgesetzt oder der Kopf bewegt? Dann nicht fortsetzen.":
+        "No line ends at this position - was the controller reset or the head "
+        "moved? Then do not resume.",
+    "Mehrdeutig: Zeilen {z}": "Ambiguous: lines {z}",
+    "Stelle nicht eindeutig - nicht automatisch fortsetzen.":
+        "The spot is not unique - do not resume automatically.",
+    "\nStopp-Stelle gefunden: nach Zeile {i} von {n} ({p:.1f} %)":
+        "\nStopping point found: after line {i} of {n} ({p:.1f} %)",
+    "  letzte ausgefuehrte Zeile: {z}": "  last line executed: {z}",
+    "  naechste Zeile:            {z}": "  next line:           {z}",
+    "  noch {n} Befehle, Vorschub F{f:g}": "  {n} commands left, feed F{f:g}",
+    "Maschine ist nicht im Zustand Idle ({z}) - erst klaeren.":
+        "The machine is not Idle ({z}) - sort that out first.",
+    "\nNur geprueft, nichts gesendet. Zum Fortsetzen mit --start aufrufen.":
+        "\nChecked only, nothing sent. Call with --start to resume.",
+    "\nlaeuft - Strg-C = anhalten am naechsten Zeilenende "
+    "(Position bleibt, spaeter mit --start weiter)\n":
+        "\nrunning - Ctrl-C stops at the next line end "
+        "(the position is kept, resume later with --start)\n",
+    "\r{p} %  noch ~{min:.0f} min  Fehler {err}   ":
+        "\r{p} %  ~{min:.0f} min left  errors {err}   ",
+    "\n{z} - angehalten.": "\n{z} - stopped.",
+    "\nfertig in {min:.0f} min, {err} Uebertragungsfehler":
+        "\nfinished in {min:.0f} min, {err} transmission errors",
+    "\nAnhalten: sende nichts mehr, Puffer wird abgearbeitet ...":
+        "\nStopping: sending nothing more, the buffer runs out ...",
+    "steht. Laser aus (M4, keine Bewegung), Position und Nullpunkt erhalten.\n"
+    "Weitermachen: python3 fortsetzen.py DATEI --start":
+        "stopped. Laser off (M4, no movement), position and origin kept.\n"
+        "Carry on with: python3 fortsetzen.py FILE --start",
+    "\nHaengengebliebenen Job exakt an der Stopp-Stelle fortsetzen.\n\n"
+    "  python3 fortsetzen.py datei.nc            nur pruefen (sendet nichts)\n"
+    "  python3 fortsetzen.py datei.nc --start    ab der gefundenen Stelle weiter\n\n"
+    "Voraussetzung: Der Controller wurde seit dem Stopp NICHT zurueckgesetzt\n"
+    "(Laserwerk noch offen, kein STOPP, Kabel nicht gezogen). Dann steht der\n"
+    "Kopf exakt am Ende des zuletzt ausgefuehrten Befehls, und der Nullpunkt\n"
+    "(WCO) ist noch gueltig.\n":
+        "\nResume a stalled job exactly where it stopped.\n\n"
+        "  python3 fortsetzen.py file.nc            check only (sends nothing)\n"
+        "  python3 fortsetzen.py file.nc --start    carry on from that point\n\n"
+        "Requirement: the controller has NOT been reset since the stop\n"
+        "(Laserwerk still open, no STOP, cable not pulled). Then the head\n"
+        "stands exactly at the end of the last command executed, and the\n"
+        "origin (WCO) is still valid.\n",
 }

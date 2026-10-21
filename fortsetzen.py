@@ -16,6 +16,12 @@ haelt. Dabei aendert sich die DTR-Leitung nicht - also kein Reset.
 import re, sys, time, glob, os
 import serial
 
+import lw_presets as P
+import lw_text
+from lw_text import T
+
+lw_text.setze(P.load_config().get("sprache", "de"))
+
 TOL = 0.006          # mm, Genauigkeit des Positionsabgleichs
 RX_BUF = 127
 
@@ -52,7 +58,7 @@ def position(s):
             if m: mpos = tuple(map(float, m.groups()))
             if w: wco = tuple(map(float, w.groups()))
     if mpos is None or wco is None:
-        sys.exit("Position nicht lesbar (kein MPos/WCO empfangen).")
+        sys.exit(T("Position nicht lesbar (kein MPos/WCO empfangen)."))
     return state, mpos, wco, tuple(a - b for a, b in zip(mpos, wco))
 
 
@@ -74,7 +80,14 @@ def endpunkte(lines):
 def main():
     a = sys.argv[1:]
     if not a:
-        sys.exit(__doc__)
+        sys.exit(T(
+            "\nHaengengebliebenen Job exakt an der Stopp-Stelle fortsetzen.\n\n"
+            "  python3 fortsetzen.py datei.nc            nur pruefen (sendet nichts)\n"
+            "  python3 fortsetzen.py datei.nc --start    ab der gefundenen Stelle weiter\n\n"
+            "Voraussetzung: Der Controller wurde seit dem Stopp NICHT zurueckgesetzt\n"
+            "(Laserwerk noch offen, kein STOPP, Kabel nicht gezogen). Dann steht der\n"
+            "Kopf exakt am Ende des zuletzt ausgefuehrten Befehls, und der Nullpunkt\n"
+            "(WCO) ist noch gueltig.\n"))
     datei, start = a[0], "--start" in a
     lines = [l for l in (z.split(";")[0].strip() for z in open(datei)) if l]
     ep = endpunkte(lines)
@@ -84,36 +97,40 @@ def main():
     time.sleep(0.3)
     s.reset_input_buffer()
     state, mpos, wco, wpos = position(s)
-    print(f"Port {p}")
-    print(f"Zustand {state}   MPos {mpos[:2]}   WCO {wco[:2]}")
-    print(f"Werkstueckposition  X {wpos[0]:.3f}  Y {wpos[1]:.3f}")
+    print(T("Port {p}").format(p=p))
+    print(T("Zustand {z}   MPos {m}   WCO {w}").format(
+        z=state, m=mpos[:2], w=wco[:2]))
+    print(T("Werkstueckposition  X {x:.3f}  Y {y:.3f}").format(
+        x=wpos[0], y=wpos[1]))
 
     treffer = [i for i, (x, y, f, bew) in enumerate(ep)
                if bew and abs(x - wpos[0]) <= TOL and abs(y - wpos[1]) <= TOL]
     if not treffer:
         s.close()
-        sys.exit("Keine Zeile endet an dieser Position - wurde der Controller "
-                 "zurueckgesetzt oder der Kopf bewegt? Dann nicht fortsetzen.")
+        sys.exit(T("Keine Zeile endet an dieser Position - wurde der Controller "
+                   "zurueckgesetzt oder der Kopf bewegt? Dann nicht fortsetzen."))
     if len(treffer) > 1:
         # mehrere Kandidaten: der letzte gehoert zum weitesten Fortschritt,
         # aber das ist nicht eindeutig - lieber anzeigen und abbrechen
-        print(f"Mehrdeutig: Zeilen {treffer[:10]}")
+        print(T("Mehrdeutig: Zeilen {z}").format(z=treffer[:10]))
         s.close()
-        sys.exit("Stelle nicht eindeutig - nicht automatisch fortsetzen.")
+        sys.exit(T("Stelle nicht eindeutig - nicht automatisch fortsetzen."))
     idx = treffer[0]
     feed = next((ep[i][2] for i in range(idx, -1, -1) if ep[i][2]), 1000.0)
     rest = lines[idx + 1:]
-    print(f"\nStopp-Stelle gefunden: nach Zeile {idx+1} von {len(lines)} "
-          f"({(idx+1)*100/len(lines):.1f} %)")
-    print(f"  letzte ausgefuehrte Zeile: {lines[idx]}")
-    print(f"  naechste Zeile:            {rest[0] if rest else '-'}")
-    print(f"  noch {len(rest)} Befehle, Vorschub F{feed:g}")
+    print(T("\nStopp-Stelle gefunden: nach Zeile {i} von {n} ({p:.1f} %)").format(
+        i=idx + 1, n=len(lines), p=(idx + 1) * 100 / len(lines)))
+    print(T("  letzte ausgefuehrte Zeile: {z}").format(z=lines[idx]))
+    print(T("  naechste Zeile:            {z}").format(z=rest[0] if rest else "-"))
+    print(T("  noch {n} Befehle, Vorschub F{f:g}").format(n=len(rest), f=feed))
     if not state.startswith("Idle"):
         s.close()
-        sys.exit(f"Maschine ist nicht im Zustand Idle ({state}) - erst klaeren.")
+        sys.exit(T("Maschine ist nicht im Zustand Idle ({z}) - erst klaeren."
+                   ).format(z=state))
     if not start:
         s.close()
-        print("\nNur geprueft, nichts gesendet. Zum Fortsetzen mit --start aufrufen.")
+        print(T("\nNur geprueft, nichts gesendet. "
+                "Zum Fortsetzen mit --start aufrufen."))
         return
 
     pre = ["G21", "G90", "G94", f"F{feed:g}", "M4 S0"]
@@ -121,7 +138,8 @@ def main():
     pend, sent, done, err = [], 0, 0, 0
     t0 = time.time()
     buf = b""
-    print("\nlaeuft - Strg-C = anhalten am naechsten Zeilenende (Position bleibt, spaeter mit --start weiter)\n")
+    print(T("\nlaeuft - Strg-C = anhalten am naechsten Zeilenende "
+            "(Position bleibt, spaeter mit --start weiter)\n"))
     try:
         while done < len(queue):
             while sent < len(queue) and sum(pend) + len(queue[sent]) + 1 <= RX_BUF:
@@ -138,18 +156,21 @@ def main():
                         err += 1
                     if done % 2000 == 0:
                         el = time.time() - t0
-                        print(f"\r{done*100//len(queue)} %  noch ~{el/done*(len(queue)-done)/60:.0f} min"
-                              f"  Fehler {err}   ", end="", flush=True)
+                        print(T("\r{p} %  noch ~{min:.0f} min  Fehler {err}   ").format(
+                            p=done * 100 // len(queue),
+                            min=el / done * (len(queue) - done) / 60, err=err),
+                            end="", flush=True)
                 elif l.startswith("ALARM"):
                     s.write(b"!")
-                    sys.exit(f"\n{l} - angehalten.")
+                    sys.exit(T("\n{z} - angehalten.").format(z=l))
                 # Statusberichte (auch auf Laserwerks '?') einfach ignorieren
-        print(f"\nfertig in {(time.time()-t0)/60:.0f} min, {err} Uebertragungsfehler")
+        print(T("\nfertig in {min:.0f} min, {err} Uebertragungsfehler").format(
+            min=(time.time() - t0) / 60, err=err))
     except KeyboardInterrupt:
         # Nicht mitten im Segment anhalten: nichts mehr nachschieben und die
         # gepufferten Befehle zu Ende fahren lassen. Dann steht der Kopf
         # wieder exakt auf einem Zeilenende und ist erneut auffindbar.
-        print("\nAnhalten: sende nichts mehr, Puffer wird abgearbeitet ...")
+        print(T("\nAnhalten: sende nichts mehr, Puffer wird abgearbeitet ..."))
         t1 = time.time()
         while done < sent and time.time() - t1 < 60:
             buf += s.read(s.in_waiting or 1)
@@ -158,8 +179,8 @@ def main():
                 if l.strip() in (b"ok",) or l.strip().startswith(b"error"):
                     done += 1
         time.sleep(1.0)
-        print("steht. Laser aus (M4, keine Bewegung), Position und Nullpunkt erhalten.\n"
-              "Weitermachen: python3 fortsetzen.py DATEI --start")
+        print(T("steht. Laser aus (M4, keine Bewegung), Position und Nullpunkt "
+                "erhalten.\nWeitermachen: python3 fortsetzen.py DATEI --start"))
     finally:
         s.close()
 

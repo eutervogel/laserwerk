@@ -602,4 +602,18 @@ EN = {
     "Mitten": "Midtones",
     "größer = Mitten heller (nur Graustufen)":
         "higher = lighter midtones (greyscale only)",
+    # ---- Nullpunkt ueber den Soft-Reset retten
+    "Zum Nullpunkt fahren": "Move to origin",
+    "In dieser Sitzung ist kein Nullpunkt gesetzt (oder er ist nach einem "
+    "STOPP verloren).\n\nX0 Y0 ist dann der Nullpunkt der MASCHINE, nicht der "
+    "des Werkstücks - der Kopf fährt irgendwohin.\n\nTrotzdem fahren?":
+        "No origin is set in this session (or it was lost in a STOP).\n\n"
+        "X0 Y0 is then the MACHINE origin, not the workpiece one - the head "
+        "will go somewhere else.\n\nMove anyway?",
+    "Nullpunkt gemerkt - er wird nach dem Entsperren ($X) wiederhergestellt.":
+        "Origin remembered - it is restored after unlocking ($X).",
+    "Nullpunkt nach dem STOPP wiederhergestellt (X {x:.2f} / Y {y:.2f}).":
+        "Origin restored after the STOP (X {x:.2f} / Y {y:.2f}).",
+    "Nullpunkt konnte nicht wiederhergestellt werden ({r}) - bitte neu setzen.":
+        "Could not restore the origin ({r}) - please set it again.",
 }

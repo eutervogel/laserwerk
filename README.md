@@ -42,6 +42,10 @@ settings for a new material.
   finishes or runs into an alarm.
 - **Resume** — `fortsetzen.py` finds the exact stopping point of a stalled job
   by matching the position, then streams the rest.
+- **The origin survives a STOP** — aborting soft-resets the controller, which
+  clears its G92 offset. Laserwerk remembers it beforehand and sets it again
+  afterwards, so "move to origin" still means the workpiece and not the
+  machine's own zero.
 
 ## How it looks
 

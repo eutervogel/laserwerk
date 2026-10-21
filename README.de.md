@@ -40,6 +40,10 @@ Material ausprobieren will.
   am Werkstück steht. Meldet sich, wenn ein Job fertig ist oder in Alarm geht.
 - **Fortsetzen** — `fortsetzen.py` findet nach einem hängengebliebenen Job die
   genaue Stoppstelle über die Position und streamt den Rest.
+- **Nullpunkt übersteht STOPP** — der Abbruch setzt den Controller zurück und
+  löscht dabei dessen G92-Versatz. Laserwerk merkt ihn sich vorher und setzt
+  ihn danach neu, damit „Zum Nullpunkt fahren" weiter das Werkstück meint und
+  nicht den Nullpunkt der Maschine.
 
 ## So sieht das aus
 

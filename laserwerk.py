@@ -55,6 +55,7 @@ class App:
         self.zref_ok = False       # Z-Referenz gueltig
         self.fokus_zs = []
         self.fern = None               # Telegram-Fernsteuerung
+        self._rettung = None           # Nullpunkt ueber einen Soft-Reset retten
         self.s_max = float(self.cfg.get("s_max", J.S_MAX))   # $30 der Maschine
         self.area = max(float(self.cfg["x_max"]), float(self.cfg["y_max"]), 10.0)
         self.v_zeig_s = tk.IntVar(value=50)     # Leistung Sichtkreuz/Rahmen
@@ -901,6 +902,7 @@ class App:
 
     # ================================================================ Maschine
     def toggle_connect(self):
+        self._rettung = None
         if self.grbl.connected:
             self.grbl.disconnect()
             self.btn_conn.configure(text=T("Verbinden"))
@@ -933,6 +935,42 @@ class App:
             name=lw_text.SPRACHEN[kuerzel]))
         messagebox.showinfo(T("Sprache"),
             T("Die Sprache gilt, sobald Laserwerk neu gestartet wird."))
+
+    def _rettbar(self):
+        """Nur der eigene Soft-Reset laesst sich ueberleben. Nach einem
+        USB-Abriss oder einem Neuverbinden ist die Maschinenposition
+        wirklich unbekannt - dann waere ein wiederhergestellter Versatz
+        schlimmer als keiner."""
+        return (self._rettung is not None and any(self._rettung[0])
+                and time.time() - self._rettung[3] < 120)
+
+    def _nullpunkt_retten(self):
+        """Den G92-Versatz nach einem Soft-Reset wiederherstellen.
+
+        Beim Anhalten bremst das Programm erst aus und setzt erst dann zurueck,
+        deshalb stimmt die Maschinenposition noch. Der Versatz wird also einfach
+        neu gesetzt: G92 auf (MPos - altes WCO). Es bewegt sich dabei nichts.
+        """
+        wco, war_null, war_zref, wann = self._rettung
+        self._rettung = None
+        self.grbl.wait_idle(timeout=8)
+        st = self.grbl.status
+        if self.grbl.alarm or st["state"].startswith(("Alarm", "Door")):
+            self._rettung = (wco, war_null, war_zref, wann)  # nach dem Entsperren
+            self.q.put(("msg", T("Nullpunkt gemerkt - er wird nach dem "
+                                 "Entsperren ($X) wiederhergestellt.")))
+            return
+        m = (list(st.get("mpos", ())) + [0, 0, 0])[:3]
+        ziel = [a - b for a, b in zip(m, (list(wco) + [0, 0, 0])[:3])]
+        r = self.grbl.cmd("G92 X{:.3f} Y{:.3f} Z{:.3f}".format(*ziel))
+        if str(r).startswith("ok"):
+            self.zero_ok, self.zref_ok = war_null, war_zref
+            self.q.put(("msg", T("Nullpunkt nach dem STOPP wiederhergestellt "
+                                 "(X {x:.2f} / Y {y:.2f}).").format(
+                                     x=ziel[0], y=ziel[1])))
+        else:
+            self.q.put(("msg", T("Nullpunkt konnte nicht wiederhergestellt "
+                                 "werden ({r}) - bitte neu setzen.").format(r=r)))
 
     def _flaeche_titel(self):
         self.lf_flaeche.configure(text=T(
@@ -1061,8 +1099,19 @@ class App:
         self._log(T('Z-Referenz: aktuelle Höhe = Fokus für {0:.2f} mm').format(z))
 
     def goto_zero(self):
-        if self._need():
-            self._bg(lambda: self.grbl.goto(x=0, y=0), T("fahre zum Nullpunkt"))
+        if not self._need():
+            return
+        if not self.zero_ok:
+            # Ohne gueltigen Versatz ist X0 Y0 der Maschinennullpunkt - und der
+            # liegt irgendwo, nicht auf dem Werkstueck.
+            if not messagebox.askokcancel(T("Zum Nullpunkt fahren"),
+                    T("In dieser Sitzung ist kein Nullpunkt gesetzt (oder er ist "
+                      "nach einem STOPP verloren).\n\n"
+                      "X0 Y0 ist dann der Nullpunkt der MASCHINE, nicht der des "
+                      "Werkstücks - der Kopf fährt irgendwohin.\n\n"
+                      "Trotzdem fahren?")):
+                return
+        self._bg(lambda: self.grbl.goto(x=0, y=0), T("fahre zum Nullpunkt"))
 
     def zeigen(self):
         """Sichtkreuz: im Lasermodus geht Licht nur waehrend einer Fahrt."""
@@ -1084,6 +1133,8 @@ class App:
     def unlock(self):
         if self._need():
             self._log(self.grbl.unlock())
+            if self._rettbar():
+                self._bg(self._nullpunkt_retten, None)
 
     def laser_off(self):
         self.grbl.laser_off()
@@ -1213,9 +1264,15 @@ class App:
             self._log(T("weiter"))
 
     def stop(self):
-        if self.grbl.connected:
-            self._log(T("STOPP"))
-            threading.Thread(target=self.grbl.stop, daemon=True).start()
+        if not self.grbl.connected:
+            return
+        # Der Soft-Reset im Controller loescht den G92-Versatz. Vorher merken,
+        # damit der Nullpunkt danach wiederhergestellt werden kann - sonst
+        # faehrt "Zum Nullpunkt" an den Maschinennullpunkt.
+        self._rettung = (tuple(self.grbl.status.get("wco", (0, 0, 0))),
+                         self.zero_ok, self.zref_ok, time.time())
+        self._log(T("STOPP"))
+        threading.Thread(target=self.grbl.stop, daemon=True).start()
 
     # ================================================================ Aussehen
     def _theme_label(self):
@@ -1293,12 +1350,18 @@ class App:
             self._log(d)
             self._melde(f"ALARM: {d}")
         elif k == "reset":
-            if self.zero_ok or self.zref_ok:
-                self._log(T("Controller neu gestartet - Nullpunkt und Z-Referenz neu setzen!"))
             self.zero_ok = self.zref_ok = False
+            if self._rettbar():
+                self._bg(self._nullpunkt_retten, None)
+            elif self._rettung is not None:
+                self._rettung = None
+            else:
+                self._log(T("Controller neu gestartet - Nullpunkt und "
+                            "Z-Referenz neu setzen!"))
         elif k == "lost":
             self.btn_conn.configure(text=T("Verbinden"))
             self.zero_ok = self.zref_ok = False
+            self._rettung = None      # Position nach einem Abriss unbekannt
             self._log(T('VERBINDUNG VERLOREN: {0}').format(d))
             self._melde(T("VERBINDUNG VERLOREN - im Zweifel Laserschalter "
                           "von Hand aus!"))

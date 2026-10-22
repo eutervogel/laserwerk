@@ -630,4 +630,10 @@ EN = {
     "Werte prüfen.": "Check the values.",
     "Graustufentest: {n} Leistungen x {s} Stufen, {b:.0f} x {h:.0f} mm":
         "Greyscale test: {n} power levels x {s} steps, {b:.0f} x {h:.0f} mm",
+    "Der Job braucht X {x0:.1f} .. {x1:.1f} und Y {y0:.1f} .. {y1:.1f} mm.\n\n"
+    "Der Verfahrweg ist 0 .. {xm:.0f} und 0 .. {ym:.0f} mm "
+    "(Reiter Maschine, 'Verfahrweg der Maschine').":
+        "The job needs X {x0:.1f} .. {x1:.1f} and Y {y0:.1f} .. {y1:.1f} mm.\n\n"
+        "The machine travel is 0 .. {xm:.0f} and 0 .. {ym:.0f} mm "
+        "(Machine tab, 'Machine travel').",
 }

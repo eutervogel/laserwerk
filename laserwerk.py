@@ -1324,11 +1324,18 @@ class App:
         # Unterscheidung, deshalb sagt 'rahmen' ausdruecklich Bescheid.
         if not self._need(zero=not rahmen):
             return
+        # Nicht die Spanne pruefen, sondern wo der Kopf wirklich hin muss.
+        # Die Spanne verschweigt einen Job, der weit draussen liegt, und
+        # verbietet einen, der nur zum Nullpunkt zurueckfaehrt.
         x0, x1, y0, y1 = J.extent(lines)
-        if x1 - x0 > self.cfg["x_max"] or y1 - y0 > self.cfg["y_max"]:
+        xm, ym = float(self.cfg["x_max"]), float(self.cfg["y_max"])
+        if x1 > xm + 0.05 or y1 > ym + 0.05 or x0 < -0.05 or y0 < -0.05:
             messagebox.showerror(T("Zu groß"),
-                T("Spanne {b:.0f} x {h:.0f} mm passt nicht in den Verfahrweg."
-                  ).format(b=x1 - x0, h=y1 - y0))
+                T("Der Job braucht X {x0:.1f} .. {x1:.1f} und "
+                  "Y {y0:.1f} .. {y1:.1f} mm.\n\n"
+                  "Der Verfahrweg ist 0 .. {xm:.0f} und 0 .. {ym:.0f} mm "
+                  "(Reiter Maschine, 'Verfahrweg der Maschine').").format(
+                    x0=x0, x1=x1, y0=y0, y1=y1, xm=xm, ym=ym))
             return
         if confirm:
             t = ""
@@ -1616,7 +1623,14 @@ class App:
 
     def _scale(self):
         w, h = self._cv()
-        return (min(w, h) - 20) / self.area * self.zoom
+        return self._grundmass() * self.zoom
+
+    def _grundmass(self):
+        """Massstab, bei dem der ganze Verfahrweg ins Fenster passt - nach
+        Breite UND Hoehe, sonst verschenkt eine flache Maschine die Haelfte."""
+        w, h = self._cv()
+        return min((w - 20) / max(10.0, float(self.cfg["x_max"])),
+                   (h - 20) / max(10.0, float(self.cfg["y_max"])))
 
     def _resized(self, e):
         """Fenster groesser: Ansicht unten links verankert lassen."""
@@ -1640,7 +1654,7 @@ class App:
         if neu == self.zoom:
             return
         s1 = self._scale()
-        s2 = (min(*self._cv()) - 20) / self.area * neu
+        s2 = self._grundmass() * neu
         mx, my = (e.x - self.ox) / s1, (self.oy - e.y) / s1
         self.zoom = neu
         self.ox, self.oy = e.x - mx * s2, e.y + my * s2
@@ -1659,27 +1673,40 @@ class App:
 
     def reset_view(self):
         self.zoom = 1.0
-        self.ox, self.oy = 10, self._cv()[1] - 10
+        w, h = self._cv()
+        s = self._grundmass()
+        # mittig einpassen statt unten links kleben - bei einer flachen
+        # Maschine bleibt sonst oben ein breiter leerer Streifen
+        self.ox = max(10, (w - float(self.cfg["x_max"]) * s) / 2)
+        self.oy = h - max(10, (h - float(self.cfg["y_max"]) * s) / 2)
         self._draw()
 
     def _draw(self):
         cv = self.cv
         cv.delete("all")
+        # Die Flaeche ist so breit und so hoch wie der Verfahrweg - nicht
+        # quadratisch. Sonst sieht ein Brett aus, als passe es nicht.
+        wx, wy = float(self.cfg["x_max"]), float(self.cfg["y_max"])
         x0, y0 = self._mm(0, 0)
-        x1, y1 = self._mm(self.area, self.area)
+        x1, y1 = self._mm(wx, wy)
         cv.create_rectangle(x0, y1, x1, y0, outline=S.CANVAS_EDGE)
         s = self._scale()
         if s >= 6:                      # weit hineingezoomt: 1-mm-Raster dazu
-            for m in range(0, int(self.area) + 1):
-                if m % 10 == 0:
-                    continue
-                a, _ = self._mm(m, 0); cv.create_line(a, y0, a, y1, fill=S.CANVAS_GRID)
-                _, b = self._mm(0, m); cv.create_line(x0, b, x1, b, fill=S.CANVAS_GRID)
-        for m in range(10, int(self.area), 10):
-            c = S.CANVAS_GRID if m % 50 else S.CANVAS_GRID2
-            a, _ = self._mm(m, 0); cv.create_line(a, y0, a, y1, fill=c)
-            _, b = self._mm(0, m); cv.create_line(x0, b, x1, b, fill=c)
-        for m in range(50, int(self.area), 50):
+            for m in range(0, int(wx) + 1):
+                if m % 10:
+                    a, _ = self._mm(m, 0)
+                    cv.create_line(a, y0, a, y1, fill=S.CANVAS_GRID)
+            for m in range(0, int(wy) + 1):
+                if m % 10:
+                    _, b = self._mm(0, m)
+                    cv.create_line(x0, b, x1, b, fill=S.CANVAS_GRID)
+        for m in range(10, int(wx), 10):
+            a, _ = self._mm(m, 0)
+            cv.create_line(a, y0, a, y1, fill=S.CANVAS_GRID if m % 50 else S.CANVAS_GRID2)
+        for m in range(10, int(wy), 10):
+            _, b = self._mm(0, m)
+            cv.create_line(x0, b, x1, b, fill=S.CANVAS_GRID if m % 50 else S.CANVAS_GRID2)
+        for m in range(50, int(wx), 50):
             a, _ = self._mm(m, 0); cv.create_text(a, y0 + 1, text=str(m), anchor="n", fill=S.MUTED, font=("sans", 7))
         if self.v_board.get():
             W, H = float(self.v_bw.get()), float(self.v_bh.get())

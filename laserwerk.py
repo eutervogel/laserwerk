@@ -350,29 +350,36 @@ class App:
         self.v_line = tk.DoubleVar(value=0.10)
         self._row(f, 1, "Materialdicke", self.v_dicke, unit="mm")
         self._row(f, 2, "Fokuskorrektur", self.v_korr, unit="mm")
+        self.v_smin = tk.IntVar(value=0)
         self._row(f, 3, "Leistung S", self.v_s, unit="von 1000")
-        self._row(f, 4, "Vorschub F", self.v_f, unit="mm/min")
-        self._row(f, 5, "Zeilenabstand", self.v_line, unit="mm")
+        self._row(f, 4, "Leistung ab", self.v_smin, unit="0 = automatisch")
+        self._row(f, 5, "Vorschub F", self.v_f, unit="mm/min")
+        self._row(f, 6, "Zeilenabstand", self.v_line, unit="mm")
+        ttk.Label(f, text=T("'Leistung ab' ist die kleinste Leistung, bei der das\n"
+                            "Material überhaupt zeichnet. Graustufen werden dann\n"
+                            "zwischen diesen beiden Werten verteilt statt zwischen\n"
+                            "30 % und S. Für Strichgrafik ohne Bedeutung."),
+                  style="Muted.TLabel").grid(row=7, column=0, columnspan=3, sticky="w")
         self.lbl_sf = ttk.Label(f, text="")
-        self.lbl_sf.grid(row=6, column=0, columnspan=3, sticky="w", pady=4)
-        for v in (self.v_s, self.v_f):
+        self.lbl_sf.grid(row=8, column=0, columnspan=3, sticky="w", pady=4)
+        for v in (self.v_s, self.v_f, self.v_smin):
             v.trace_add("write", lambda *a: self._show_sf())
         self.v_notiz = tk.StringVar()
-        ttk.Label(f, text=T("Notiz")).grid(row=7, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=8, column=0, columnspan=3, sticky="ew")
+        ttk.Label(f, text=T("Notiz")).grid(row=9, column=0, sticky="w")
+        ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=10, column=0, columnspan=3, sticky="ew")
 
         ttk.Button(f, text=T("Übernehmen + Z-Höhe anfahren"), command=self.apply_preset, style="Accent.TButton"
-                   ).grid(row=9, column=0, columnspan=3, sticky="ew", pady=(10, 2))
-        ttk.Separator(f).grid(row=10, column=0, columnspan=3, sticky="ew", pady=8)
+                   ).grid(row=11, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+        ttk.Separator(f).grid(row=12, column=0, columnspan=3, sticky="ew", pady=8)
         self.v_pname = tk.StringVar()
-        ttk.Label(f, text=T("Speichern als")).grid(row=11, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.v_pname, width=20).grid(row=11, column=1, columnspan=2, sticky="w")
+        ttk.Label(f, text=T("Speichern als")).grid(row=13, column=0, sticky="w")
+        ttk.Entry(f, textvariable=self.v_pname, width=20).grid(row=13, column=1, columnspan=2, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=12, column=0, columnspan=3, sticky="ew", pady=4)
+        bb.grid(row=14, column=0, columnspan=3, sticky="ew", pady=4)
         ttk.Button(bb, text=T("Speichern"), command=self.save_preset).pack(side="left")
         ttk.Button(bb, text=T("Löschen"), command=self.delete_preset).pack(side="left", padx=4)
         ttk.Label(f, text=T("Z fährt auf Materialdicke + Korrektur.\n"
-                            "Dafuer muss unter 'Maschine' eine\nZ-Referenz gesetzt sein."), style="Muted.TLabel").grid(row=13, column=0, columnspan=3, sticky="w", pady=8)
+                            "Dafuer muss unter 'Maschine' eine\nZ-Referenz gesetzt sein."), style="Muted.TLabel").grid(row=15, column=0, columnspan=3, sticky="w", pady=8)
         self._show_sf()
 
     # ---------------------------------------------------------------- Maschine
@@ -779,7 +786,7 @@ class App:
             return
         self.lines, self.info = J.raster_gcode(
             p, line, self._s(s), f,
-            s_min=self._s(s * 0.3) if self.v_mode.get() == "grau" else 0,
+            s_min=self._s(self._s_unten(s)) if self.v_mode.get() == "grau" else 0,
             overscan=over, x_off=xoff, y_off=yoff,
             kommentar=os.path.basename(self.src_path)
                       + ("  RUECKSEITE" if sp != "nein" else ""))
@@ -901,14 +908,34 @@ class App:
             return
         self.v_dicke.set(d.get("dicke", 0)); self.v_korr.set(d.get("korrektur", 0))
         self.v_s.set(d.get("s", 830)); self.v_f.set(d.get("f", 1000))
+        self.v_smin.set(d.get("smin", 0))
         self.v_line.set(d.get("line", 0.1)); self.v_notiz.set(d.get("notiz", ""))
         self.v_mode.set(d.get("mode", "schwelle")); self.v_schw.set(d.get("schwelle", 0.5))
         self.v_gamma.set(d.get("gamma", 1.0)); self._gamma_zeigen()
         self.v_pname.set(self.v_preset.get())
 
+    def _s_unten(self, s_max):
+        """Kleinste Leistung fuer Graustufen: eingestellt, sonst 30 % von S.
+
+        Bei Material mit scharfer Schwelle (Buche) liegen Zeichnen und
+        Verkohlen eng beieinander. Dann muss die Tonskala genau in dieses
+        Fenster gelegt werden, sonst ist die helle Haelfte unsichtbar und
+        die dunkle einheitlich schwarz.
+        """
+        try:
+            unten = int(self.v_smin.get())
+        except tk.TclError:
+            unten = 0
+        if unten <= 0:
+            return s_max * 0.3
+        return min(unten, max(0, s_max - 1))
+
     def _show_sf(self):
         try:
-            self.lbl_sf.configure(text=T('S/F = {0:.2f}   (Holz bewährt: 0,83)').format(self.v_s.get()/self.v_f.get()))
+            s = self.v_s.get()
+            self.lbl_sf.configure(text=T("S/F = {sf:.2f}   (Holz bewährt: 0,83)"
+                                         "\nGraustufen: S{u:.0f} .. S{o:.0f}").format(
+                sf=s / self.v_f.get(), u=self._s_unten(s), o=s))
         except (tk.TclError, ZeroDivisionError):
             pass
 
@@ -942,7 +969,8 @@ class App:
         if not n:
             return
         self.presets[n] = dict(dicke=self.v_dicke.get(), korrektur=self.v_korr.get(),
-                               s=self.v_s.get(), f=self.v_f.get(), line=self.v_line.get(),
+                               s=self.v_s.get(), smin=self.v_smin.get(),
+                               f=self.v_f.get(), line=self.v_line.get(),
                                mode=self.v_mode.get(), schwelle=round(self.v_schw.get(), 2),
                                gamma=round(self.v_gamma.get(), 2),
                                notiz=self.v_notiz.get())
@@ -1276,7 +1304,9 @@ class App:
                                  T("Werte mit Komma trennen, z.B. 200,400,600"))
             return
         g, i = J.graustufentest([self._s(p) for p in ps], fv, n, feld,
-                                line=self.v_line.get())
+                                line=self.v_line.get(),
+                                s_min=self._s(self._s_unten(max(ps)))
+                                if int(self.v_smin.get() or 0) > 0 else None)
         self.lines, self.info = g, i
         self.preview_pil = self.preview_img = self.cut_polys = None
         self._log(T("Graustufentest: {n} Leistungen x {s} Stufen, "

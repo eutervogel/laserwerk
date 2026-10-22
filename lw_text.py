@@ -636,4 +636,17 @@ EN = {
         "The job needs X {x0:.1f} .. {x1:.1f} and Y {y0:.1f} .. {y1:.1f} mm.\n\n"
         "The machine travel is 0 .. {xm:.0f} and 0 .. {ym:.0f} mm "
         "(Machine tab, 'Machine travel').",
+    # ---- untere Leistungsgrenze fuer Graustufen
+    "Leistung ab": "Power from", "0 = automatisch": "0 = automatic",
+    "'Leistung ab' ist die kleinste Leistung, bei der das\n"
+    "Material überhaupt zeichnet. Graustufen werden dann\n"
+    "zwischen diesen beiden Werten verteilt statt zwischen\n"
+    "30 % und S. Für Strichgrafik ohne Bedeutung.":
+        "'Power from' is the lowest power at which the material\n"
+        "marks at all. Greyscales are then spread between those\n"
+        "two values instead of between 30 % and S. Of no\n"
+        "consequence for line art.",
+    "S/F = {sf:.2f}   (Holz bewährt: 0,83)\nGraustufen: S{u:.0f} .. S{o:.0f}":
+        "S/F = {sf:.2f}   (proven on wood: 0.83)\n"
+        "Greyscale: S{u:.0f} .. S{o:.0f}",
 }

@@ -106,6 +106,14 @@ sind ein Startpunkt für einen eigenen Materialtest, kein Rezept. Zu viel
 Leistung bei zu wenig Vorschub heißt nicht „dunkler", sondern irgendwann
 „brennt".
 
+Hat dein Material eine **scharfe Schwelle** — Buche etwa zeichnet erst ab
+einer Leistung und verkohlt kurz darüber —, dann trag im Reiter *Material*
+unter **Leistung ab** ein, wo es anfängt zu zeichnen. Die Tonwerte werden
+dann zwischen diesem Wert und S verteilt statt zwischen 30 % und S. Ohne das
+liegt die halbe Tonskala unter der Schwelle und macht gar nichts, während
+die andere Hälfte einheitlich schwarz ist. Beide Werte liest du aus dem
+Graustufentest ab. 0 heißt: wie bisher, 30 % von S.
+
 Für **Graustufen** gilt das doppelt: Dort brennt jede Zeile über die ganze
 Fläche, und die Nachbarzeile trifft schon vorgewärmtes Material. Gemessen
 wurden auf der Referenzmaschine S175 auf Pappe und S130 auf Schichtplatte —

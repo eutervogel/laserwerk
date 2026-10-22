@@ -106,6 +106,14 @@ optical. A different laser, lens or focus means different values. Treat them as
 a starting point for your own material test, not as a recipe. Too much power at
 too little feed does not mean "darker", it eventually means "on fire".
 
+If your material has a **sharp threshold** — beech, for one, marks only above
+a certain power and chars just above that — set **Power from** in the
+*Material* tab to the power where it begins to mark. Tones are then spread
+between that value and S instead of between 30 % and S. Without it half the
+tonal range sits below the threshold and does nothing, while the other half
+is uniformly black. Both values come straight off the greyscale test. 0 means
+the old behaviour, 30 % of S.
+
 That goes double for **greyscale**: there every row burns across the whole
 area, and the next row meets material that is already warm. On the reference
 machine S175 worked on cardboard and S130 on plywood — a sixth of what the

@@ -197,7 +197,7 @@ def materialtest(powers, feeds, feld=6.0, gap=2.5, line=0.12):
 
 
 def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
-                   boden=0.3):
+                   boden=0.3, s_min=None):
     """Streifen aus Graustufenfeldern: eine Zeile je Leistung, darin ein
     Tonwertkeil von hell nach dunkel.
 
@@ -215,7 +215,8 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
     rows = 0
     for r, s_max in enumerate(powers):
         yb = 3.0 + r * (feld + gap)
-        s_min = int(round(s_max * boden))
+        unten = int(round(s_max * boden)) if s_min is None else int(s_min)
+        unten = min(unten, max(0, s_max - 1))
         g.append(f"; S{s_max} F{feed}")
         # Striche links: so viele wie die Zeilennummer. Sonst weiss man am
         # fertigen Brettchen nicht mehr, welche Zeile welche Leistung war.
@@ -229,7 +230,7 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
                 rows += 1
         for c in range(stufen):
             ton = (c + 1) / stufen                     # hellstes Feld nicht leer
-            sv = int(round(s_min + ton * (s_max - s_min)))
+            sv = int(round(unten + ton * (s_max - unten)))
             xb = 3.0 + c * (feld + gap * 0.2)
             g.append(f"; Ton {ton:.2f} -> S{sv}")
             for i in range(int(feld / line)):

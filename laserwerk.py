@@ -955,6 +955,15 @@ class App:
         over = self._anlauf(f)
         xoff = max(0.0, float(self.v_xoff.get()))
         yoff = max(0.0, float(self.v_yoff.get()))
+        # Der Anlauf liegt links vom Motiv. Passt er nicht zwischen Nullpunkt
+        # und Motiv, muesste der Kopf ins Negative - deshalb das Motiv
+        # nachruecken statt einen Job zu erzeugen, der nicht laufen kann.
+        if xoff < over - 0.001:
+            self._log(T("Versatz X von {alt:.1f} auf {neu:.1f} mm angehoben - "
+                        "sonst passt der Anlauf nicht vor den Nullpunkt.").format(
+                            alt=xoff, neu=over))
+            xoff = over
+            self.v_xoff.set(round(over, 2))
         # Rueckseite: Bild spiegeln UND an der Wendeachse gegenueber platzieren
         sp, achse = self.v_spiegel.get(), float(self.v_achse.get())
         bw, bh = p.shape[1] * line, p.shape[0] * line
@@ -977,10 +986,6 @@ class App:
             overscan=over, x_off=xoff, y_off=yoff,
             kommentar=os.path.basename(self.src_path)
                       + ("  RUECKSEITE" if sp != "nein" else ""))
-        if xoff < over:
-            self._log(T("Hinweis: Anlauf {a:g} mm > Versatz {x:g} mm - der Kopf "
-                        "faehrt bis X {bis:.1f}, also links am Nullpunkt vorbei."
-                        ).format(a=over, x=xoff, bis=xoff - over))
         self.preview_pil = J.preview_image(p)
         self.preview_img = None
         self.preview_pos = (xoff, yoff + self.info["hoehe"])

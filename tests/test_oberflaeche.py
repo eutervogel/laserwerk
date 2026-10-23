@@ -433,3 +433,41 @@ class Beenden(Grundlage):
         self.app.beenden()
         self.assertNotIn("STOPP", self.app.grbl.protokoll)
         self.assertTrue(self.wurzel.winfo_exists())
+
+
+@ohne_bildschirm
+class AnlaufPasstVorDenNullpunkt(Grundlage):
+    def test_versatz_wird_angehoben(self):
+        self.motiv()
+        self.app.cfg["accel"] = 30.0
+        self.app.v_f.set(1000)
+        self.app.v_over.set(0)                 # automatisch: 5,3 mm
+        self.app.v_xoff.set(2.0)               # zu wenig davor
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.v_mode.set("raster")
+        self.app.generate()
+        self.assertGreaterEqual(self.app.v_xoff.get(), 5.2)
+        self.assertGreaterEqual(J.extent(self.app.lines)[0], -0.001)
+
+    def test_job_laeuft_danach(self):
+        self.motiv()
+        self.app.cfg["accel"] = 30.0
+        self.app.v_f.set(1000)
+        self.app.v_over.set(0)
+        self.app.v_xoff.set(0.0)
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.generate()
+        self.gezeigt.clear()
+        self.app._run(self.app.lines, "Test")
+        self.assertEqual(self.gezeigt, [])
+
+    def test_grosser_versatz_bleibt(self):
+        self.motiv()
+        self.app.v_over.set(0)
+        self.app.v_xoff.set(40.0)
+        self.app.v_w.set(30.0)
+        self.app._keep_ratio("w")
+        self.app.generate()
+        self.assertEqual(self.app.v_xoff.get(), 40.0)

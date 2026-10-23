@@ -694,4 +694,8 @@ EN = {
         "A job is running.\n\nQuitting halts it and switches the laser off. "
         "Resuming is then only possible through the position "
         "(fortsetzen.py).\n\nReally quit?",
+    "Versatz X von {alt:.1f} auf {neu:.1f} mm angehoben - "
+    "sonst passt der Anlauf nicht vor den Nullpunkt.":
+        "Offset X raised from {alt:.1f} to {neu:.1f} mm - otherwise the "
+        "overscan does not fit before the origin.",
 }

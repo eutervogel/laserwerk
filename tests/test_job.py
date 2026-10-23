@@ -231,3 +231,22 @@ class FremderGcode(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Anlauf(unittest.TestCase):
+    """Der Anlauf muss lang genug sein, damit die Achse auf Tempo ist -
+    sonst gibt M4 am Zeilenanfang zu wenig Leistung."""
+
+    def test_formel(self):
+        self.assertAlmostEqual(J.anlauf_noetig(1000, 30.0), 4.63, places=2)
+        self.assertAlmostEqual(J.anlauf_noetig(600, 30.0), 1.67, places=2)
+        self.assertAlmostEqual(J.anlauf_noetig(1000, 500.0), 0.28, places=2)
+
+    def test_schnellere_maschine_braucht_weniger(self):
+        self.assertLess(J.anlauf_noetig(1000, 500.0), J.anlauf_noetig(1000, 30.0))
+
+    def test_mehr_vorschub_braucht_mehr(self):
+        self.assertGreater(J.anlauf_noetig(1500, 30.0), J.anlauf_noetig(1000, 30.0))
+
+    def test_null_stuerzt_nicht_ab(self):
+        self.assertGreaterEqual(J.anlauf_noetig(0, 0), 0.0)

@@ -79,6 +79,22 @@ def prepare(im, w_mm, h_mm, line, invert=False, rotate=0,
     return p
 
 
+def anlauf_noetig(feed, accel):
+    """Wie weit die Achse braucht, um den Vorschub zu erreichen.
+
+    Im Lasermodus mit M4 skaliert GRBL die Leistung mit der tatsaechlichen
+    Geschwindigkeit. Faengt eine Zeile an, bevor die Achse auf Tempo ist,
+    brennt ihr Anfang zu schwach - bei 30 mm/s^2 und F1000 sind das
+    4,6 mm, in denen die Leistung erst hochlaeuft. Der Anlauf muss also
+    mindestens so lang sein, sonst steht im Werkstueck etwas anderes als
+    in der Vorschau.
+
+    s = v^2 / (2a), v in mm/s.
+    """
+    v = max(1e-6, float(feed) / 60.0)
+    return v * v / (2.0 * max(1e-6, float(accel)))
+
+
 def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
                  y_off=0.0, merge=0.06, kommentar=""):
     """Leistungsmatrix -> G-Code-Zeilen. Rueckgabe (zeilen, info)."""

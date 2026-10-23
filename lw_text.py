@@ -668,4 +668,11 @@ EN = {
     "Darstellung": "Appearance",
     "Die Sprache gilt nach einem Neustart.":
         "The language takes effect after a restart.",
+    # ---- Anlauf aus der Beschleunigung
+    "0 = aus Vorschub und Beschleunigung gerechnet.\n"
+    "Zu kurz heißt: der Zeilenanfang brennt zu schwach.":
+        "0 = computed from feed and acceleration.\n"
+        "Too short means the row start burns too weakly.",
+    "nötig bei F{f:.0f}: {n:.1f} mm": "needed at F{f:.0f}: {n:.1f} mm",
+    "  - eingestellt zu kurz!": "  - the set value is too short!",
 }

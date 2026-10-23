@@ -126,6 +126,9 @@ class App:
                   self.v_xoff, self.v_over, self.v_yoff, self.v_gamma,
                   self.v_spiegel, self.v_achse):
             v.trace_add("write", lambda *a: self._stale())
+        for v in (self.v_f, self.v_over):
+            v.trace_add("write", lambda *a: self._anlauf_zeigen())
+        self._anlauf_zeigen()
         for v in (self.v_bw, self.v_bh, self.v_board, self.v_snap):
             v.trace_add("write", lambda *a: self._brett_geaendert())
 
@@ -242,7 +245,7 @@ class App:
         ttk.Button(box, text=T("Originalgröße 1:1 (SVG/DXF)"), command=self.original_size
                    ).grid(row=1, column=0, columnspan=6, sticky="ew", pady=(4, 6))
         ttk.Label(box, text=T("Anlauf")).grid(row=2, column=0, sticky="w")
-        ttk.Spinbox(box, from_=0, to=10, increment=0.5, width=5,
+        ttk.Spinbox(box, from_=0, to=25, increment=0.5, width=5,
                     textvariable=self.v_over).grid(row=2, column=1, sticky="w")
         ttk.Label(box, text=T("Versatz X")).grid(row=2, column=2, columnspan=2, sticky="e")
         ttk.Spinbox(box, from_=0, to=50, increment=0.5, width=5,
@@ -252,10 +255,12 @@ class App:
         ttk.Spinbox(box, from_=0, to=200, increment=0.5, width=5,
                     textvariable=self.v_yoff).grid(row=3, column=4, sticky="w")
         ttk.Label(box, text="mm").grid(row=3, column=5, sticky="w")
-        ttk.Label(box, text=T("Der Anlauf macht die Zeilenränder gleichmäßig,\n"
-                              "der Versatz hält ihn rechts vom Nullpunkt."),
-                  style="Muted.TLabel").grid(row=4, column=0, columnspan=6,
-                                             sticky="w", pady=(4, 0))
+        self.lbl_anlauf = ttk.Label(box, text="", style="Muted.TLabel")
+        self.lbl_anlauf.grid(row=4, column=0, columnspan=6, sticky="w", pady=(4, 0))
+        ttk.Label(box, text=T("0 = aus Vorschub und Beschleunigung gerechnet.\n"
+                              "Zu kurz heißt: der Zeilenanfang brennt zu schwach."),
+                  style="Muted.TLabel").grid(row=5, column=0, columnspan=6,
+                                             sticky="w")
 
         rs = ttk.LabelFrame(f, text=T("Rückseite (zweiseitig gravieren)"), padding=4)
         rs.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, 6))
@@ -880,7 +885,7 @@ class App:
                       gamma=max(0.2, float(self.v_gamma.get())),
                       rotate=self.v_rot.get(), mode=self.v_mode.get(),
                       schwelle=self.v_schw.get())
-        over = max(0.0, float(self.v_over.get()))
+        over = self._anlauf(f)
         xoff = max(0.0, float(self.v_xoff.get()))
         yoff = max(0.0, float(self.v_yoff.get()))
         # Rueckseite: Bild spiegeln UND an der Wendeachse gegenueber platzieren
@@ -1036,6 +1041,44 @@ class App:
         self.v_mode.set(d.get("mode", "schwelle")); self.v_schw.set(d.get("schwelle", 0.5))
         self.v_gamma.set(d.get("gamma", 1.0)); self._gamma_zeigen()
         self.v_pname.set(self.v_preset.get())
+
+    def _anlauf(self, feed=None):
+        """Wirksamer Anlauf: eingestellt, oder 0 = aus der Maschine gerechnet."""
+        try:
+            gesetzt = float(self.v_over.get())
+        except tk.TclError:
+            gesetzt = 0.0
+        return gesetzt if gesetzt > 0 else self._anlauf_noetig(feed)
+
+    def _anlauf_noetig(self, feed=None):
+        """Wie lang der Anlauf sein muss, damit die Achse auf Tempo ist.
+
+        Im Lasermodus skaliert M4 die Leistung mit der Geschwindigkeit.
+        Faengt die Zeile zu frueh an, brennt ihr Anfang zu schwach - und
+        im Werkstueck steht etwas anderes als in der Vorschau.
+        """
+        if feed is None:
+            feed = float(self.v_f.get()) if self._zahl(self.v_f) else 1000.0
+        noetig = J.anlauf_noetig(feed, self.cfg.get("accel", 30.0))
+        return round(min(noetig * 1.1 + 0.2, 25.0), 1)      # etwas Luft
+
+    def _anlauf_zeigen(self, *_):
+        if not hasattr(self, "lbl_anlauf"):
+            return
+        noetig = self._anlauf_noetig()
+        text = T("nötig bei F{f:.0f}: {n:.1f} mm").format(
+            f=float(self.v_f.get()) if self._zahl(self.v_f) else 1000.0, n=noetig)
+        if self._anlauf() + 0.05 < noetig:
+            text += T("  - eingestellt zu kurz!")
+        self.lbl_anlauf.configure(text=text)
+
+    @staticmethod
+    def _zahl(var):
+        try:
+            float(var.get())
+            return True
+        except tk.TclError:
+            return False
 
     def _s_unten(self, s_max):
         """Kleinste Leistung fuer Graustufen: eingestellt, sonst 30 % von S.
@@ -1240,6 +1283,10 @@ class App:
                          "(S{a:.0f} wird S{b:.0f}).").format(
                 ist=s30, soll=J.S_MAX, a=self.v_s.get(),
                 b=self._s(self.v_s.get())))
+        if d.get("120"):
+            self.cfg["accel"] = float(d["120"])
+            P.save_config(self.cfg)
+            self._anlauf_zeigen()
         if d.get("32") is not None and d["32"] < 0.5:
             hin.append(T("$32 = 0: Der Lasermodus ist AUS. Der Strahl brennt dann "
                          "auch im Stillstand weiter - mit '$32=1' einschalten."))
@@ -1977,10 +2024,7 @@ class App:
         """Beim Gravieren muss links vom Motiv der Anlauf hinpassen."""
         if getattr(self, "v_job", None) is None or self.v_job.get() != "gravur":
             return 0.0
-        try:
-            return max(0.0, float(self.v_over.get()))
-        except tk.TclError:
-            return 0.0
+        return self._anlauf()
 
     def _snap(self, wert, ziele, tol):
         if not self.v_snap.get():

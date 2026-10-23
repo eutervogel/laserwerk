@@ -19,6 +19,11 @@ Material ausprobieren will.
 
 ## Kann
 
+- **Anlauf aus der Maschine** — im Lasermodus skaliert GRBL mit `M4` die
+  Leistung mit der Geschwindigkeit. Ist der Anlauf kürzer als der
+  Beschleunigungsweg, brennt der Zeilenanfang zu schwach. Laserwerk rechnet
+  ihn aus Vorschub und `$120` aus: bei F1000 und 30 mm/s² sind das 4,6 mm,
+  nicht die 1,5 mm, die man üblicherweise einstellt.
 - **Gravieren** — Bilder (PNG, JPG, WEBP, BMP) und SVG als Raster, zeilenweise:
   schwarzweiß mit Schwelle, Graustufen mit veränderlicher Leistung oder
   Rasterung nach Floyd-Steinberg, bei der alle Punkte gleich stark brennen und

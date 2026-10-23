@@ -360,3 +360,50 @@ class Projektrundlauf(Grundlage):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@ohne_bildschirm
+class AnlaufAusDerMaschine(Grundlage):
+    def test_null_heisst_gerechnet(self):
+        self.app.cfg["accel"] = 30.0
+        self.app.v_f.set(1000)
+        self.app.v_over.set(0)
+        self.assertAlmostEqual(self.app._anlauf(), 5.3, delta=0.2)   # 4,63 + Luft
+
+    def test_eigener_wert_gilt(self):
+        self.app.v_over.set(8.0)
+        self.assertEqual(self.app._anlauf(), 8.0)
+
+    def test_schnelle_maschine_braucht_kaum_anlauf(self):
+        self.app.cfg["accel"] = 500.0
+        self.app.v_f.set(1000)
+        self.app.v_over.set(0)
+        self.assertLess(self.app._anlauf(), 1.0)
+
+    def test_hinweis_warnt_vor_zu_kurzem_anlauf(self):
+        self.app.cfg["accel"] = 30.0
+        self.app.v_f.set(1000)
+        self.app.v_over.set(1.5)
+        self.app._anlauf_zeigen()
+        self.assertIn("kurz", self.app.lbl_anlauf.cget("text"))
+        self.app.v_over.set(0)
+        self.app._anlauf_zeigen()
+        self.assertNotIn("kurz", self.app.lbl_anlauf.cget("text"))
+
+    def test_beschleunigung_kommt_aus_dollar_120(self):
+        self.app.grbl = Attrappe()
+        self.app.grbl.settings["120"] = 250.0
+        self.app._einstellungen_pruefen(self.app.grbl.settings)
+        self.assertEqual(self.app.cfg["accel"], 250.0)
+
+    def test_gcode_nimmt_den_gerechneten_anlauf(self):
+        self.motiv()
+        self.app.cfg["accel"] = 30.0
+        self.app.v_f.set(1000)
+        self.app.v_over.set(0)
+        self.app.v_xoff.set(20.0)
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.assertAlmostEqual(self.app.info["xmin"], 20.0 - 5.3, delta=0.3)

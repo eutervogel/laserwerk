@@ -250,3 +250,56 @@ class Anlauf(unittest.TestCase):
 
     def test_null_stuerzt_nicht_ab(self):
         self.assertGreaterEqual(J.anlauf_noetig(0, 0), 0.0)
+
+
+class Bildkorrektur(unittest.TestCase):
+    def setUp(self):
+        # Foto mit hellgrauem Hintergrund und mittlerem Motiv
+        a = np.full((200, 300), 235, dtype=np.uint8)
+        a[60:140, 80:220] = 120
+        self.foto = Image.fromarray(a)
+
+    def test_ohne_werte_bleibt_das_bild(self):
+        gleich = J.bildkorrektur(self.foto, 0, 0, 0)
+        self.assertEqual(list(gleich.getdata())[:5],
+                         list(self.foto.getdata())[:5])
+
+    def test_kontrast_spreizt(self):
+        vorher = np.asarray(self.foto, dtype=float).std()
+        nachher = np.asarray(J.bildkorrektur(self.foto, 0, 50, 0), dtype=float).std()
+        self.assertGreater(nachher, vorher)
+
+    def test_helligkeit_hebt(self):
+        vorher = np.asarray(self.foto, dtype=float).mean()
+        nachher = np.asarray(J.bildkorrektur(self.foto, 40, 0, 0), dtype=float).mean()
+        self.assertGreater(nachher, vorher)
+
+    def test_auto_zieht_den_hintergrund_auf_weiss(self):
+        h, k = J.auto_tonwerte(self.foto)
+        roh = J.prepare(self.foto, 60.0, 40.0, 0.15, mode="raster")
+        auto = J.prepare(self.foto, 60.0, 40.0, 0.15, mode="raster",
+                         helligkeit=h, kontrast=k)
+        # Hintergrund oben links: vorher ein duenner Teppich, danach nichts
+        self.assertGreater(roh[:20, :20].sum(), 0.0)
+        self.assertEqual(auto[:20, :20].sum(), 0.0)
+        # das Motiv wird dafuer kraeftiger, der Abstand waechst
+        mitte = (slice(80, 120), slice(120, 180))
+        self.assertGreater(auto[mitte].mean(), roh[mitte].mean())
+
+    def test_auto_laesst_strichgrafik_in_ruhe(self):
+        a = np.full((200, 300), 255, dtype=np.uint8)
+        a[50:150, 50:250] = 0
+        h, k = J.auto_tonwerte(Image.fromarray(a))
+        self.assertAlmostEqual(h, 0.0, delta=2.0)
+        self.assertAlmostEqual(k, 0.0, delta=2.0)
+
+    def test_schaerfen_hebt_die_kanten(self):
+        weich = self.foto.filter(__import__("PIL.ImageFilter", fromlist=["x"]).GaussianBlur(2))
+        a = np.asarray(weich, dtype=float)
+        b = np.asarray(J.bildkorrektur(weich, 0, 0, 80), dtype=float)
+        self.assertGreater(np.abs(np.diff(b, axis=1)).mean(),
+                           np.abs(np.diff(a, axis=1)).mean())
+
+    def test_auto_bei_einfarbigem_bild(self):
+        flach = Image.fromarray(np.full((50, 50), 128, dtype=np.uint8))
+        self.assertEqual(J.auto_tonwerte(flach), (0.0, 0.0))

@@ -32,6 +32,10 @@ Material ausprobieren will.
   Zeilenenden.
 - **Schneiden** — Konturen aus SVG und DXF, innen vor außen, mehrere Durchgänge,
   Originalgröße 1:1 für Schablonen aus dem CAD.
+- **Bildkorrektur** — Helligkeit, Kontrast und Schärfen, dazu ein
+  Auto-Knopf, der Schwarz- und Weißpunkt aus dem Bild holt. Fotos brauchen
+  das fast immer: ein hellgrauer Hintergrund brennt sonst als dünner
+  Punkteteppich mit und frisst den Kontrast des Motivs.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
   darauf schieben und an den Ecken skalieren, mit Einrasten auf Kanten, Ecken
   und Mitte. Drehen in beliebigen Winkeln, nicht nur in 90er-Schritten.

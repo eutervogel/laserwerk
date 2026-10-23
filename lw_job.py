@@ -8,8 +8,9 @@ Grundregeln aus der Praxis:
   - Nullpunkt = linke untere Ecke des Motivs, alle Koordinaten positiv.
 """
 import io, os, subprocess, tempfile
+import math
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 S_MAX = 1000          # $30
 ACCEL = 30.0          # $120 mm/s^2
@@ -50,14 +51,62 @@ def autocrop(im, schwelle=240):
 
 
 # ---------------------------------------------------------------- Raster
+def bildkorrektur(im, helligkeit=0.0, kontrast=0.0, schaerfe=0.0):
+    """Tonwerte und Schaerfe vor dem Rastern.
+
+    Fotos kommen selten so, dass sie auf Holz funktionieren: der
+    Hintergrund ist hellgrau statt weiss und wird deshalb als duenner
+    Punkteteppich mitgebrannt, und feine Zeichnung geht beim Verkleinern
+    verloren. Beides laesst sich hier geradeziehen.
+
+    helligkeit, kontrast: -100 bis +100.  schaerfe: 0 bis 100.
+    Geschaerft wird nach dem Verkleinern - vorher waere es wirkungslos.
+    """
+    if schaerfe:
+        im = im.filter(ImageFilter.UnsharpMask(
+            radius=2, percent=int(max(0.0, min(schaerfe, 100.0)) * 2.5),
+            threshold=3))
+    if not helligkeit and not kontrast:
+        return im
+    a = np.asarray(im).astype(np.float32) / 255.0
+    c = 2.0 ** (float(kontrast) / 50.0)            # +100 -> 4x, -100 -> 0,25x
+    a = (a - 0.5) * c + 0.5 + float(helligkeit) / 200.0
+    return Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8), "L")
+
+
+def auto_tonwerte(im, unten=1.0, oben=20.0):
+    """Helligkeit und Kontrast so, dass der Hintergrund weiss wird.
+
+    Nimmt das untere und obere Perzentil als Schwarz- und Weisspunkt und
+    rechnet daraus die beiden Regler zurueck - der Benutzer sieht also,
+    was 'Auto' getan hat, und kann weiterdrehen.
+
+    Das obere Perzentil ist mit 20 bewusst beherzt gewaehlt. Fuer einen
+    Bildschirm waere das zu viel, fuer Holz nicht: was heller als etwa
+    vier Fuenftel ist, soll blankes Holz bleiben und nicht als duenner
+    Punkteteppich mitbrennen. Strichgrafik ruehrt das nicht an, die hat
+    dort ohnehin nichts liegen.
+    """
+    a = np.asarray(im.convert("L")).astype(np.float32) / 255.0
+    lo = float(np.percentile(a, unten))
+    hi = float(np.percentile(a, 100.0 - oben))
+    if hi - lo < 0.02:
+        return 0.0, 0.0
+    c = min(4.0, max(0.25, 1.0 / (hi - lo)))
+    h = ((0.5 - lo) / (hi - lo) - 0.5) * 200.0
+    return round(max(-100.0, min(100.0, h)), 1), round(50.0 * math.log2(c), 1)
+
+
 def prepare(im, w_mm, h_mm, line, invert=False, rotate=0,
-            mode="schwelle", schwelle=0.5, gamma=1.0):
+            mode="schwelle", schwelle=0.5, gamma=1.0,
+            helligkeit=0.0, kontrast=0.0, schaerfe=0.0):
     """Liefert Leistungsmatrix 0..1 (1 = volle Leistung), Zeile 0 = oben."""
     if rotate:
         im = im.rotate(-rotate, expand=True, fillcolor=255)
     nx = max(1, int(round(w_mm / line)))
     ny = max(1, int(round(h_mm / line)))
     im = im.resize((nx, ny), Image.LANCZOS)
+    im = bildkorrektur(im, helligkeit, kontrast, schaerfe)
     a = np.asarray(im).astype(np.float32) / 255.0
     dunkel = 1.0 - a
     if invert:

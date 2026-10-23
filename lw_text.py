@@ -675,4 +675,16 @@ EN = {
         "Too short means the row start burns too weakly.",
     "nötig bei F{f:.0f}: {n:.1f} mm": "needed at F{f:.0f}: {n:.1f} mm",
     "  - eingestellt zu kurz!": "  - the set value is too short!",
+    # ---- Bildkorrektur
+    "Bildkorrektur": "Image correction",
+    "Helligkeit": "Brightness", "Kontrast": "Contrast", "Schärfen": "Sharpen",
+    "Auto": "Auto", "Zurücksetzen": "Reset",
+    "Fotos brauchen das fast immer: ohne Korrektur\n"
+    "brennt ein hellgrauer Hintergrund als dünner\n"
+    "Punkteteppich mit. 'Auto' zieht ihn auf Weiß.":
+        "Photos nearly always need this: without it a\n"
+        "light grey background burns as a thin carpet\n"
+        "of dots. 'Auto' pulls it to white.",
+    "Auto-Tonwerte: Helligkeit {h:+.0f}, Kontrast {k:+.0f}":
+        "Auto levels: brightness {h:+.0f}, contrast {k:+.0f}",
 }

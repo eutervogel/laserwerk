@@ -124,7 +124,8 @@ class App:
         for v in (self.v_inv, self.v_mode, self.v_schw, self.v_rot,
                   self.v_s, self.v_f, self.v_line, self.v_job, self.v_passes,
                   self.v_xoff, self.v_over, self.v_yoff, self.v_gamma,
-                  self.v_spiegel, self.v_achse):
+                  self.v_spiegel, self.v_achse,
+                  self.v_hell, self.v_kontrast, self.v_schaerfe):
             v.trace_add("write", lambda *a: self._stale())
         for v in (self.v_f, self.v_over):
             v.trace_add("write", lambda *a: self._anlauf_zeigen())
@@ -323,8 +324,36 @@ class App:
         self.lbl_gammahilfe.grid(row=15, column=0, columnspan=3, sticky="w")
         self._gamma_zeigen()
 
+        bk = ttk.LabelFrame(f, text=T("Bildkorrektur"), padding=4)
+        bk.grid(row=16, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        self.v_hell = tk.DoubleVar(value=0.0)
+        self.v_kontrast = tk.DoubleVar(value=0.0)
+        self.v_schaerfe = tk.DoubleVar(value=0.0)
+        self.lbl_bk = {}
+        for r, (name, var, von, bis) in enumerate((
+                ("Helligkeit", self.v_hell, -100, 100),
+                ("Kontrast", self.v_kontrast, -100, 100),
+                ("Schärfen", self.v_schaerfe, 0, 100))):
+            ttk.Label(bk, text=T(name)).grid(row=r, column=0, sticky="w")
+            ttk.Scale(bk, from_=von, to=bis, variable=var, length=130,
+                      command=lambda v, k=name: self._bk_zeigen()
+                      ).grid(row=r, column=1, sticky="w", padx=(4, 0))
+            self.lbl_bk[name] = ttk.Label(bk, width=5, anchor="e")
+            self.lbl_bk[name].grid(row=r, column=2, sticky="w")
+        kb = ttk.Frame(bk)
+        kb.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        ttk.Button(kb, text=T("Auto"), command=self.auto_tonwerte
+                   ).pack(side="left", fill="x", expand=True)
+        ttk.Button(kb, text=T("Zurücksetzen"), command=self.bk_zuruecksetzen
+                   ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+        ttk.Label(bk, text=T("Fotos brauchen das fast immer: ohne Korrektur\n"
+                             "brennt ein hellgrauer Hintergrund als dünner\n"
+                             "Punkteteppich mit. 'Auto' zieht ihn auf Weiß."),
+                  style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+        self._bk_zeigen()
+
         jb = ttk.LabelFrame(f, text=T("Bearbeitung"), padding=4)
-        jb.grid(row=16, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        jb.grid(row=17, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_job = tk.StringVar(value="gravur")
         ttk.Radiobutton(jb, text=T("Gravieren (Flächen, zeilenweise)"), value="gravur",
                         variable=self.v_job, command=self._job_changed).grid(row=0, column=0, columnspan=3, sticky="w")
@@ -336,15 +365,15 @@ class App:
                     ).grid(row=2, column=1, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
-                   ).grid(row=17, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+                   ).grid(row=18, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         self.lbl_info = ttk.Label(f, text="", justify="left")
-        self.lbl_info.grid(row=18, column=0, columnspan=3, sticky="w")
+        self.lbl_info.grid(row=19, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=19, column=0, columnspan=3, sticky="ew", pady=6)
+        bb.grid(row=20, column=0, columnspan=3, sticky="ew", pady=6)
         ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
         ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
         pb = ttk.Frame(f)
-        pb.grid(row=20, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        pb.grid(row=21, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         ttk.Button(pb, text=T("Projekt speichern"), command=self.save_project
                    ).pack(side="left", fill="x", expand=True)
         ttk.Button(pb, text=T("Projekt öffnen"), command=self.open_project
@@ -644,6 +673,8 @@ class App:
         ("v_w", "breite"), ("v_h", "hoehe"), ("v_lock", "verhaeltnis"),
         ("v_rot", "drehung"), ("v_inv", "invertiert"), ("v_mode", "modus"),
         ("v_schw", "schwelle"), ("v_gamma", "mitten"),
+        ("v_hell", "helligkeit"), ("v_kontrast", "kontrast"),
+        ("v_schaerfe", "schaerfe"),
         ("v_xoff", "versatz_x"), ("v_yoff", "versatz_y"), ("v_over", "anlauf"),
         ("v_spiegel", "spiegel"), ("v_achse", "wendeachse"),
         ("v_job", "bearbeitung"), ("v_passes", "durchgaenge"),
@@ -816,6 +847,39 @@ class App:
         self._stale()
         self._draw()
 
+    def _bk_zeigen(self, *_):
+        for name, var in (("Helligkeit", self.v_hell),
+                          ("Kontrast", self.v_kontrast),
+                          ("Schärfen", self.v_schaerfe)):
+            try:
+                self.lbl_bk[name].configure(text="%+.0f" % var.get()
+                                            if name != "Schärfen"
+                                            else "%.0f" % var.get())
+            except tk.TclError:
+                pass
+
+    def auto_tonwerte(self):
+        """Schwarz- und Weisspunkt aus dem Bild holen und als Regler setzen."""
+        if self.src is None:
+            messagebox.showinfo(T("Bildkorrektur"), T("Erst ein Bild oder SVG öffnen."))
+            return
+        h, k = J.auto_tonwerte(self.src)
+        self.v_hell.set(h)
+        self.v_kontrast.set(k)
+        self._bk_zeigen()
+        self._log(T("Auto-Tonwerte: Helligkeit {h:+.0f}, Kontrast {k:+.0f}").format(
+            h=h, k=k))
+        self._stale()
+        self._draw()
+
+    def bk_zuruecksetzen(self):
+        self.v_hell.set(0.0)
+        self.v_kontrast.set(0.0)
+        self.v_schaerfe.set(0.0)
+        self._bk_zeigen()
+        self._stale()
+        self._draw()
+
     def _gamma_zeigen(self):
         try:
             g = float(self.v_gamma.get())
@@ -883,6 +947,9 @@ class App:
                 src = J.autocrop(J.load_source(self.src_path, need), 245)
         p = J.prepare(src, w, h, line, invert=self.v_inv.get(),
                       gamma=max(0.2, float(self.v_gamma.get())),
+                      helligkeit=self.v_hell.get(),
+                      kontrast=self.v_kontrast.get(),
+                      schaerfe=self.v_schaerfe.get(),
                       rotate=self.v_rot.get(), mode=self.v_mode.get(),
                       schwelle=self.v_schw.get())
         over = self._anlauf(f)
@@ -2103,7 +2170,9 @@ class App:
         # waehrend des Ziehens grob skalieren, danach sauber
         glatt = Image.BILINEAR if self.drag else Image.LANCZOS
         rot, inv, sp = self.v_rot.get(), self.v_inv.get(), self.v_spiegel.get()
-        key = (w_px, h_px, rot, inv, sp, glatt, id(self.src))
+        bk = (round(self.v_hell.get()), round(self.v_kontrast.get()),
+              round(self.v_schaerfe.get()))
+        key = (w_px, h_px, rot, inv, sp, glatt, bk, id(self.src))
         if self._live_cache and self._live_cache[0] == key:
             return self._live_cache[1]
         im = self.src
@@ -2114,6 +2183,7 @@ class App:
         elif sp == "y":
             im = im.transpose(Image.FLIP_TOP_BOTTOM)
         im = im.resize((w_px, h_px), glatt)
+        im = J.bildkorrektur(im, *bk)
         if inv:
             from PIL import ImageOps
             im = ImageOps.invert(im)

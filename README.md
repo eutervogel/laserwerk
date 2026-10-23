@@ -32,6 +32,10 @@ settings for a new material.
   threshold. Plus a midtone control and overscan at the row ends.
 - **Cut** — contours from SVG and DXF, inner before outer, several passes,
   original size 1:1 for templates straight out of CAD.
+- **Image correction** — brightness, contrast and sharpening, plus an Auto
+  button that takes the black and white point from the image. Photos nearly
+  always need it: a light grey background otherwise burns as a thin carpet of
+  dots and eats the subject's contrast.
 - **Place** — enter the length and width of your workpiece, then drag the
   artwork onto it with the mouse and resize it by its corners, snapping to
   edges, corners and centre. Rotate to any angle, not just multiples of 90°.

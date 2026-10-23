@@ -17,6 +17,7 @@ import lw_grbl as G
 import lw_job as J
 import lw_presets as P
 import lw_vector as V
+import lw_projekt as PR
 import lw_telegram as TG
 import lw_text
 from lw_text import T
@@ -57,6 +58,8 @@ class App:
         self.fokus_zs = []
         self.fern = None               # Telegram-Fernsteuerung
         self._rettung = None           # Nullpunkt ueber einen Soft-Reset retten
+        self.projekt_pfad = None       # zuletzt gespeichertes Projekt
+        self.quelle_pfad = None        # Vorlage, wie der Nutzer sie kennt
         self.s_max = float(self.cfg.get("s_max", J.S_MAX))   # $30 der Maschine
         self.area = max(float(self.cfg["x_max"]), float(self.cfg["y_max"]), 10.0)
         self.v_zeig_s = tk.IntVar(value=50)     # Leistung Sichtkreuz/Rahmen
@@ -335,6 +338,12 @@ class App:
         bb.grid(row=19, column=0, columnspan=3, sticky="ew", pady=6)
         ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
         ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
+        pb = ttk.Frame(f)
+        pb.grid(row=20, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        ttk.Button(pb, text=T("Projekt speichern"), command=self.save_project
+                   ).pack(side="left", fill="x", expand=True)
+        ttk.Button(pb, text=T("Projekt öffnen"), command=self.open_project
+                   ).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
     # ---------------------------------------------------------------- Material
     def _build_material(self):
@@ -576,8 +585,13 @@ class App:
             filetypes=[(T("Bilder, SVG, DXF"),
                         "*.png *.jpg *.jpeg *.webp *.bmp *.svg *.dxf"),
                        (T("alle"), "*")])
-        if not p:
-            return
+        if p:
+            self.lade_motiv(p)
+
+    def lade_motiv(self, p, anzeige=None):
+        """Datei einlesen und als Motiv setzen. 'anzeige' ueberschreibt den
+        Namen im Fenster - ein Projekt zeigt den urspruenglichen, nicht den
+        der ausgepackten Kopie."""
         ext = os.path.splitext(p)[1].lower()
         vec = None
         im = None
@@ -598,9 +612,10 @@ class App:
                 im = J.autocrop(J.load_source(p, 3000 if ext == ".svg" else None), 245)
         except Exception as e:
             messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
-            return
+            return False
         self.clear_motif()
         self.src, self.src_path, self.vec = im, p, vec
+        self.quelle_pfad = p
         self.vec_bb = V.bbox(V.flatten(vec, 1.0)) if vec else None
         self._vecdreh = None
         if ext == ".dxf":
@@ -608,8 +623,92 @@ class App:
         elif not vec and self.v_job.get() == "schnitt":
             self.v_job.set("gravur")
         self.v_rot.set(0)
-        self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(os.path.basename(p), im.width, im.height))
+        self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
+            anzeige or os.path.basename(p), im.width, im.height))
         self.fit()
+        return True
+
+    # --------------------------------------------------------- Projekt
+    # Alles, was ein Projekt ausmacht: Variable -> Name in der Datei.
+    PROJEKTFELDER = (
+        ("v_w", "breite"), ("v_h", "hoehe"), ("v_lock", "verhaeltnis"),
+        ("v_rot", "drehung"), ("v_inv", "invertiert"), ("v_mode", "modus"),
+        ("v_schw", "schwelle"), ("v_gamma", "mitten"),
+        ("v_xoff", "versatz_x"), ("v_yoff", "versatz_y"), ("v_over", "anlauf"),
+        ("v_spiegel", "spiegel"), ("v_achse", "wendeachse"),
+        ("v_job", "bearbeitung"), ("v_passes", "durchgaenge"),
+        ("v_bw", "brett_x"), ("v_bh", "brett_y"),
+        ("v_board", "brett_zeigen"), ("v_snap", "einrasten"),
+        ("v_maxw", "max_breite"), ("v_maxh", "max_hoehe"),
+        ("v_dicke", "dicke"), ("v_korr", "fokuskorrektur"),
+        ("v_s", "leistung"), ("v_smin", "leistung_ab"), ("v_f", "vorschub"),
+        ("v_line", "zeilenabstand"), ("v_notiz", "notiz"),
+        ("v_preset", "preset"),
+    )
+
+    def save_project(self):
+        if self.src is None:
+            messagebox.showinfo(T("Projekt"), T("Erst ein Bild oder SVG öffnen."))
+            return
+        vor = os.path.splitext(os.path.basename(self.src_path or "projekt"))[0]
+        p = filedialog.asksaveasfilename(
+            title=T("Projekt speichern"), defaultextension=PR.ENDUNG,
+            initialfile=vor + PR.ENDUNG,
+            initialdir=os.path.expanduser("~/Downloads"),
+            filetypes=[(T("Laserwerk-Projekt"), "*" + PR.ENDUNG), (T("alle"), "*")])
+        if not p:
+            return
+        werte = {}
+        for name, schluessel in self.PROJEKTFELDER:
+            try:
+                werte[schluessel] = getattr(self, name).get()
+            except tk.TclError:
+                pass
+        try:
+            d = PR.speichern(p, werte, self.quelle_pfad or self.src_path)
+        except OSError as e:
+            messagebox.showerror(T("Projekt"), str(e))
+            return
+        self._projekt_titel(p)
+        self._log(T("Projekt gespeichert: {name} ({kb} kB{mit})").format(
+            name=os.path.basename(p), kb=os.path.getsize(p) // 1024,
+            mit=T(", mit Vorlage") if d.get("vorlage") else ""))
+
+    def open_project(self):
+        p = filedialog.askopenfilename(
+            title=T("Projekt öffnen"), initialdir=os.path.expanduser("~/Downloads"),
+            filetypes=[(T("Laserwerk-Projekt"), "*" + PR.ENDUNG), (T("alle"), "*")])
+        if not p:
+            return
+        try:
+            d = PR.laden(p)
+        except Exception as e:
+            messagebox.showerror(T("Projekt"), str(e))
+            return
+        ordner = os.path.join(P.DIR, "vorlagen")
+        quelle, name = PR.vorlage_auspacken(d, ordner)
+        if not quelle:
+            messagebox.showerror(T("Projekt"),
+                T("Die Vorlage '{name}' steckt nicht in der Datei und liegt "
+                  "nicht mehr am gemerkten Ort.").format(name=name))
+            return
+        if not self.lade_motiv(quelle, anzeige=name):
+            return
+        self.quelle_pfad = d.get("quelle") or quelle
+        for feld, schluessel in self.PROJEKTFELDER:
+            if schluessel in d["werte"]:
+                try:
+                    getattr(self, feld).set(d["werte"][schluessel])
+                except tk.TclError:
+                    pass
+        self._gamma_zeigen(); self._show_sf(); self._stale(); self._draw()
+        self._projekt_titel(p)
+        self._log(T("Projekt geladen: {name} (gespeichert {wann})").format(
+            name=os.path.basename(p), wann=d.get("gespeichert", "?")))
+
+    def _projekt_titel(self, pfad):
+        self.projekt_pfad = pfad
+        self.root.title("Laserwerk" + (" – " + os.path.basename(pfad) if pfad else ""))
 
     def clear_motif(self):
         """Bild, Vorschau und erzeugten/geladenen G-Code verwerfen."""

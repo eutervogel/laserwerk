@@ -650,4 +650,17 @@ EN = {
         "S/F = {sf:.2f}   (proven on wood: 0.83)\n"
         "Greyscale: S{u:.0f} .. S{o:.0f}",
     "Rasterung (Punktdichte, für Fotos)": "Dithering (dot density, for photos)",
+    # ---- Projektdateien
+    "Projekt": "Project",
+    "Projekt speichern": "Save project", "Projekt öffnen": "Open project",
+    "Laserwerk-Projekt": "Laserwerk project",
+    "Projekt gespeichert: {name} ({kb} kB{mit})":
+        "Project saved: {name} ({kb} kB{mit})",
+    ", mit Vorlage": ", artwork included",
+    "Projekt geladen: {name} (gespeichert {wann})":
+        "Project loaded: {name} (saved {wann})",
+    "Die Vorlage '{name}' steckt nicht in der Datei und liegt nicht mehr "
+    "am gemerkten Ort.":
+        "The artwork '{name}' is not inside the file and is no longer at the "
+        "remembered place.",
 }

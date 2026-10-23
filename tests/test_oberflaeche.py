@@ -31,7 +31,8 @@ class Grundlage(unittest.TestCase):
         self.L.messagebox.askyesno = lambda t, m: True
 
     def tearDown(self):
-        app_schliessen(self.wurzel, getattr(self, "app", None))
+        if self.wurzel is not None:
+            app_schliessen(self.wurzel, getattr(self, "app", None))
 
     def motiv(self, breite=400, hoehe=200):
         self.app.src = Image.new("L", (breite, hoehe), 0)
@@ -407,3 +408,28 @@ class AnlaufAusDerMaschine(Grundlage):
         self.app.v_mode.set("schwelle")
         self.app.generate()
         self.assertAlmostEqual(self.app.info["xmin"], 20.0 - 5.3, delta=0.3)
+
+
+@ohne_bildschirm
+class Beenden(Grundlage):
+    def test_ohne_job_einfach_zu(self):
+        self.gezeigt.clear()
+        self.app.beenden()
+        self.assertEqual(self.gezeigt, [])
+        self.wurzel = self.app = None          # schon zerstoert
+
+    def test_mit_job_wird_gefragt_und_angehalten(self):
+        gefragt = []
+        self.L.messagebox.askokcancel = lambda t, m: (gefragt.append(m), True)[1]
+        self.app.grbl.job_running = True
+        self.app.beenden()
+        self.assertTrue(gefragt)
+        self.assertIn("STOPP", self.app.grbl.protokoll)
+        self.wurzel = self.app = None
+
+    def test_abbrechen_laesst_den_job_laufen(self):
+        self.L.messagebox.askokcancel = lambda t, m: False
+        self.app.grbl.job_running = True
+        self.app.beenden()
+        self.assertNotIn("STOPP", self.app.grbl.protokoll)
+        self.assertTrue(self.wurzel.winfo_exists())

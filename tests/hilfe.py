@@ -161,7 +161,7 @@ def app_schliessen(wurzel, app=None):
     """Fenster zumachen wie der Benutzer - ohne haengende Abfrage."""
     try:
         if app is not None:
-            app.beenden()
+            app.beenden(fragen=False)
         else:
             wurzel.destroy()
     except Exception:

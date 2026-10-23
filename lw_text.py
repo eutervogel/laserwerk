@@ -687,4 +687,11 @@ EN = {
         "of dots. 'Auto' pulls it to white.",
     "Auto-Tonwerte: Helligkeit {h:+.0f}, Kontrast {k:+.0f}":
         "Auto levels: brightness {h:+.0f}, contrast {k:+.0f}",
+    "Beenden": "Quit",
+    "Es läuft gerade ein Job.\n\nBeenden hält ihn an und schaltet den Laser "
+    "aus. Fortsetzen ist danach nur über die Position möglich "
+    "(fortsetzen.py).\n\nWirklich beenden?":
+        "A job is running.\n\nQuitting halts it and switches the laser off. "
+        "Resuming is then only possible through the position "
+        "(fortsetzen.py).\n\nReally quit?",
 }

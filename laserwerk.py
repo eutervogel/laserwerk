@@ -1678,10 +1678,22 @@ class App:
             pass
         self._poll_id = self.root.after(100, self._poll)
 
-    def beenden(self):
+    def beenden(self, fragen=True):
         """Sauber zumachen: Abfrage anhalten, Bot stilllegen, Port schliessen.
         Ohne das laeuft die Abfrage in ein zerstoertes Fenster und der
-        Controller behaelt die offene Verbindung."""
+        Controller behaelt die offene Verbindung.
+
+        Laeuft ein Job, wird vorher gefragt - sonst reicht ein Klick auf das
+        Kreuz, um eine Gravur nach einer Stunde zu verlieren.
+        """
+        if fragen and self.grbl.connected and self.grbl.job_running:
+            if not messagebox.askokcancel(T("Beenden"),
+                    T("Es läuft gerade ein Job.\n\n"
+                      "Beenden hält ihn an und schaltet den Laser aus. "
+                      "Fortsetzen ist danach nur über die Position möglich "
+                      "(fortsetzen.py).\n\nWirklich beenden?")):
+                return
+            self.grbl.stop()
         try:
             if getattr(self, "_poll_id", None):
                 self.root.after_cancel(self._poll_id)

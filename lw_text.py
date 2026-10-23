@@ -663,4 +663,7 @@ EN = {
     "am gemerkten Ort.":
         "The artwork '{name}' is not inside the file and is no longer at the "
         "remembered place.",
+    "Erzeugen": "Build",
+    "\nHinweis: nutzt G91 - die Datei fährt relativ!\nErst auf den Startpunkt fahren.":
+        "\nNote: uses G91 - the file moves relatively!\nMove to the start point first.",
 }

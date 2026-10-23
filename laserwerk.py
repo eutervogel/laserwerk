@@ -5,7 +5,7 @@ Laserwerk - Oberflaeche fuer GRBL-Diodenlaser.
 Bild oder SVG laden, skalieren, Material waehlen, Achsen steuern,
 Nullpunkt setzen, Fokus testen, gravieren.
 """
-import base64, io, math, os, queue, threading, time
+import base64, io, math, os, queue, re, threading, time
 from PIL import Image
 import tkinter as tk
 from tkinter import ttk
@@ -131,22 +131,24 @@ class App:
         # Jobleiste
         jb = ttk.Frame(main, padding=(0, 6, 0, 0))
         jb.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self.btn_gen = ttk.Button(jb, text=T("Erzeugen"), command=self.generate)
+        self.btn_gen.grid(row=0, column=0, padx=(0, 10))
         for i, (t, f, st) in enumerate([("Rahmen fahren", self.frame, "TButton"),
                                         ("Start", self.start, "Accent.TButton"),
                                         ("Pause", self.pause, "TButton"),
                                         ("Weiter", self.resume, "TButton"),
                                         ("STOPP", self.stop, "Danger.TButton")]):
-            ttk.Button(jb, text=T(t), command=f, style=st).grid(row=0, column=i, padx=3)
+            ttk.Button(jb, text=T(t), command=f, style=st).grid(row=0, column=i + 1, padx=3)
         ttk.Checkbutton(jb, text=T("Rahmen sichtbar"), variable=self.v_frame_laser
-                        ).grid(row=0, column=5, padx=(8, 0))
-        self.prog = ttk.Progressbar(jb, length=300, maximum=1000)
-        self.prog.grid(row=0, column=6, padx=8)
-        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=34)
-        self.lbl_prog.grid(row=0, column=7)
+                        ).grid(row=0, column=6, padx=(10, 2))
+        self.prog = ttk.Progressbar(jb, length=170, maximum=1000)
+        self.prog.grid(row=0, column=7, padx=8, sticky="ew")
+        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=26, anchor="w")
+        self.lbl_prog.grid(row=0, column=8)
         self.btn_theme = ttk.Button(jb, command=self.toggle_theme, width=8)
-        self.btn_theme.grid(row=0, column=8, padx=(6, 0))
+        self.btn_theme.grid(row=0, column=9, padx=(6, 0))
         self._theme_label()
-        jb.columnconfigure(6, weight=1)
+        jb.columnconfigure(7, weight=1)
 
         if TG.lade().get("auto") and self.v_tg_token.get().strip():
             self.root.after(800, self.fern_start)
@@ -626,6 +628,7 @@ class App:
         self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
             anzeige or os.path.basename(p), im.width, im.height))
         self.fit()
+        self._gen_knopf()
         return True
 
     # --------------------------------------------------------- Projekt
@@ -722,6 +725,7 @@ class App:
         self.drag = None
         self.lbl_src.configure(text="-")
         self.lbl_info.configure(text="")
+        self._gen_knopf()
         self._draw()
 
     def _vec_bbox(self):
@@ -823,12 +827,20 @@ class App:
             return
         self._keep_ratio("w")
 
+    def _gen_knopf(self):
+        """Hervorheben, solange kein gueltiger G-Code vorliegt."""
+        if not hasattr(self, "btn_gen"):
+            return
+        fehlt = self.src is not None and self.lines is None
+        self.btn_gen.configure(style="Accent.TButton" if fehlt else "TButton")
+
     def _stale(self):
         """Größe/Drehung geändert: erzeugter G-Code passt nicht mehr."""
         if self.src is not None and self.lines is not None:
             self.lines = self.info = self.preview_img = self.cut_polys = None
             self.preview_pil = self._prev_cache = None
             self.lbl_info.configure(text=T("Einstellung geändert -\nVorschau neu erzeugen."))
+        self._gen_knopf()
 
     def fit(self):
         if self.src is None:
@@ -898,6 +910,7 @@ class App:
         self.preview_pil = J.preview_image(p)
         self.preview_img = None
         self.preview_pos = (xoff, yoff + self.info["hoehe"])
+        self._gen_knopf()
         i = self.info
         warn = ""
         if i["xmax"] > self.cfg["x_max"] or h > self.cfg["y_max"]:
@@ -940,6 +953,7 @@ class App:
                                             kommentar=os.path.basename(self.src_path))
         self.cut_polys = polys
         self.preview_img = None
+        self._gen_knopf()
         i = self.info
         warn = T("\nACHTUNG: größer als der Verfahrweg!") if (
             i["xmax"] > self.cfg["x_max"] or i["hoehe"] > self.cfg["y_max"]) else ""
@@ -986,7 +1000,11 @@ class App:
         self.preview_img = None
         self.preview_pos = (x0, y1)          # linke obere Ecke in mm
         self.src_path = p
+        self._gen_knopf()
         m3 = any(l.upper().startswith("M3") for l in self.lines)
+        # G91 = relative Fahrten. Dann haengt alles davon ab, wo der Kopf
+        # beim Start steht - bei unseren eigenen Dateien nie der Fall.
+        rel = any(re.match(r"\s*G0*91\b", l.upper()) for l in self.lines)
         neg = x0 < -0.01 or y0 < -0.01
         self.lbl_info.configure(text=(
             T("{datei}\n"
@@ -999,7 +1017,9 @@ class App:
             + (T("\nHinweis: nutzt M3 - bei Pause brennt der\nLaser weiter!")
                if m3 else "")
             + (T("\nHinweis: negative Koordinaten - Nullpunkt\n"
-                 "liegt nicht links unten!") if neg else "")))
+                 "liegt nicht links unten!") if neg else "")
+            + (T("\nHinweis: nutzt G91 - die Datei fährt relativ!\n"
+                 "Erst auf den Startpunkt fahren.") if rel else "")))
         self._draw()
 
     # ================================================================ Material

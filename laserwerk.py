@@ -72,7 +72,8 @@ class App:
         self.v_achse = tk.DoubleVar(value=50.0)       # Wendeachse in mm
         self.job_t0 = None
         self._build()
-        self.root.after(100, self._poll)
+        self._poll_id = self.root.after(100, self._poll)
+        self.root.protocol("WM_DELETE_WINDOW", self.beenden)
         self._draw()
 
     # ================================================================ Aufbau
@@ -141,13 +142,10 @@ class App:
             ttk.Button(jb, text=T(t), command=f, style=st).grid(row=0, column=i + 1, padx=3)
         ttk.Checkbutton(jb, text=T("Rahmen sichtbar"), variable=self.v_frame_laser
                         ).grid(row=0, column=6, padx=(10, 2))
-        self.prog = ttk.Progressbar(jb, length=170, maximum=1000)
+        self.prog = ttk.Progressbar(jb, length=120, maximum=1000)
         self.prog.grid(row=0, column=7, padx=8, sticky="ew")
-        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=26, anchor="w")
+        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=22, anchor="w")
         self.lbl_prog.grid(row=0, column=8)
-        self.btn_theme = ttk.Button(jb, command=self.toggle_theme, width=8)
-        self.btn_theme.grid(row=0, column=9, padx=(6, 0))
-        self._theme_label()
         jb.columnconfigure(7, weight=1)
 
         if TG.lade().get("auto") and self.v_tg_token.get().strip():
@@ -484,7 +482,7 @@ class App:
         ec.grid(row=12, column=0, columnspan=2, sticky="ew")
         ec.bind("<Return>", lambda e: self.send_cmd())
         ttk.Button(f, text=T("senden"), command=self.send_cmd).grid(row=12, column=2)
-        sp = ttk.LabelFrame(f, text=T("Sprache"), padding=4)
+        sp = ttk.LabelFrame(f, text=T("Darstellung"), padding=4)
         sp.grid(row=15, column=0, columnspan=3, sticky="ew", pady=(8, 2))
         self.v_sprache = tk.StringVar(
             value=lw_text.SPRACHEN.get(self.cfg.get("sprache", "de"), "Deutsch"))
@@ -492,8 +490,12 @@ class App:
                            width=12, values=list(lw_text.SPRACHEN.values()))
         cbs.grid(row=0, column=0, sticky="w")
         cbs.bind("<<ComboboxSelected>>", lambda e: self.set_sprache())
-        ttk.Label(sp, text=T("Gilt nach einem Neustart des Programms."),
-                  style="Muted.TLabel").grid(row=0, column=1, padx=(8, 0), sticky="w")
+        self.btn_theme = ttk.Button(sp, command=self.toggle_theme, width=8)
+        self.btn_theme.grid(row=0, column=1, padx=(8, 0), sticky="w")
+        self._theme_label()
+        ttk.Label(sp, text=T("Die Sprache gilt nach einem Neustart."),
+                  style="Muted.TLabel").grid(row=1, column=0, columnspan=2,
+                                             sticky="w", pady=(4, 0))
 
         tg = ttk.LabelFrame(f, text=T("Fernsteuerung über Telegram"), padding=4)
         tg.grid(row=13, column=0, columnspan=3, sticky="ew", pady=(8, 2))
@@ -1560,7 +1562,27 @@ class App:
                 self._event(k, d)
         except queue.Empty:
             pass
-        self.root.after(100, self._poll)
+        self._poll_id = self.root.after(100, self._poll)
+
+    def beenden(self):
+        """Sauber zumachen: Abfrage anhalten, Bot stilllegen, Port schliessen.
+        Ohne das laeuft die Abfrage in ein zerstoertes Fenster und der
+        Controller behaelt die offene Verbindung."""
+        try:
+            if getattr(self, "_poll_id", None):
+                self.root.after_cancel(self._poll_id)
+                self._poll_id = None
+        except Exception:
+            pass
+        if self.fern is not None:
+            self.fern.stop()
+        try:
+            if self.grbl.connected:
+                self.grbl.laser_off()
+                self.grbl.disconnect()
+        except Exception:
+            pass
+        self.root.destroy()
 
     def _event(self, k, d):
         if k == "status":

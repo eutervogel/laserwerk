@@ -170,6 +170,16 @@ installed afterwards and nothing opens dialogs behind your back.
 missing entry simply falls back to German, so nothing breaks. To add a
 language, copy the table and extend `SPRACHEN`.
 
+## Tests
+
+```sh
+python3 -m unittest discover -s tests -t tests
+```
+
+105 tests on stdlib only, nothing to install. The interface tests need a
+display and are skipped without one; prefix `xvfb-run -a` to run them on a
+hidden screen. Details in [tests/README.md](tests/README.md).
+
 ## Licence
 
 MIT, see [LICENSE](LICENSE). Without any warranty — in particular for whatever

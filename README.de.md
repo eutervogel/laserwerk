@@ -173,6 +173,17 @@ muss und nichts im Hintergrund Dialoge öffnet.
 Fehlt ein Eintrag, erscheint einfach das Deutsche — nichts bricht. Für eine
 weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 
+## Tests
+
+```sh
+python3 -m unittest discover -s tests -t tests
+```
+
+105 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
+lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
+[tests/README.md](tests/README.md).
+
 ## Lizenz
 
 MIT, siehe [LICENSE](LICENSE). Ohne jede Gewährleistung — besonders für das,

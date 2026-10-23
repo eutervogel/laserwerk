@@ -120,7 +120,6 @@ EN = {
     "Vorschub F": "Feed F",
     "Zeilenabstand": "Row pitch",
     "Notiz": "Note",
-    "Name": "Name",
     "Werte übernehmen und Z anfahren": "Apply values and move Z",
     "Z fährt auf Materialdicke + Korrektur.": "Z moves to thickness + correction.",
 
@@ -666,4 +665,7 @@ EN = {
     "Erzeugen": "Build",
     "\nHinweis: nutzt G91 - die Datei fährt relativ!\nErst auf den Startpunkt fahren.":
         "\nNote: uses G91 - the file moves relatively!\nMove to the start point first.",
+    "Darstellung": "Appearance",
+    "Die Sprache gilt nach einem Neustart.":
+        "The language takes effect after a restart.",
 }

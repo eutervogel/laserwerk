@@ -64,6 +64,15 @@ def prepare(im, w_mm, h_mm, line, invert=False, rotate=0,
         dunkel = 1.0 - dunkel
     if mode == "schwelle":
         p = (dunkel >= (1.0 - schwelle)).astype(np.float32)
+    elif mode == "raster":
+        # Punktdichte statt Leistung: jeder Punkt brennt gleich stark, der
+        # Tonwert kommt aus der Anzahl. Das umgeht die Kennlinie des
+        # Materials - entscheidend bei Holz mit scharfer Schwelle, wo
+        # zwischen "zeichnet nicht" und "verkohlt" kaum Platz ist.
+        d = np.clip(dunkel, 0, 1) ** gamma
+        grau = Image.fromarray(((1.0 - d) * 255).astype(np.uint8), "L")
+        sw = grau.convert("1", dither=Image.FLOYDSTEINBERG)
+        p = (np.asarray(sw) == 0).astype(np.float32)   # schwarz = brennen
     else:
         p = np.clip(dunkel, 0, 1) ** gamma
         p[p < 0.08] = 0.0

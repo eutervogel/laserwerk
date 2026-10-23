@@ -20,10 +20,11 @@ settings for a new material.
 
 ## What it does
 
-- **Engrave** — images (PNG, JPG, WEBP, BMP) and SVG as a raster, row by row,
-  either black and white with a threshold or greyscale with varying power,
-  with a midtone control for the tonal curve. Overscan at the row ends keeps
-  the edges even.
+- **Engrave** — images (PNG, JPG, WEBP, BMP) and SVG as a raster, row by row:
+  black and white with a threshold, greyscale with varying power, or
+  Floyd-Steinberg dithering, where every dot burns at the same power and the
+  tone comes from dot density — the answer for material with a sharp
+  threshold. Plus a midtone control and overscan at the row ends.
 - **Cut** — contours from SVG and DXF, inner before outer, several passes,
   original size 1:1 for templates straight out of CAD.
 - **Place** — enter the length and width of your workpiece, then drag the

@@ -19,10 +19,12 @@ Material ausprobieren will.
 
 ## Kann
 
-- **Gravieren** — Bilder (PNG, JPG, WEBP, BMP) und SVG als Raster, zeilenweise,
-  wahlweise schwarzweiß mit Schwelle oder Graustufen mit veränderlicher
-  Leistung, samt Tonwertregler für die Mitten. Anlauf (Overscan) an den
-  Zeilenenden für saubere Ränder.
+- **Gravieren** — Bilder (PNG, JPG, WEBP, BMP) und SVG als Raster, zeilenweise:
+  schwarzweiß mit Schwelle, Graustufen mit veränderlicher Leistung oder
+  Rasterung nach Floyd-Steinberg, bei der alle Punkte gleich stark brennen und
+  der Tonwert aus der Punktdichte kommt — das Mittel für Material mit scharfer
+  Schwelle. Dazu ein Tonwertregler für die Mitten und Anlauf (Overscan) an den
+  Zeilenenden.
 - **Schneiden** — Konturen aus SVG und DXF, innen vor außen, mehrere Durchgänge,
   Originalgröße 1:1 für Schablonen aus dem CAD.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus

@@ -649,4 +649,5 @@ EN = {
     "S/F = {sf:.2f}   (Holz bewährt: 0,83)\nGraustufen: S{u:.0f} .. S{o:.0f}":
         "S/F = {sf:.2f}   (proven on wood: 0.83)\n"
         "Greyscale: S{u:.0f} .. S{o:.0f}",
+    "Rasterung (Punktdichte, für Fotos)": "Dithering (dot density, for photos)",
 }

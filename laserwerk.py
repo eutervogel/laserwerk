@@ -288,20 +288,22 @@ class App:
                         ).grid(row=9, column=0, columnspan=3, sticky="w")
         self.v_mode = tk.StringVar(value="schwelle")
         ttk.Radiobutton(f, text=T("Schwarzweiß (Strichgrafik)"), value="schwelle",
-                        variable=self.v_mode).grid(row=11, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text=T("Graustufen (Leistung variiert)"), value="grau",
                         variable=self.v_mode).grid(row=10, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text=T("Rasterung (Punktdichte, für Fotos)"), value="raster",
+                        variable=self.v_mode).grid(row=12, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text=T("Graustufen (Leistung variiert)"), value="grau",
+                        variable=self.v_mode).grid(row=11, column=0, columnspan=3, sticky="w")
         self.v_schw = tk.DoubleVar(value=0.5)
-        ttk.Label(f, text=T("Schwelle")).grid(row=12, column=0, sticky="w")
+        ttk.Label(f, text=T("Schwelle")).grid(row=13, column=0, sticky="w")
         ttk.Scale(f, from_=0.1, to=0.9, variable=self.v_schw, length=140
-                  ).grid(row=12, column=1, columnspan=2, sticky="w")
+                  ).grid(row=13, column=1, columnspan=2, sticky="w")
 
         # Tonwertkurve: hebt oder senkt nur die Mitten. Schwarz bleibt schwarz,
         # Weiss bleibt aus - das Mittel gegen "laeuft alles zu".
         self.v_gamma = tk.DoubleVar(value=1.0)
-        ttk.Label(f, text=T("Mitten")).grid(row=13, column=0, sticky="w")
+        ttk.Label(f, text=T("Mitten")).grid(row=14, column=0, sticky="w")
         sg = ttk.Frame(f)
-        sg.grid(row=13, column=1, columnspan=2, sticky="w")
+        sg.grid(row=14, column=1, columnspan=2, sticky="w")
         ttk.Scale(sg, from_=0.4, to=2.5, variable=self.v_gamma, length=110,
                   command=lambda v: self._gamma_zeigen()).pack(side="left")
         self.lbl_gamma = ttk.Label(sg, width=4)
@@ -310,11 +312,11 @@ class App:
                    command=lambda: self.v_gamma.set(1.0)).pack(side="left", padx=(2, 0))
         self.lbl_gammahilfe = ttk.Label(
             f, text=T("größer = Mitten heller (nur Graustufen)"), style="Muted.TLabel")
-        self.lbl_gammahilfe.grid(row=14, column=0, columnspan=3, sticky="w")
+        self.lbl_gammahilfe.grid(row=15, column=0, columnspan=3, sticky="w")
         self._gamma_zeigen()
 
         jb = ttk.LabelFrame(f, text=T("Bearbeitung"), padding=4)
-        jb.grid(row=15, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        jb.grid(row=16, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_job = tk.StringVar(value="gravur")
         ttk.Radiobutton(jb, text=T("Gravieren (Flächen, zeilenweise)"), value="gravur",
                         variable=self.v_job, command=self._job_changed).grid(row=0, column=0, columnspan=3, sticky="w")
@@ -326,11 +328,11 @@ class App:
                     ).grid(row=2, column=1, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
-                   ).grid(row=16, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+                   ).grid(row=17, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         self.lbl_info = ttk.Label(f, text="", justify="left")
-        self.lbl_info.grid(row=17, column=0, columnspan=3, sticky="w")
+        self.lbl_info.grid(row=18, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=18, column=0, columnspan=3, sticky="ew", pady=6)
+        bb.grid(row=19, column=0, columnspan=3, sticky="ew", pady=6)
         ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
         ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
 

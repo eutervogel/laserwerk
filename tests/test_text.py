@@ -39,7 +39,7 @@ def schluessel_im_code():
 # Texte, die Hilfsfunktionen durchreichen und deshalb nicht als T("...")
 # im Quelltext stehen.
 DURCHGEREICHT = {
-    "Rahmen fahren", "Start", "Pause", "Weiter", "STOPP",
+    "Rahmen", "Kontur", "Start", "Pause", "Weiter", "STOPP",
     "Motiv", "Material", "Maschine", "Tests",
     "Breite", "Höhe", "Materialdicke", "Fokuskorrektur", "Leistung S",
     "Leistung ab", "Vorschub F", "Zeilenabstand", "Notiz",

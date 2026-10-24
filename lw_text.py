@@ -700,4 +700,14 @@ EN = {
         "overscan does not fit before the origin.",
     "Rand": "Margin", "links": "left", "rechts": "right",
     "unten": "bottom", "oben": "top",
+    # ---- Kontur abfahren
+    "Kontur": "Outline", "Kontur fahren": "Trace outline",
+    "Nur bei SVG und DXF - ein Pixelbild hat keine Konturen.\n\n"
+    "Für Bilder den Rahmen fahren.":
+        "Only for SVG and DXF - a pixel image has no contours.\n\n"
+        "Use the frame run for images.",
+    "Kontur fahren: {k} Konturen, {m:.2f} m, ca. {min:.0f} min, S{s}/F{f}":
+        "Trace outline: {k} contours, {m:.2f} m, about {min:.0f} min, S{s}/F{f}",
+    "{k} Konturen, {m:.2f} m Weg, ca. {min:.0f} min.\n\nFortfahren?":
+        "{k} contours, {m:.2f} m of travel, about {min:.0f} min.\n\nCarry on?",
 }

@@ -41,6 +41,10 @@ Material ausprobieren will.
   und Mitte. Drehen in beliebigen Winkeln, nicht nur in 90er-Schritten.
   Die Abstände zu den vier Kanten stehen als Felder daneben — ablesbar beim
   Schieben und eintippbar, wenn es genau 5 mm vom rechten Rand sein soll.
+- **Kontur abfahren** — nicht nur den umschließenden Kasten, sondern die
+  echte Schnittkontur aus SVG oder DXF, mit schwachem Strahl. Bei einem
+  gedrehten oder runden Teil sagt das Rechteck wenig darüber, ob es aufs
+  Brettchen passt.
 - **Maschine fahren** — Achsen tippen, Nullpunkt setzen, Z-Referenz,
   Rahmenfahrt um das Motiv, Sichtkreuz mit schwacher Leistung („wo steht er
   gerade?"), Entsperren, einzelne G-Code-Befehle.

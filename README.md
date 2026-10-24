@@ -41,6 +41,9 @@ settings for a new material.
   edges, corners and centre. Rotate to any angle, not just multiples of 90°.
   The distances to all four edges sit next to it as fields — readable while
   dragging and typeable when it has to be exactly 5 mm off the right edge.
+- **Trace the outline** — not just the bounding box but the real cut
+  contour from SVG or DXF, at low power. For a rotated or round part the
+  rectangle says little about whether it fits the board.
 - **Drive the machine** — jog the axes, set the origin, set a Z reference,
   trace a frame around the artwork, show where the head stands with a short
   sight cross at low power, unlock, send single G-code commands.

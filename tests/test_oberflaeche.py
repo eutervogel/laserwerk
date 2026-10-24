@@ -595,3 +595,62 @@ class Raender(Grundlage):
         self.app.v_rand["l"].set(1.0)
         self.app._rand_setzen("l")
         self.assertGreaterEqual(self.app.v_xoff.get(), 4.0)
+
+
+@ohne_bildschirm
+class KonturFahren(Grundlage):
+    def svg_laden(self):
+        import os
+        import tempfile
+        p = os.path.join(tempfile.mkdtemp(), "k.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
+                    'height="20" viewBox="0 0 40 20">'
+                    '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/>'
+                    '<circle cx="20" cy="10" r="5"/></svg>')
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_image()
+
+    def test_faehrt_die_echte_kontur_nicht_den_kasten(self):
+        self.svg_laden()
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(10.0)
+        self.app.kontur()
+        gesendet = [z for z in self.app.grbl.gesendet if z.startswith("G1")]
+        # ein Kasten haette vier G1-Fahrten, der Kreis bringt viel mehr
+        self.assertGreater(len(gesendet), 20)
+
+    def test_schwache_leistung(self):
+        import re
+        self.svg_laden()
+        self.app.v_zeig_s.set(50)
+        self.app.kontur()
+        werte = {int(m.group(1)) for z in self.app.grbl.gesendet
+                 for m in [re.search(r"S(\d+)", z)] if m}
+        self.assertLessEqual(max(werte), 50)
+
+    def test_leistung_wird_gedeckelt(self):
+        """Ueber S120 geht es nicht - bei F600 ist das S/F 0,20, die Grenze,
+        ab der es sichtbar einbrennt."""
+        import re
+        self.svg_laden()
+        self.app.v_zeig_s.set(400)
+        self.app.kontur()
+        werte = {int(m.group(1)) for z in self.app.grbl.gesendet
+                 for m in [re.search(r"S(\d+)", z)] if m}
+        self.assertLessEqual(max(werte), 120)
+        self.assertLessEqual(max(werte) / J.POINTER_FEED, 0.20)
+
+    def test_ohne_konturen_hinweis(self):
+        self.motiv()                          # Pixelbild
+        self.gezeigt.clear()
+        self.app.kontur()
+        self.assertTrue(self.gezeigt)
+
+    def test_braucht_keinen_nullpunkt_wie_der_rahmen(self):
+        self.svg_laden()
+        self.app.zero_ok = False
+        self.app.kontur()
+        self.assertTrue(any(z.startswith("JOB") for z in self.app.grbl.protokoll))

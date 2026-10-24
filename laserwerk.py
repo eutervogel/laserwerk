@@ -141,7 +141,8 @@ class App:
         jb.grid(row=1, column=0, columnspan=2, sticky="ew")
         self.btn_gen = ttk.Button(jb, text=T("Erzeugen"), command=self.generate)
         self.btn_gen.grid(row=0, column=0, padx=(0, 10))
-        for i, (t, f, st) in enumerate([("Rahmen fahren", self.frame, "TButton"),
+        for i, (t, f, st) in enumerate([("Rahmen", self.frame, "TButton"),
+                                        ("Kontur", self.kontur, "TButton"),
                                         ("Start", self.start, "Accent.TButton"),
                                         ("Pause", self.pause, "TButton"),
                                         ("Weiter", self.resume, "TButton"),
@@ -149,9 +150,9 @@ class App:
             ttk.Button(jb, text=T(t), command=f, style=st).grid(row=0, column=i + 1, padx=3)
         ttk.Checkbutton(jb, text=T("Rahmen sichtbar"), variable=self.v_frame_laser
                         ).grid(row=0, column=6, padx=(10, 2))
-        self.prog = ttk.Progressbar(jb, length=120, maximum=1000)
+        self.prog = ttk.Progressbar(jb, length=90, maximum=1000)
         self.prog.grid(row=0, column=7, padx=8, sticky="ew")
-        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=22, anchor="w")
+        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=18, anchor="w")
         self.lbl_prog.grid(row=0, column=8)
         jb.columnconfigure(7, weight=1)
 
@@ -1062,10 +1063,14 @@ class App:
                 s=s, f=f, sf=s / f, warn=warn)))
         self._draw()
 
-    def _generate_cut(self, w, h, s, f):
+    def _schnitt_polys(self, w, h, melden=True):
+        """Konturen an ihrer endgueltigen Stelle - fuer das Schneiden und
+        fuer das Abfahren mit schwachem Strahl."""
         if not self.vec:
-            messagebox.showinfo(T("Schneiden"), T("Keine Konturen - bitte ein SVG oder DXF öffnen."))
-            return
+            if melden:
+                messagebox.showinfo(T("Schneiden"),
+                                    T("Keine Konturen - bitte ein SVG oder DXF öffnen."))
+            return None
         bw, bh = self._vec_dreh_bb()
         sc = min(w / bw if bw else 1e9, h / bh if bh else 1e9)
         polys = V.flatten(self.vec, sc)
@@ -1077,11 +1082,18 @@ class App:
             polys = V.mirror(polys, sp, achse)
             x0, y0, x1, y1 = V.bbox(polys)
             if x0 < 0 or y0 < 0:
-                messagebox.showerror(T("Rückseite"),
-                    T("Gespiegelt beginnt der Schnitt bei X {x:.1f} / Y {y:.1f} mm.\n"
-                      "Wendeachse groesser waehlen.").format(x=x0, y=y0))
-                return
-        polys = V.order(polys)
+                if melden:
+                    messagebox.showerror(T("Rückseite"),
+                        T("Gespiegelt beginnt der Schnitt bei X {x:.1f} / Y {y:.1f} mm.\n"
+                          "Wendeachse groesser waehlen.").format(x=x0, y=y0))
+                return None
+        return V.order(polys)
+
+    def _generate_cut(self, w, h, s, f):
+        polys = self._schnitt_polys(w, h)
+        if polys is None:
+            return
+        sp = self.v_spiegel.get()
         passes = max(1, self.v_passes.get())
         self.lines, self.info = V.cut_gcode(polys, self._s(s), f, passes,
                                             kommentar=os.path.basename(self.src_path))
@@ -1639,6 +1651,45 @@ class App:
         if self._need(zero=True):
             self._run(J.frame_lines(self.lines, self._s(sv), J.POINTER_FEED),
                       name, rahmen=True)
+
+    def kontur(self):
+        """Die echte Kontur mit schwachem Strahl abfahren statt nur den Kasten.
+
+        Bei einem gedrehten oder runden Teil sagt das umschliessende Rechteck
+        wenig darueber, ob das Motiv auf das Brettchen passt.
+        """
+        if not self.vec:
+            messagebox.showinfo(T("Kontur fahren"),
+                                T("Nur bei SVG und DXF - ein Pixelbild hat keine "
+                                  "Konturen.\n\nFür Bilder den Rahmen fahren."))
+            return
+        try:
+            w, h = float(self.v_w.get()), float(self.v_h.get())
+        except tk.TclError:
+            messagebox.showerror(T("Eingabe"), T("Zahlenfeld ungültig."))
+            return
+        polys = self._schnitt_polys(w, h)
+        if polys is None:
+            return
+        sv = max(1, min(int(self.v_zeig_s.get()), 120))
+        if sv / J.POINTER_FEED > 0.20:
+            messagebox.showwarning(T("Kontur fahren"),
+                T("S{s} bei F{f} ist S/F {sf:.2f}.\n"
+                  "Ueber 0,20 brennt es sichtbar ein - bitte weniger."
+                  ).format(s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED))
+            return
+        g, i = V.cut_gcode(polys, self._s(sv), J.POINTER_FEED, 1)
+        self._log(T("Kontur fahren: {k} Konturen, {m:.2f} m, ca. {min:.0f} min, "
+                    "S{s}/F{f}").format(k=i["konturen"], m=i["cut_m"],
+                                        min=max(1, i["sekunden"] / 60),
+                                        s=sv, f=J.POINTER_FEED))
+        if i["sekunden"] > 120 and not messagebox.askokcancel(
+                T("Kontur fahren"),
+                T("{k} Konturen, {m:.2f} m Weg, ca. {min:.0f} min.\n\n"
+                  "Fortfahren?").format(k=i["konturen"], m=i["cut_m"],
+                                        min=max(1, i["sekunden"] / 60))):
+            return
+        self._run(g, T("Kontur fahren"), rahmen=True)
 
     def start(self):
         if not self.lines:

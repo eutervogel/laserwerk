@@ -32,6 +32,9 @@ settings for a new material.
   threshold. Plus a midtone control and overscan at the row ends.
 - **Cut** — contours from SVG and DXF, inner before outer, several passes,
   original size 1:1 for templates straight out of CAD.
+- **Both in one run** — engrave first, then cut it out, with its own power and
+  feed for the cut. In that order, otherwise the part drops out before it is
+  engraved.
 - **Image correction** — brightness, contrast and sharpening, plus an Auto
   button that takes the black and white point from the image. Photos nearly
   always need it: a light grey background otherwise burns as a thin carpet of

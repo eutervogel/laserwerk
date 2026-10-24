@@ -32,6 +32,9 @@ Material ausprobieren will.
   Zeilenenden.
 - **Schneiden** — Konturen aus SVG und DXF, innen vor außen, mehrere Durchgänge,
   Originalgröße 1:1 für Schablonen aus dem CAD.
+- **Beides in einem Lauf** — erst gravieren, dann ausschneiden, mit eigener
+  Leistung und eigenem Vorschub für den Schnitt. In dieser Reihenfolge, sonst
+  fällt das Teil heraus, bevor es graviert ist.
 - **Bildkorrektur** — Helligkeit, Kontrast und Schärfen, dazu ein
   Auto-Knopf, der Schwarz- und Weißpunkt aus dem Bild holt. Fotos brauchen
   das fast immer: ein hellgrauer Hintergrund brennt sonst als dünner

@@ -471,3 +471,65 @@ class AnlaufPasstVorDenNullpunkt(Grundlage):
         self.app._keep_ratio("w")
         self.app.generate()
         self.assertEqual(self.app.v_xoff.get(), 40.0)
+
+
+@ohne_bildschirm
+class Mausrad(Grundlage):
+    """Fruehr rief jeder Reiter bind_all auf und ueberschrieb den vorherigen -
+    nur der letzte liess sich rollen."""
+
+    def setUp(self):
+        super().setUp()
+        # Im unsichtbaren Fenster sind die Flaechen 1 Pixel hoch; ohne echte
+        # Hoehe bewegt eine Rastung rechnerisch nichts.
+        for _, cv in self.app._rollflaechen:
+            cv.configure(height=600)
+        self.wurzel.update()
+
+    def rollen(self, widget, hoch=False):
+        import types
+        e = types.SimpleNamespace(widget=widget, num=4 if hoch else 5, delta=0)
+        return self.app._rad(e)
+
+    def test_jeder_reiter_laesst_sich_rollen(self):
+        self.wurzel.update()
+        for name, tab in (("Motiv", self.app.tab_motiv),
+                          ("Material", self.app.tab_mat),
+                          ("Maschine", self.app.tab_masch),
+                          ("Tests", self.app.tab_test)):
+            cv = tab.master
+            cv.yview_moveto(0.0)
+            self.wurzel.update()
+            kind = tab.winfo_children()[-1]
+            self.rollen(kind)
+            self.wurzel.update()
+            if cv.bbox("all")[3] > cv.winfo_height():
+                self.assertGreater(cv.yview()[0], 0.0, "%s rollt nicht" % name)
+
+    def test_ueber_der_leeren_flaeche_rollt_es_auch(self):
+        self.wurzel.update()
+        cv = self.app.tab_motiv.master
+        cv.yview_moveto(0.0)
+        self.rollen(cv)
+        self.wurzel.update()
+        self.assertGreater(cv.yview()[0], 0.0)
+
+    def test_zurueck_nach_oben(self):
+        self.wurzel.update()
+        cv = self.app.tab_motiv.master
+        cv.yview_moveto(0.5)
+        self.wurzel.update()
+        vorher = cv.yview()[0]
+        self.rollen(self.app.tab_motiv, hoch=True)
+        self.wurzel.update()
+        self.assertLess(cv.yview()[0], vorher)
+
+    def test_zeichenflaeche_bleibt_dem_zoom(self):
+        """Ueber der Arbeitsflaeche darf das Rad nicht die Spalte rollen."""
+        self.assertIsNone(self.rollen(self.app.cv))
+
+    def test_kurzer_reiter_zappelt_nicht(self):
+        self.wurzel.update()
+        cv = self.app.tab_mat.master
+        if cv.bbox("all")[3] <= cv.winfo_height():
+            self.assertIsNone(self.rollen(self.app.tab_mat))

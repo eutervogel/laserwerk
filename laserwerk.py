@@ -112,6 +112,7 @@ class App:
         # Reiter
         nb = self.nb = ttk.Notebook(main)
         nb.grid(row=0, column=1, sticky="nsew")
+        self._rollflaechen = []
         self.tab_motiv = self._scrollbereich(nb, "Motiv")
         self.tab_mat = self._scrollbereich(nb, "Material")
         self.tab_masch = self._scrollbereich(nb, "Maschine")
@@ -120,6 +121,8 @@ class App:
         self._build_material()
         self._build_maschine()
         self._build_tests()
+        for ev in ("<Button-4>", "<Button-5>", "<MouseWheel>"):
+            self.root.bind_all(ev, self._rad, add="+")
         # jede Aenderung, die den G-Code beeinflusst, macht ihn ungueltig
         for v in (self.v_inv, self.v_mode, self.v_schw, self.v_rot,
                   self.v_s, self.v_f, self.v_line, self.v_job, self.v_passes,
@@ -168,7 +171,9 @@ class App:
         sb = ttk.Scrollbar(aussen, orient="vertical", command=cv.yview)
         innen = ttk.Frame(cv, padding=12)
         fen = cv.create_window((0, 0), window=innen, anchor="nw")
-        cv.configure(yscrollcommand=sb.set)
+        # Ohne feste Schrittweite rollt Tk ein Zehntel der Fensterhoehe je
+        # Einheit - das waere pro Rastung ein Drittel Seite.
+        cv.configure(yscrollcommand=sb.set, yscrollincrement=20)
         cv.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         def passend(e):
@@ -178,10 +183,38 @@ class App:
                          width=max(400, innen.winfo_reqwidth()))
         innen.bind("<Configure>", passend)
         cv.bind("<Configure>", lambda e: cv.itemconfigure(fen, width=e.width))
-        for ev, d in (("<Button-4>", -1), ("<Button-5>", 1)):
-            cv.bind_all(ev, lambda e, d=d: (cv.yview_scroll(d, "units")
-                                            if str(e.widget).startswith(str(innen)) else None))
+        self._rollflaechen.append((str(innen), cv))
         return innen
+
+    @staticmethod
+    def _unterhalb(pfad, eltern):
+        """Gehoert das Widget zu diesem Bereich? Reiner Praefixvergleich wuerde
+        '.!frame' auch in '.!frame2' finden."""
+        return pfad == eltern or pfad.startswith(eltern + ".")
+
+    def _rad(self, e):
+        """Mausrad in den Reiterspalten.
+
+        Eine einzige Bindung fuer alle Bereiche: frueher rief jeder Reiter
+        bind_all auf und ueberschrieb damit den vorherigen - nur der letzte
+        liess sich rollen, und auch der nur ueber seinen Feldern.
+        """
+        pfad = str(e.widget)
+        for innen, cv in self._rollflaechen:
+            if not (self._unterhalb(pfad, innen) or pfad == str(cv)):
+                continue
+            bb = cv.bbox("all")
+            if not bb or bb[3] - bb[1] <= cv.winfo_height():
+                return None                     # passt ohnehin ins Fenster
+            if e.num == 4:
+                schritt = -1
+            elif e.num == 5:
+                schritt = 1
+            else:
+                schritt = -1 if getattr(e, "delta", 0) > 0 else 1
+            cv.yview_scroll(schritt * 3, "units")
+            return "break"
+        return None
 
     def _row(self, parent, r, label, var, width=8, unit=""):
         ttk.Label(parent, text=T(label)).grid(row=r, column=0, sticky="w", pady=2)

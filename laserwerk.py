@@ -127,6 +127,7 @@ class App:
         for v in (self.v_inv, self.v_mode, self.v_schw, self.v_rot,
                   self.v_s, self.v_f, self.v_line, self.v_job, self.v_passes,
                   self.v_xoff, self.v_over, self.v_yoff, self.v_gamma,
+                  self.v_cs, self.v_cf,
                   self.v_spiegel, self.v_achse,
                   self.v_hell, self.v_kontrast, self.v_schaerfe):
             v.trace_add("write", lambda *a: self._stale())
@@ -415,10 +416,26 @@ class App:
                         variable=self.v_job, command=self._job_changed).grid(row=0, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(jb, text=T("Schneiden (Konturen, SVG/DXF)"), value="schnitt",
                         variable=self.v_job, command=self._job_changed).grid(row=1, column=0, columnspan=3, sticky="w")
-        ttk.Label(jb, text=T("Durchgänge")).grid(row=2, column=0, sticky="w")
+        ttk.Radiobutton(jb, text=T("Erst gravieren, dann schneiden"), value="beides",
+                        variable=self.v_job, command=self._job_changed
+                        ).grid(row=2, column=0, columnspan=3, sticky="w")
+        ttk.Label(jb, text=T("Durchgänge")).grid(row=3, column=0, sticky="w")
         self.v_passes = tk.IntVar(value=1)
         ttk.Spinbox(jb, from_=1, to=10, textvariable=self.v_passes, width=4
-                    ).grid(row=2, column=1, sticky="w")
+                    ).grid(row=3, column=1, sticky="w")
+        self.v_cs = tk.IntVar(value=0)
+        self.v_cf = tk.IntVar(value=0)
+        ttk.Label(jb, text=T("Schnitt S")).grid(row=4, column=0, sticky="w", pady=(6, 0))
+        ttk.Spinbox(jb, from_=0, to=1000, increment=10, width=6,
+                    textvariable=self.v_cs).grid(row=4, column=1, sticky="w", pady=(6, 0))
+        ttk.Label(jb, text=T("F")).grid(row=4, column=2, sticky="e", padx=(8, 2),
+                                        pady=(6, 0))
+        ttk.Spinbox(jb, from_=0, to=5000, increment=50, width=6,
+                    textvariable=self.v_cf).grid(row=4, column=3, sticky="w", pady=(6, 0))
+        ttk.Label(jb, text=T("0 = Werte aus dem Reiter Material.\n"
+                             "Schneiden braucht meist mehr Leistung und\n"
+                             "weniger Vorschub als Gravieren."),
+                  style="Muted.TLabel").grid(row=5, column=0, columnspan=4, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
                    ).grid(row=18, column=0, columnspan=3, sticky="ew", pady=(10, 2))
@@ -734,6 +751,7 @@ class App:
         ("v_xoff", "versatz_x"), ("v_yoff", "versatz_y"), ("v_over", "anlauf"),
         ("v_spiegel", "spiegel"), ("v_achse", "wendeachse"),
         ("v_job", "bearbeitung"), ("v_passes", "durchgaenge"),
+        ("v_cs", "schnitt_leistung"), ("v_cf", "schnitt_vorschub"),
         ("v_bw", "brett_x"), ("v_bh", "brett_y"),
         ("v_board", "brett_zeigen"), ("v_snap", "einrasten"),
         ("v_maxw", "max_breite"), ("v_maxh", "max_hoehe"),
@@ -844,7 +862,7 @@ class App:
                                 "Zum Nachzeichnen 'Schneiden' mit wenig Leistung nehmen."))
             self.v_job.set("schnitt")
             return
-        if self.v_job.get() == "schnitt" and not self.vec:
+        if self.v_job.get() in ("schnitt", "beides") and not self.vec:
             messagebox.showinfo(T("Schneiden"), T("Schneiden geht nur mit SVG- oder DXF-Dateien,\n"
                                   "weil dafür Konturen nötig sind."))
             self.v_job.set("gravur")
@@ -993,7 +1011,8 @@ class App:
             messagebox.showerror(T("Eingabe"), T("Zahlenfeld ungültig."))
             return
         if self.v_job.get() == "schnitt":
-            return self._generate_cut(w, h, s, f)
+            cs, cf = self._schnittwerte()
+            return self._generate_cut(w, h, cs, cf)
         self.cut_polys = None
         src = self.src
         if self.src_path.lower().endswith(".svg"):
@@ -1045,6 +1064,9 @@ class App:
         self.preview_pil = J.preview_image(p)
         self.preview_img = None
         self.preview_pos = (xoff, yoff + self.info["hoehe"])
+        if self.v_job.get() == "beides":
+            if not self._schnitt_anhaengen(w, h):
+                return
         self._gen_knopf()
         i = self.info
         warn = ""
@@ -1061,6 +1083,10 @@ class App:
                 b=i["breite"], h=i["hoehe"], x0=i["xmin"], x1=i["xmax"],
                 n=i["befehle"], m=i["cut_m"], min=i["sekunden"] / 60,
                 s=s, f=f, sf=s / f, warn=warn)))
+        # Der Schnitt haengt sich erst hier an - vorher wuerde die Gravur
+        # seinen Text mit ihrem eigenen ueberschreiben.
+        if self.v_job.get() == "beides" and not self._schnitt_anhaengen(w, h):
+            return
         self._draw()
 
     def _schnitt_polys(self, w, h, melden=True):
@@ -1088,6 +1114,39 @@ class App:
                           "Wendeachse groesser waehlen.").format(x=x0, y=y0))
                 return None
         return V.order(polys)
+
+    def _schnitt_anhaengen(self, w, h):
+        """An die fertige Gravur den Schnitt haengen - in dieser Reihenfolge,
+        sonst faellt das Teil heraus, bevor es graviert ist."""
+        polys = self._schnitt_polys(w, h)
+        if polys is None:
+            self.lines = self.info = None
+            return False
+        cs, cf = self._schnittwerte()
+        passes = max(1, self.v_passes.get())
+        g, ci = V.cut_gcode(polys, self._s(cs), cf, passes,
+                            kommentar=os.path.basename(self.src_path or ""))
+        # Die Rueckfahrt am Ende der Gravur faellt weg, der Schnitt faengt
+        # ohnehin mit einer eigenen Anfahrt an.
+        if self.lines and self.lines[-1].startswith("G0 X0 Y0"):
+            self.lines = self.lines[:-1]
+        self.lines = self.lines + g
+        i = self.info
+        self.info = dict(i)
+        self.info.update(
+            befehle=len(self.lines),
+            cut_m=i["cut_m"] + ci["cut_m"],
+            sekunden=i["sekunden"] + ci["sekunden"],
+            xmax=max(i["xmax"], ci["xmax"]),
+            konturen=ci["konturen"], schnitt_m=ci["cut_m"],
+            schnitt_sekunden=ci["sekunden"])
+        self.cut_polys = polys
+        self.lbl_info.configure(text=self.lbl_info.cget("text") + T(
+            "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
+            "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min").format(
+                k=ci["konturen"], m=ci["cut_m"], p=passes, s=cs, f=cf,
+                sf=cs / cf if cf else 0, min=max(1, ci["sekunden"] / 60)))
+        return True
 
     def _generate_cut(self, w, h, s, f):
         polys = self._schnitt_polys(w, h)
@@ -1218,6 +1277,16 @@ class App:
             return True
         except tk.TclError:
             return False
+
+    def _schnittwerte(self):
+        """Leistung und Vorschub fuers Schneiden - eigene oder die vom Material."""
+        try:
+            s = int(self.v_cs.get())
+            f = int(self.v_cf.get())
+        except tk.TclError:
+            s = f = 0
+        return (s if s > 0 else int(self.v_s.get()),
+                f if f > 0 else int(self.v_f.get()))
 
     def _s_unten(self, s_max):
         """Kleinste Leistung fuer Graustufen: eingestellt, sonst 30 % von S.
@@ -2127,6 +2196,13 @@ class App:
             cv.create_line(mx, ay, mx, by2, fill="#6b4f2f", dash=(3, 3))
             cv.create_line(ax, my, bx2, my, fill="#6b4f2f", dash=(3, 3))
         box = self._box()
+        gezeigt = False
+        if self.preview_pil is not None and self.preview_pos and self.info:
+            ax, ay = self._mm(*self.preview_pos)      # erzeugte G-Code-Vorschau
+            self._prepare_preview()
+            if self.preview_img is not None:
+                cv.create_image(ax, ay, image=self.preview_img, anchor="nw")
+                gezeigt = True
         if self.cut_polys:              # Schnittkonturen: echte Geometrie
             for pl in self.cut_polys:
                 pts = [c for p in pl["pts"] for c in self._mm(*p)]
@@ -2134,12 +2210,8 @@ class App:
                     pts += list(self._mm(*pl["pts"][0]))
                 if len(pts) >= 4:
                     cv.create_line(*pts, fill=S.DANGER, width=1)
-        elif self.preview_pil is not None and self.preview_pos and self.info:
-            ax, ay = self._mm(*self.preview_pos)      # erzeugte G-Code-Vorschau
-            self._prepare_preview()
-            if self.preview_img is not None:
-                cv.create_image(ax, ay, image=self.preview_img, anchor="nw")
-        elif box and self.src is not None:            # Platzierung live
+            gezeigt = True
+        if not gezeigt and box and self.src is not None:   # Platzierung live
             x, y, b, h = box
             img = self._live_image(b, h)
             if img is not None:
@@ -2213,7 +2285,8 @@ class App:
 
     def _xmin(self):
         """Beim Gravieren muss links vom Motiv der Anlauf hinpassen."""
-        if getattr(self, "v_job", None) is None or self.v_job.get() != "gravur":
+        if getattr(self, "v_job", None) is None or \
+                self.v_job.get() not in ("gravur", "beides"):
             return 0.0
         return self._anlauf()
 

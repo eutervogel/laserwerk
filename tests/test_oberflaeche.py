@@ -654,3 +654,124 @@ class KonturFahren(Grundlage):
         self.app.zero_ok = False
         self.app.kontur()
         self.assertTrue(any(z.startswith("JOB") for z in self.app.grbl.protokoll))
+
+
+@ohne_bildschirm
+class GravierenUndSchneiden(Grundlage):
+    def svg_laden(self):
+        import os
+        import tempfile
+        p = os.path.join(tempfile.mkdtemp(), "teil.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
+                    'height="20" viewBox="0 0 40 20">'
+                    '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/>'
+                    '<circle cx="20" cy="10" r="6" fill="black"/></svg>')
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_image()
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(10.0)
+
+    def test_beides_haengt_den_schnitt_an_die_gravur(self):
+        self.svg_laden()
+        self.app.v_mode.set("schwelle")
+        self.app.v_job.set("gravur")
+        self.app.generate()
+        nur_gravur = len(self.app.lines)
+        self.app.v_job.set("beides")
+        self.app.generate()
+        self.assertGreater(len(self.app.lines), nur_gravur)
+        self.assertIsNotNone(self.app.cut_polys)
+
+    def test_erst_gravieren_dann_schneiden(self):
+        """Umgekehrt faellt das Teil heraus, bevor es graviert ist."""
+        self.svg_laden()
+        self.app.v_job.set("beides")
+        self.app.generate()
+        schnitt = next(i for i, z in enumerate(self.app.lines)
+                       if z.startswith("; Laserwerk Schnitt"))
+        gravur = next(i for i, z in enumerate(self.app.lines)
+                      if z.startswith("; Laserwerk "))
+        self.assertLess(gravur, schnitt)
+
+    def test_eigene_schnittwerte(self):
+        import re
+        self.svg_laden()
+        self.app.v_s.set(300)
+        self.app.v_f.set(1000)
+        self.app.v_cs.set(800)
+        self.app.v_cf.set(400)
+        self.app.v_job.set("beides")
+        self.app.generate()
+        werte = {int(m.group(1)) for z in self.app.lines if z.startswith("G1")
+                 for m in [re.search(r"S(\d+)", z)] if m}
+        self.assertIn(300, werte)          # Gravur
+        self.assertIn(800, werte)          # Schnitt
+        self.assertTrue(any("F400" in z for z in self.app.lines))
+
+    def test_null_heisst_werte_vom_material(self):
+        self.svg_laden()
+        self.app.v_s.set(300)
+        self.app.v_f.set(900)
+        self.app.v_cs.set(0)
+        self.app.v_cf.set(0)
+        self.assertEqual(self.app._schnittwerte(), (300, 900))
+
+    def test_laufzeit_ist_die_summe(self):
+        self.svg_laden()
+        self.app.v_job.set("gravur")
+        self.app.generate()
+        t_gravur = self.app.info["sekunden"]
+        self.app.v_job.set("beides")
+        self.app.generate()
+        self.assertGreater(self.app.info["sekunden"], t_gravur)
+        self.assertIn("schnitt_sekunden", self.app.info)
+
+    def test_ohne_konturen_kein_gemischter_modus(self):
+        self.motiv()                       # Pixelbild
+        self.app.v_job.set("beides")
+        self.app._job_changed()
+        self.assertEqual(self.app.v_job.get(), "gravur")
+
+    def test_anlauf_gilt_auch_im_gemischten_modus(self):
+        self.svg_laden()
+        self.app.v_job.set("beides")
+        self.app.v_over.set(4.0)
+        self.assertEqual(self.app._xmin(), 4.0)
+
+    def test_job_laeuft_am_stueck(self):
+        self.svg_laden()
+        self.app.v_job.set("beides")
+        self.app.generate()
+        self.app.start()
+        import time
+        t0 = time.time()
+        while time.time() - t0 < 3 and not any(
+                z.startswith("JOB") for z in self.app.grbl.protokoll):
+            self.wurzel.update()
+            time.sleep(0.02)
+        self.assertTrue(any(z.startswith("JOB") for z in self.app.grbl.protokoll))
+        self.assertEqual(self.app.grbl.gesendet[-1], "G0 X0 Y0")
+
+
+@ohne_bildschirm
+class GemischterInfotext(Grundlage):
+    def test_beide_teile_stehen_im_infofeld(self):
+        import os
+        import tempfile
+        p = os.path.join(tempfile.mkdtemp(), "t.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
+                    'height="20" viewBox="0 0 40 20">'
+                    '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/></svg>')
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_image()
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.v_job.set("beides")
+        self.app.generate()
+        text = self.app.lbl_info.cget("text")
+        self.assertIn("Motiv", text)
+        self.assertIn("Schnitt", text)

@@ -710,4 +710,17 @@ EN = {
         "Trace outline: {k} contours, {m:.2f} m, about {min:.0f} min, S{s}/F{f}",
     "{k} Konturen, {m:.2f} m Weg, ca. {min:.0f} min.\n\nFortfahren?":
         "{k} contours, {m:.2f} m of travel, about {min:.0f} min.\n\nCarry on?",
+    # ---- Gravieren und Schneiden in einem Lauf
+    "Erst gravieren, dann schneiden": "Engrave first, then cut",
+    "Schnitt S": "Cut S", "F": "F",
+    "0 = Werte aus dem Reiter Material.\n"
+    "Schneiden braucht meist mehr Leistung und\n"
+    "weniger Vorschub als Gravieren.":
+        "0 = use the values from the Material tab.\n"
+        "Cutting usually needs more power and less\n"
+        "feed than engraving.",
+    "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
+    "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min":
+        "\n\nPlus cut: {k} contours, {m:.2f} m x {p}\n"
+        "S{s}/F{f} = S/F {sf:.2f}, about {min:.0f} min",
 }

@@ -698,4 +698,6 @@ EN = {
     "sonst passt der Anlauf nicht vor den Nullpunkt.":
         "Offset X raised from {alt:.1f} to {neu:.1f} mm - otherwise the "
         "overscan does not fit before the origin.",
+    "Rand": "Margin", "links": "left", "rechts": "right",
+    "unten": "bottom", "oben": "top",
 }

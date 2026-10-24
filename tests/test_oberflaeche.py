@@ -533,3 +533,65 @@ class Mausrad(Grundlage):
         cv = self.app.tab_mat.master
         if cv.bbox("all")[3] <= cv.winfo_height():
             self.assertIsNone(self.rollen(self.app.tab_mat))
+
+
+@ohne_bildschirm
+class Raender(Grundlage):
+    def setUp(self):
+        super().setUp()
+        self.motiv()
+        self.app.v_bw.set(120.0)
+        self.app.v_bh.set(80.0)
+        self.app.v_job.set("schnitt")          # ohne Anlaufgrenze rechnen
+        self.app.v_w.set(80.0)
+        self.app.v_h.set(40.0)
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(5.0)
+        self.app._draw()
+
+    def test_abstaende_werden_angezeigt(self):
+        r = self.app.v_rand
+        self.assertAlmostEqual(r["l"].get(), 10.0, places=1)
+        self.assertAlmostEqual(r["r"].get(), 30.0, places=1)   # 120-10-80
+        self.assertAlmostEqual(r["u"].get(), 5.0, places=1)
+        self.assertAlmostEqual(r["o"].get(), 35.0, places=1)   # 80-5-40
+
+    def test_rechten_rand_eintippen(self):
+        self.app.v_rand["r"].set(5.0)
+        self.app._rand_setzen("r")
+        self.assertAlmostEqual(self.app.v_xoff.get(), 35.0, places=1)  # 120-80-5
+        self.assertAlmostEqual(self.app.v_rand["r"].get(), 5.0, places=1)
+
+    def test_oberen_rand_eintippen(self):
+        self.app.v_rand["o"].set(8.0)
+        self.app._rand_setzen("o")
+        self.assertAlmostEqual(self.app.v_yoff.get(), 32.0, places=1)  # 80-40-8
+
+    def test_abstaende_folgen_dem_schieben(self):
+        self.app.v_xoff.set(25.0)
+        self.app._draw()
+        self.assertAlmostEqual(self.app.v_rand["l"].get(), 25.0, places=1)
+        self.assertAlmostEqual(self.app.v_rand["r"].get(), 15.0, places=1)
+
+    def test_abstaende_folgen_dem_brettmass(self):
+        self.app.v_bw.set(200.0)
+        self.app._draw()
+        self.assertAlmostEqual(self.app.v_rand["r"].get(), 110.0, places=1)
+
+    def test_rueckseite_zeigt_die_echte_lage(self):
+        self.app.v_spiegel.set("x")
+        self.app.v_achse.set(60.0)
+        self.app._draw()
+        # gespiegelt sitzt das Motiv bei x = 2*60-10-80 = 30
+        self.assertAlmostEqual(self.app.v_rand["l"].get(), 30.0, places=1)
+        self.app.v_rand["r"].set(5.0)
+        self.app._rand_setzen("r")
+        self.app._draw()
+        self.assertAlmostEqual(self.app.v_rand["r"].get(), 5.0, places=1)
+
+    def test_anlauf_begrenzt_den_linken_rand(self):
+        self.app.v_job.set("gravur")
+        self.app.v_over.set(4.0)
+        self.app.v_rand["l"].set(1.0)
+        self.app._rand_setzen("l")
+        self.assertGreaterEqual(self.app.v_xoff.get(), 4.0)

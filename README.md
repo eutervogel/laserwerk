@@ -39,6 +39,8 @@ settings for a new material.
 - **Place** — enter the length and width of your workpiece, then drag the
   artwork onto it with the mouse and resize it by its corners, snapping to
   edges, corners and centre. Rotate to any angle, not just multiples of 90°.
+  The distances to all four edges sit next to it as fields — readable while
+  dragging and typeable when it has to be exactly 5 mm off the right edge.
 - **Drive the machine** — jog the axes, set the origin, set a Z reference,
   trace a frame around the artwork, show where the head stands with a short
   sight cross at low power, unlock, send single G-code commands.

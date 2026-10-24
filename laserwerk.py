@@ -251,20 +251,42 @@ class App:
         wk = ttk.LabelFrame(f, text=T("Werkstück (Nullpunkt = linke untere Ecke)"), padding=4)
         wk.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 2))
         ttk.Label(wk, text=T("Länge X")).grid(row=0, column=0, sticky="w")
-        ttk.Spinbox(wk, from_=1, to=200, increment=1, width=6,
+        ttk.Spinbox(wk, from_=1, to=2000, increment=1, width=6,
                     textvariable=self.v_bw).grid(row=0, column=1, sticky="w")
         ttk.Label(wk, text=T("Breite Y")).grid(row=0, column=2, sticky="e", padx=(8, 2))
-        ttk.Spinbox(wk, from_=1, to=200, increment=1, width=6,
+        ttk.Spinbox(wk, from_=1, to=2000, increment=1, width=6,
                     textvariable=self.v_bh).grid(row=0, column=3, sticky="w")
         ttk.Label(wk, text="mm").grid(row=0, column=4, sticky="w")
         ttk.Checkbutton(wk, text=T("anzeigen"), variable=self.v_board
                         ).grid(row=1, column=0, columnspan=2, sticky="w")
         ttk.Checkbutton(wk, text=T("einrasten"), variable=self.v_snap
                         ).grid(row=1, column=2, columnspan=2, sticky="w")
+        # Abstaende zu den vier Kanten: ablesbar und eintippbar. Sonst muss
+        # man den Versatz von der Nullecke aus ausrechnen, nur um 5 mm vom
+        # rechten Rand wegzubleiben.
+        ttk.Label(wk, text=T("Rand")).grid(row=2, column=0, sticky="w", pady=(6, 0))
+        self.v_rand = {}
+        for sp, (seite, name) in enumerate((("l", "links"), ("r", "rechts"))):
+            self.v_rand[seite] = tk.DoubleVar(value=0.0)
+            ttk.Label(wk, text=T(name)).grid(row=2 + sp, column=1, sticky="e",
+                                             padx=(0, 2), pady=(6 if not sp else 0, 0))
+            e = ttk.Entry(wk, textvariable=self.v_rand[seite], width=6)
+            e.grid(row=2 + sp, column=2, sticky="w", pady=(6 if not sp else 0, 0))
+            e.bind("<Return>", lambda ev, s=seite: self._rand_setzen(s))
+            e.bind("<FocusOut>", lambda ev, s=seite: self._rand_setzen(s))
+        for sp, (seite, name) in enumerate((("u", "unten"), ("o", "oben"))):
+            self.v_rand[seite] = tk.DoubleVar(value=0.0)
+            ttk.Label(wk, text=T(name)).grid(row=2 + sp, column=3, sticky="e",
+                                             padx=(8, 2), pady=(6 if not sp else 0, 0))
+            e = ttk.Entry(wk, textvariable=self.v_rand[seite], width=6)
+            e.grid(row=2 + sp, column=4, sticky="w", pady=(6 if not sp else 0, 0))
+            e.bind("<Return>", lambda ev, s=seite: self._rand_setzen(s))
+            e.bind("<FocusOut>", lambda ev, s=seite: self._rand_setzen(s))
+
         ttk.Button(wk, text=T("Motiv mittig setzen"), command=self.center_motif
-                   ).grid(row=2, column=0, columnspan=5, sticky="ew", pady=(4, 0))
+                   ).grid(row=4, column=0, columnspan=5, sticky="ew", pady=(6, 0))
         ttk.Label(wk, text=T("Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren."),
-                  style="Muted.TLabel").grid(row=3, column=0, columnspan=5, sticky="w")
+                  style="Muted.TLabel").grid(row=5, column=0, columnspan=5, sticky="w")
 
         box = ttk.LabelFrame(f, text=T("Größe, Anlauf und Versatz"), padding=4)
         box.grid(row=6, column=0, columnspan=3, sticky="ew", pady=6)
@@ -2089,6 +2111,7 @@ class App:
             cv.create_text(self._cv()[0] - 8, 8, anchor="ne", fill=S.MUTED,
                            text=T('{0:.1f}x   Mausrad = Zoom, mittlere/rechte Taste = schieben').format(self.zoom))
         self._draw_head()
+        self._raender_zeigen()
 
     def _brett_geaendert(self):
         """Brettchen neu zeichnen und die Masse fuer die naechste Sitzung merken."""
@@ -2198,6 +2221,43 @@ class App:
                 nh = nb * bh / bb
                 if unten: y = by + bh - nh
             self._set_box(x, y, nb, nh)
+        self._draw()
+
+    def _raender_zeigen(self):
+        """Die vier Abstaende aus der aktuellen Lage nachtragen."""
+        kasten = self._box()
+        if not kasten or not hasattr(self, "v_rand"):
+            return
+        x, y, b, h = kasten
+        try:
+            W, H = float(self.v_bw.get()), float(self.v_bh.get())
+        except tk.TclError:
+            return
+        for seite, wert in (("l", x), ("r", W - x - b),
+                            ("u", y), ("o", H - y - h)):
+            self.v_rand[seite].set(round(wert, 1))
+
+    def _rand_setzen(self, seite):
+        """Eingetippten Abstand in eine Lage umrechnen."""
+        kasten = self._box()
+        if not kasten:
+            return
+        x, y, b, h = kasten
+        try:
+            W, H = float(self.v_bw.get()), float(self.v_bh.get())
+            v = float(self.v_rand[seite].get())
+        except tk.TclError:
+            return
+        if seite == "l":
+            x = v
+        elif seite == "r":
+            x = W - b - v
+        elif seite == "u":
+            y = v
+        else:
+            y = H - h - v
+        self._set_box(x, y)
+        self._raender_zeigen()
         self._draw()
 
     def center_motif(self):

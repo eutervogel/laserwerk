@@ -39,6 +39,8 @@ Material ausprobieren will.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
   darauf schieben und an den Ecken skalieren, mit Einrasten auf Kanten, Ecken
   und Mitte. Drehen in beliebigen Winkeln, nicht nur in 90er-Schritten.
+  Die Abstände zu den vier Kanten stehen als Felder daneben — ablesbar beim
+  Schieben und eintippbar, wenn es genau 5 mm vom rechten Rand sein soll.
 - **Maschine fahren** — Achsen tippen, Nullpunkt setzen, Z-Referenz,
   Rahmenfahrt um das Motiv, Sichtkreuz mit schwacher Leistung („wo steht er
   gerade?"), Entsperren, einzelne G-Code-Befehle.

@@ -114,3 +114,28 @@ class Abweisen(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AltesFormat(unittest.TestCase):
+    """Projekte aus der Zeit vor der Elementliste muessen weiter aufgehen."""
+
+    def setUp(self):
+        self.ordner = tempfile.mkdtemp(prefix="laserwerk-alt-")
+        self.vorlage = os.path.join(self.ordner, "alt.svg")
+        with open(self.vorlage, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
+                    'height="20" viewBox="0 0 40 20"><rect width="40" '
+                    'height="20" fill="none" stroke="black"/></svg>')
+
+    def tearDown(self):
+        shutil.rmtree(self.ordner, ignore_errors=True)
+
+    def test_einzelne_vorlage_wird_gelesen(self):
+        p = os.path.join(self.ordner, "alt.lwp")
+        PR.speichern(p, {"breite": 50.0, "modus": "schwelle", "brett_x": 120.0},
+                     quelle=self.vorlage)
+        d = PR.laden(p)
+        self.assertNotIn("elemente", d)
+        ziel, name = PR.vorlage_auspacken(d, os.path.join(self.ordner, "aus"))
+        self.assertTrue(ziel)
+        self.assertEqual(name, "alt.svg")

@@ -35,8 +35,17 @@ class Grundlage(unittest.TestCase):
             app_schliessen(self.wurzel, getattr(self, "app", None))
 
     def motiv(self, breite=400, hoehe=200):
-        self.app.src = Image.new("L", (breite, hoehe), 0)
+        """Ein Element anlegen, wie es das Laden einer Datei tut."""
+        im = Image.new("L", (breite, hoehe), 0)
+        self.app.src = im
         self.app.src_path = "/tmp/probe.png"
+        self.app.vec = self.app.vec_bb = None
+        self.app.elemente = [{"anzeige": "probe.png", "src": im, "vec": None,
+                              "vec_bb": None, "pfad": "/tmp/probe.png",
+                              "quelle": "/tmp/probe.png"}]
+        self.app.aktiv = 0
+        self.app._element_sichern()
+        self.app._liste_auffrischen()
 
 
 class Aufbau(Grundlage):
@@ -683,7 +692,8 @@ class GravierenUndSchneiden(Grundlage):
         self.app.v_job.set("beides")
         self.app.generate()
         self.assertGreater(len(self.app.lines), nur_gravur)
-        self.assertIsNotNone(self.app.cut_polys)
+        # die Konturen liegen jetzt beim Element, nicht mehr global
+        self.assertTrue(self.app.elemente[0]["ergebnis"]["cut_polys"])
 
     def test_erst_gravieren_dann_schneiden(self):
         """Umgekehrt faellt das Teil heraus, bevor es graviert ist."""
@@ -775,3 +785,148 @@ class GemischterInfotext(Grundlage):
         text = self.app.lbl_info.cget("text")
         self.assertIn("Motiv", text)
         self.assertIn("Schnitt", text)
+
+
+@ohne_bildschirm
+class MehrereElemente(Grundlage):
+    """Der Fall, fuer den das Ganze gebaut ist: Motiv als PNG, Rahmen als
+    SVG, uebereinander auf einem Brettchen."""
+
+    def dateien(self):
+        import os
+        import tempfile
+        ordner = tempfile.mkdtemp(prefix="laserwerk-el-")
+        png = os.path.join(ordner, "motiv.png")
+        Image.new("L", (400, 300), 40).save(png)
+        svg = os.path.join(ordner, "rahmen.svg")
+        with open(svg, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="80" '
+                    'height="60" viewBox="0 0 80 60"><rect x="0" y="0" '
+                    'width="80" height="60" fill="none" stroke="black"/></svg>')
+        return ordner, png, svg
+
+    def beide_laden(self):
+        ordner, png, svg = self.dateien()
+        self.app.v_bw.set(120.0)
+        self.app.v_bh.set(80.0)
+        self.L.filedialog.askopenfilename = lambda **k: png
+        self.app.open_image()
+        self.app.v_mode.set("schwelle")
+        self.app.v_w.set(60.0)
+        self.app._keep_ratio("w")
+        self.app.center_motif()
+        self.L.filedialog.askopenfilename = lambda **k: svg
+        self.app.open_image()
+        self.app.v_job.set("schnitt")
+        self.app.v_w.set(80.0)
+        self.app._keep_ratio("w")
+        self.app.center_motif()
+        return ordner, png, svg
+
+    def test_zwei_elemente_in_der_liste(self):
+        self.beide_laden()
+        self.assertEqual(len(self.app.elemente), 2)
+        self.assertEqual(self.app.aktiv, 1)
+        self.assertEqual(self.app.lb_el.size(), 2)
+
+    def test_umschalten_haelt_die_einstellungen(self):
+        self.beide_laden()
+        self.app.lb_el.selection_clear(0, "end")
+        self.app.lb_el.selection_set(0)
+        self.app._element_gewaehlt()
+        self.assertEqual(self.app.v_job.get(), "gravur")
+        self.assertAlmostEqual(self.app.v_w.get(), 60.0, places=1)
+        self.app.lb_el.selection_clear(0, "end")
+        self.app.lb_el.selection_set(1)
+        self.app._element_gewaehlt()
+        self.assertEqual(self.app.v_job.get(), "schnitt")
+        self.assertAlmostEqual(self.app.v_w.get(), 80.0, places=1)
+
+    def test_ein_gcode_fuer_beide(self):
+        self.beide_laden()
+        self.app.generate()
+        self.assertIsNotNone(self.app.lines)
+        for e in self.app.elemente:
+            self.assertIn("ergebnis", e)
+        # Gravur zuerst, Schnitt danach
+        gravur = next(i for i, z in enumerate(self.app.lines)
+                      if z.startswith("; Laserwerk motiv"))
+        schnitt = next(i for i, z in enumerate(self.app.lines)
+                       if z.startswith("; Laserwerk Schnitt"))
+        self.assertLess(gravur, schnitt)
+
+    def test_beide_sind_konzentrisch(self):
+        self.beide_laden()
+        self.app.generate()
+        raender = []
+        for i in (0, 1):
+            r = self.app.elemente[i]["ergebnis"]["info"]
+            raender.append(round(r["xmin"], 1))
+        self.assertNotEqual(raender[0], raender[1])     # verschieden gross
+        self.app.lb_el.selection_set(0)
+        self.app._element_gewaehlt()
+        links_png = self.app.v_rand["l"].get()
+        rechts_png = self.app.v_rand["r"].get()
+        self.assertAlmostEqual(links_png, rechts_png, places=1)
+
+    def test_entfernen(self):
+        self.beide_laden()
+        self.app.element_entfernen()
+        self.assertEqual(len(self.app.elemente), 1)
+        self.assertEqual(self.app.aktiv, 0)
+        self.assertIsNotNone(self.app.src)
+
+    def test_alles_entfernen(self):
+        self.beide_laden()
+        self.app.element_entfernen()
+        self.app.element_entfernen()
+        self.assertEqual(self.app.elemente, [])
+        self.assertIsNone(self.app.src)
+        self.gezeigt.clear()
+        self.app.generate()
+        self.assertTrue(self.gezeigt)
+
+    def test_projekt_haelt_beide(self):
+        import os
+        ordner, png, svg = self.beide_laden()
+        ziel = os.path.join(ordner, "p.lwp")
+        self.L.filedialog.asksaveasfilename = lambda **k: ziel
+        self.app.save_project()
+        soll = [(e["anzeige"], e["v_job"], round(e["v_w"], 1),
+                 round(e["v_xoff"], 1)) for e in self.app.elemente]
+
+        app_schliessen(self.wurzel, self.app)
+        self.wurzel, self.app, L2 = app_bauen()
+        L2.filedialog.askopenfilename = lambda **k: ziel
+        os.remove(png)
+        os.remove(svg)                      # Vorlagen verschwinden
+        self.app.open_project()
+        ist = [(e["anzeige"], e["v_job"], round(e["v_w"], 1),
+                round(e["v_xoff"], 1)) for e in self.app.elemente]
+        self.assertEqual(ist, soll)
+        self.assertEqual(len(self.app.elemente), 2)
+
+
+@ohne_bildschirm
+class AltesProjekt(Grundlage):
+    def test_projekt_ohne_elementliste(self):
+        import os
+        import shutil
+        import tempfile
+        import lw_projekt as PR
+        ordner = tempfile.mkdtemp(prefix="laserwerk-altp-")
+        quelle = os.path.join(ordner, "motiv.png")
+        Image.new("L", (400, 200), 30).save(quelle)
+        p = os.path.join(ordner, "alt.lwp")
+        PR.speichern(p, {"breite": 55.0, "hoehe": 27.5, "modus": "schwelle",
+                         "versatz_x": 12.0, "versatz_y": 7.0, "leistung": 444,
+                         "brett_x": 150.0, "brett_y": 90.0},
+                     quelle=quelle)
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_project()
+        self.assertEqual(len(self.app.elemente), 1)
+        self.assertAlmostEqual(self.app.v_w.get(), 55.0, places=1)
+        self.assertAlmostEqual(self.app.v_xoff.get(), 12.0, places=1)
+        self.assertEqual(self.app.v_s.get(), 444)
+        self.assertAlmostEqual(self.app.v_bw.get(), 150.0, places=1)
+        shutil.rmtree(ordner, ignore_errors=True)

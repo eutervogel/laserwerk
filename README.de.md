@@ -39,6 +39,10 @@ Material ausprobieren will.
   Auto-Knopf, der Schwarz- und Weißpunkt aus dem Bild holt. Fotos brauchen
   das fast immer: ein hellgrauer Hintergrund brennt sonst als dünner
   Punkteteppich mit und frisst den Kontrast des Motivs.
+- **Mehrere Elemente** — Motiv als PNG, Rahmen als SVG, beides auf demselben
+  Werkstück: jedes Element mit eigener Datei, eigener Platzierung und eigenen
+  Werten, gemeinsam in einer Vorschau, einem G-Code und einer Projektdatei.
+  Erst wird alles graviert, dann alles geschnitten.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
   darauf schieben und an den Ecken skalieren, mit Einrasten auf Kanten, Ecken
   und Mitte. Drehen in beliebigen Winkeln, nicht nur in 90er-Schritten.

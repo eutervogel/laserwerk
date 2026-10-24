@@ -58,6 +58,9 @@ class App:
         self.fokus_zs = []
         self.fern = None               # Telegram-Fernsteuerung
         self._rettung = None           # Nullpunkt ueber einen Soft-Reset retten
+        self._still = False            # Felder werden gerade umgeschaltet
+        self.elemente = []             # mehrere Motive auf einem Werkstueck
+        self.aktiv = -1                # welches davon die Felder bearbeiten
         self.projekt_pfad = None       # zuletzt gespeichertes Projekt
         self.quelle_pfad = None        # Vorlage, wie der Nutzer sie kennt
         self.s_max = float(self.cfg.get("s_max", J.S_MAX))   # $30 der Maschine
@@ -233,25 +236,29 @@ class App:
         ob.grid(row=0, column=0, columnspan=3, sticky="ew")
         ttk.Button(ob, text=T("Datei öffnen …"), command=self.open_image
                    ).pack(side="left", fill="x", expand=True)
-        ttk.Button(ob, text=T("Motiv entfernen"), command=self.clear_motif
+        ttk.Button(ob, text=T("Entfernen"), command=self.element_entfernen
                    ).pack(side="left", padx=(4, 0))
+        self.lb_el = tk.Listbox(f, height=4, exportselection=False,
+                                activestyle="none")
+        self.lb_el.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 2))
+        self.lb_el.bind("<<ListboxSelect>>", self._element_gewaehlt)
         self.lbl_src = ttk.Label(f, text="-", wraplength=260)
-        self.lbl_src.grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 8))
+        self.lbl_src.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
         self.v_w = tk.DoubleVar(value=100.0)
         self.v_h = tk.DoubleVar(value=100.0)
         self.v_lock = tk.BooleanVar(value=True)
-        ew = self._row(f, 2, "Breite", self.v_w, unit="mm")
-        eh = self._row(f, 3, "Höhe", self.v_h, unit="mm")
+        ew = self._row(f, 3, "Breite", self.v_w, unit="mm")
+        eh = self._row(f, 4, "Höhe", self.v_h, unit="mm")
         ew.bind("<FocusOut>", lambda e: self._keep_ratio("w"))
         ew.bind("<Return>", lambda e: self._keep_ratio("w"))
         eh.bind("<FocusOut>", lambda e: self._keep_ratio("h"))
         eh.bind("<Return>", lambda e: self._keep_ratio("h"))
         ttk.Checkbutton(f, text=T("Seitenverhältnis halten"), variable=self.v_lock
-                        ).grid(row=4, column=0, columnspan=3, sticky="w")
+                        ).grid(row=5, column=0, columnspan=3, sticky="w")
 
         wk = ttk.LabelFrame(f, text=T("Werkstück (Nullpunkt = linke untere Ecke)"), padding=4)
-        wk.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 2))
+        wk.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(6, 2))
         ttk.Label(wk, text=T("Länge X")).grid(row=0, column=0, sticky="w")
         ttk.Spinbox(wk, from_=1, to=2000, increment=1, width=6,
                     textvariable=self.v_bw).grid(row=0, column=1, sticky="w")
@@ -291,7 +298,7 @@ class App:
                   style="Muted.TLabel").grid(row=5, column=0, columnspan=5, sticky="w")
 
         box = ttk.LabelFrame(f, text=T("Größe, Anlauf und Versatz"), padding=4)
-        box.grid(row=6, column=0, columnspan=3, sticky="ew", pady=6)
+        box.grid(row=7, column=0, columnspan=3, sticky="ew", pady=6)
         self.v_maxw = tk.DoubleVar(value=190.0)
         self.v_maxh = tk.DoubleVar(value=110.0)
         ttk.Label(box, text=T("max.")).grid(row=0, column=0)
@@ -321,7 +328,7 @@ class App:
                                              sticky="w")
 
         rs = ttk.LabelFrame(f, text=T("Rückseite (zweiseitig gravieren)"), padding=4)
-        rs.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        rs.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         for i, (t, v) in enumerate((("Vorderseite", "nein"),
                                     ("Rückseite, Wenden links/rechts", "x"),
                                     ("Rückseite, Wenden oben/unten", "y"))):
@@ -335,9 +342,9 @@ class App:
                   style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
 
         self.v_rot = tk.DoubleVar(value=0.0)
-        ttk.Label(f, text=T("Drehen")).grid(row=8, column=0, sticky="w")
+        ttk.Label(f, text=T("Drehen")).grid(row=9, column=0, sticky="w")
         dr = ttk.Frame(f)
-        dr.grid(row=8, column=1, columnspan=2, sticky="w")
+        dr.grid(row=9, column=1, columnspan=2, sticky="w")
         sb = ttk.Spinbox(dr, from_=0, to=359.9, increment=5, width=6, wrap=True,
                          textvariable=self.v_rot, command=self._rotated)
         sb.pack(side="left")
@@ -351,25 +358,25 @@ class App:
 
         self.v_inv = tk.BooleanVar(value=False)
         ttk.Checkbutton(f, text=T("Invertieren (Hell und Dunkel tauschen)"), variable=self.v_inv
-                        ).grid(row=9, column=0, columnspan=3, sticky="w")
+                        ).grid(row=10, column=0, columnspan=3, sticky="w")
         self.v_mode = tk.StringVar(value="schwelle")
         ttk.Radiobutton(f, text=T("Schwarzweiß (Strichgrafik)"), value="schwelle",
-                        variable=self.v_mode).grid(row=10, column=0, columnspan=3, sticky="w")
+                        variable=self.v_mode).grid(row=13, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text=T("Rasterung (Punktdichte, für Fotos)"), value="raster",
                         variable=self.v_mode).grid(row=12, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text=T("Graustufen (Leistung variiert)"), value="grau",
                         variable=self.v_mode).grid(row=11, column=0, columnspan=3, sticky="w")
         self.v_schw = tk.DoubleVar(value=0.5)
-        ttk.Label(f, text=T("Schwelle")).grid(row=13, column=0, sticky="w")
+        ttk.Label(f, text=T("Schwelle")).grid(row=14, column=0, sticky="w")
         ttk.Scale(f, from_=0.1, to=0.9, variable=self.v_schw, length=140
-                  ).grid(row=13, column=1, columnspan=2, sticky="w")
+                  ).grid(row=14, column=1, columnspan=2, sticky="w")
 
         # Tonwertkurve: hebt oder senkt nur die Mitten. Schwarz bleibt schwarz,
         # Weiss bleibt aus - das Mittel gegen "laeuft alles zu".
         self.v_gamma = tk.DoubleVar(value=1.0)
-        ttk.Label(f, text=T("Mitten")).grid(row=14, column=0, sticky="w")
+        ttk.Label(f, text=T("Mitten")).grid(row=15, column=0, sticky="w")
         sg = ttk.Frame(f)
-        sg.grid(row=14, column=1, columnspan=2, sticky="w")
+        sg.grid(row=15, column=1, columnspan=2, sticky="w")
         ttk.Scale(sg, from_=0.4, to=2.5, variable=self.v_gamma, length=110,
                   command=lambda v: self._gamma_zeigen()).pack(side="left")
         self.lbl_gamma = ttk.Label(sg, width=4)
@@ -378,11 +385,11 @@ class App:
                    command=lambda: self.v_gamma.set(1.0)).pack(side="left", padx=(2, 0))
         self.lbl_gammahilfe = ttk.Label(
             f, text=T("größer = Mitten heller (nur Graustufen)"), style="Muted.TLabel")
-        self.lbl_gammahilfe.grid(row=15, column=0, columnspan=3, sticky="w")
+        self.lbl_gammahilfe.grid(row=16, column=0, columnspan=3, sticky="w")
         self._gamma_zeigen()
 
         bk = ttk.LabelFrame(f, text=T("Bildkorrektur"), padding=4)
-        bk.grid(row=16, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        bk.grid(row=17, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_hell = tk.DoubleVar(value=0.0)
         self.v_kontrast = tk.DoubleVar(value=0.0)
         self.v_schaerfe = tk.DoubleVar(value=0.0)
@@ -410,7 +417,7 @@ class App:
         self._bk_zeigen()
 
         jb = ttk.LabelFrame(f, text=T("Bearbeitung"), padding=4)
-        jb.grid(row=17, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        jb.grid(row=18, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_job = tk.StringVar(value="gravur")
         ttk.Radiobutton(jb, text=T("Gravieren (Flächen, zeilenweise)"), value="gravur",
                         variable=self.v_job, command=self._job_changed).grid(row=0, column=0, columnspan=3, sticky="w")
@@ -438,15 +445,15 @@ class App:
                   style="Muted.TLabel").grid(row=5, column=0, columnspan=4, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
-                   ).grid(row=18, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+                   ).grid(row=19, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         self.lbl_info = ttk.Label(f, text="", justify="left")
-        self.lbl_info.grid(row=19, column=0, columnspan=3, sticky="w")
+        self.lbl_info.grid(row=20, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=20, column=0, columnspan=3, sticky="ew", pady=6)
+        bb.grid(row=21, column=0, columnspan=3, sticky="ew", pady=6)
         ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
         ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
         pb = ttk.Frame(f)
-        pb.grid(row=21, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        pb.grid(row=22, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         ttk.Button(pb, text=T("Projekt speichern"), command=self.save_project
                    ).pack(side="left", fill="x", expand=True)
         ttk.Button(pb, text=T("Projekt öffnen"), command=self.open_project
@@ -724,45 +731,140 @@ class App:
         except Exception as e:
             messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
             return False
-        self.clear_motif()
+        if self.grbl.job_running:
+            messagebox.showinfo(T("Motiv"), T("Während eines Jobs nicht möglich."))
+            return False
+        self._element_sichern()
+        self._verwerfen()
         self.src, self.src_path, self.vec = im, p, vec
         self.quelle_pfad = p
         self.vec_bb = V.bbox(V.flatten(vec, 1.0)) if vec else None
-        self._vecdreh = None
+        self._vecdreh = self._live_cache = None
         if ext == ".dxf":
             self.v_job.set("schnitt")       # DXF = nur Konturen
-        elif not vec and self.v_job.get() == "schnitt":
+        elif not vec and self.v_job.get() in ("schnitt", "beides"):
             self.v_job.set("gravur")
         self.v_rot.set(0)
+        name = anzeige or os.path.basename(p)
         self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
-            anzeige or os.path.basename(p), im.width, im.height))
-        self.fit()
+            name, im.width, im.height))
+        self.elemente.append({"anzeige": name, "src": im, "vec": vec,
+                              "vec_bb": self.vec_bb, "pfad": p, "quelle": p})
+        self.aktiv = len(self.elemente) - 1
+        self.fit()                       # setzt Groesse, sichert gleich mit
+        self._element_sichern()
+        self._liste_auffrischen()
         self._gen_knopf()
         return True
 
+    # --------------------------------------------------------- Elemente
+    # Alles, was zu einem einzelnen Motiv gehoert. Werkstueck, Material-
+    # dicke und Maschine gelten fuer alle gemeinsam.
+    ELEMENTFELDER = (
+        "v_w", "v_h", "v_lock", "v_rot", "v_inv", "v_mode", "v_schw",
+        "v_gamma", "v_hell", "v_kontrast", "v_schaerfe",
+        "v_xoff", "v_yoff", "v_over", "v_spiegel", "v_achse",
+        "v_job", "v_passes", "v_cs", "v_cf",
+        "v_s", "v_smin", "v_f", "v_line",
+    )
+
+    def _element_sichern(self):
+        """Die Eingabefelder in das gerade gewaehlte Element zurueckschreiben."""
+        if not (0 <= self.aktiv < len(self.elemente)):
+            return
+        e = self.elemente[self.aktiv]
+        for name in self.ELEMENTFELDER:
+            try:
+                e[name] = getattr(self, name).get()
+            except tk.TclError:
+                pass
+        e.update(src=self.src, vec=self.vec, vec_bb=self.vec_bb,
+                 pfad=self.src_path, quelle=self.quelle_pfad)
+
+    def _element_laden(self, i, zeichnen=True):
+        """Ein Element in die Eingabefelder holen."""
+        if not (0 <= i < len(self.elemente)):
+            return
+        e = self.elemente[i]
+        self.aktiv = i
+        self.src, self.vec = e["src"], e["vec"]
+        self.vec_bb, self.src_path = e["vec_bb"], e["pfad"]
+        self.quelle_pfad = e.get("quelle") or e["pfad"]
+        self._vecdreh = self._live_cache = None
+        self._still = True
+        try:
+            for name in self.ELEMENTFELDER:
+                if name in e:
+                    try:
+                        getattr(self, name).set(e[name])
+                    except tk.TclError:
+                        pass
+        finally:
+            self._still = False
+        self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
+            e["anzeige"], e["src"].width, e["src"].height))
+        self._bk_zeigen(); self._gamma_zeigen(); self._show_sf()
+        self._anlauf_zeigen()
+        self._liste_auffrischen()
+        if zeichnen:
+            self._draw()
+
+    def _liste_auffrischen(self):
+        self.lb_el.delete(0, "end")
+        for i, e in enumerate(self.elemente):
+            art = {"gravur": T("gravieren"), "schnitt": T("schneiden"),
+                   "beides": T("beides")}.get(e.get("v_job", "gravur"), "")
+            self.lb_el.insert("end", "%d. %s  (%s)" % (i + 1, e["anzeige"], art))
+        if 0 <= self.aktiv < len(self.elemente):
+            self.lb_el.selection_clear(0, "end")
+            self.lb_el.selection_set(self.aktiv)
+
+    def _element_gewaehlt(self, _=None):
+        wahl = self.lb_el.curselection()
+        if not wahl or wahl[0] == self.aktiv:
+            return
+        self._element_sichern()
+        self._element_laden(wahl[0])
+
+    def element_entfernen(self):
+        if not self.elemente or self.grbl.job_running:
+            return
+        del self.elemente[self.aktiv]
+        self._verwerfen()
+        if self.elemente:
+            self._element_laden(min(self.aktiv, len(self.elemente) - 1))
+        else:
+            self.aktiv = -1
+            self.src = self.src_path = self.vec = self.vec_bb = None
+            self.lbl_src.configure(text="-")
+            self._liste_auffrischen()
+            self._gen_knopf()
+            self._draw()
+
+    def _verwerfen(self):
+        """Erzeugten G-Code und alle Vorschauen aller Elemente wegwerfen."""
+        self.lines = self.info = self.preview_img = None
+        self.preview_pil = self._prev_cache = self.cut_polys = None
+        self.preview_pos = None
+        for e in self.elemente:
+            e.pop("ergebnis", None)
+        self.lbl_info.configure(text="")
+        self._gen_knopf()
+
     # --------------------------------------------------------- Projekt
     # Alles, was ein Projekt ausmacht: Variable -> Name in der Datei.
+    # Gilt fuer das ganze Projekt, nicht fuer ein einzelnes Element
     PROJEKTFELDER = (
-        ("v_w", "breite"), ("v_h", "hoehe"), ("v_lock", "verhaeltnis"),
-        ("v_rot", "drehung"), ("v_inv", "invertiert"), ("v_mode", "modus"),
-        ("v_schw", "schwelle"), ("v_gamma", "mitten"),
-        ("v_hell", "helligkeit"), ("v_kontrast", "kontrast"),
-        ("v_schaerfe", "schaerfe"),
-        ("v_xoff", "versatz_x"), ("v_yoff", "versatz_y"), ("v_over", "anlauf"),
-        ("v_spiegel", "spiegel"), ("v_achse", "wendeachse"),
-        ("v_job", "bearbeitung"), ("v_passes", "durchgaenge"),
-        ("v_cs", "schnitt_leistung"), ("v_cf", "schnitt_vorschub"),
         ("v_bw", "brett_x"), ("v_bh", "brett_y"),
         ("v_board", "brett_zeigen"), ("v_snap", "einrasten"),
         ("v_maxw", "max_breite"), ("v_maxh", "max_hoehe"),
         ("v_dicke", "dicke"), ("v_korr", "fokuskorrektur"),
-        ("v_s", "leistung"), ("v_smin", "leistung_ab"), ("v_f", "vorschub"),
-        ("v_line", "zeilenabstand"), ("v_notiz", "notiz"),
+        ("v_notiz", "notiz"),
         ("v_preset", "preset"),
     )
 
     def save_project(self):
-        if self.src is None:
+        if not self.elemente:
             messagebox.showinfo(T("Projekt"), T("Erst ein Bild oder SVG öffnen."))
             return
         vor = os.path.splitext(os.path.basename(self.src_path or "projekt"))[0]
@@ -773,14 +875,20 @@ class App:
             filetypes=[(T("Laserwerk-Projekt"), "*" + PR.ENDUNG), (T("alle"), "*")])
         if not p:
             return
+        self._element_sichern()
         werte = {}
         for name, schluessel in self.PROJEKTFELDER:
             try:
                 werte[schluessel] = getattr(self, name).get()
             except tk.TclError:
                 pass
+        werte["gewaehlt"] = self.aktiv
+        elemente = [{"anzeige": e["anzeige"],
+                     "quelle": e.get("quelle") or e["pfad"],
+                     "werte": {k: e[k] for k in self.ELEMENTFELDER if k in e}}
+                    for e in self.elemente]
         try:
-            d = PR.speichern(p, werte, self.quelle_pfad or self.src_path)
+            d = PR.speichern(p, werte, elemente=elemente)
         except OSError as e:
             messagebox.showerror(T("Projekt"), str(e))
             return
@@ -801,22 +909,57 @@ class App:
             messagebox.showerror(T("Projekt"), str(e))
             return
         ordner = os.path.join(P.DIR, "vorlagen")
-        quelle, name = PR.vorlage_auspacken(d, ordner)
-        if not quelle:
-            messagebox.showerror(T("Projekt"),
-                T("Die Vorlage '{name}' steckt nicht in der Datei und liegt "
-                  "nicht mehr am gemerkten Ort.").format(name=name))
-            return
-        if not self.lade_motiv(quelle, anzeige=name):
-            return
-        self.quelle_pfad = d.get("quelle") or quelle
+        liste = d.get("elemente")
+        if liste is None:
+            # Projekt aus der Zeit vor der Elementliste: ein einziges Motiv,
+            # seine Werte stehen noch unter den Projektwerten.
+            alt = {"v_w": "breite", "v_h": "hoehe", "v_lock": "verhaeltnis",
+                   "v_rot": "drehung", "v_inv": "invertiert", "v_mode": "modus",
+                   "v_schw": "schwelle", "v_gamma": "mitten",
+                   "v_hell": "helligkeit", "v_kontrast": "kontrast",
+                   "v_schaerfe": "schaerfe", "v_xoff": "versatz_x",
+                   "v_yoff": "versatz_y", "v_over": "anlauf",
+                   "v_spiegel": "spiegel", "v_achse": "wendeachse",
+                   "v_job": "bearbeitung", "v_passes": "durchgaenge",
+                   "v_cs": "schnitt_leistung", "v_cf": "schnitt_vorschub",
+                   "v_s": "leistung", "v_smin": "leistung_ab",
+                   "v_f": "vorschub", "v_line": "zeilenabstand"}
+            liste = [{"anzeige": d.get("quelle_name") or "", "quelle": d.get("quelle"),
+                      "quelle_name": d.get("quelle_name"), "vorlage": d.get("vorlage"),
+                      "werte": {k: d["werte"][s] for k, s in alt.items()
+                                if s in d["werte"]}}]
+        self.clear_motif()
+        for nr, el in enumerate(liste):
+            quelle, name = PR.vorlage_auspacken(el, ordner, nr)
+            if not quelle:
+                messagebox.showerror(T("Projekt"),
+                    T("Die Vorlage '{name}' steckt nicht in der Datei und liegt "
+                      "nicht mehr am gemerkten Ort.").format(name=name))
+                return
+            if not self.lade_motiv(quelle, anzeige=el.get("anzeige") or name):
+                return
+            self._still = True
+            try:
+                for feld, wert in (el.get("werte") or {}).items():
+                    if feld in self.ELEMENTFELDER:
+                        try:
+                            getattr(self, feld).set(wert)
+                        except tk.TclError:
+                            pass
+            finally:
+                self._still = False
+            self._element_sichern()
         for feld, schluessel in self.PROJEKTFELDER:
             if schluessel in d["werte"]:
                 try:
                     getattr(self, feld).set(d["werte"][schluessel])
                 except tk.TclError:
                     pass
-        self._gamma_zeigen(); self._show_sf(); self._stale(); self._draw()
+        gewaehlt = d["werte"].get("gewaehlt", 0)
+        if self.elemente:
+            self._element_laden(min(max(0, gewaehlt), len(self.elemente) - 1),
+                                zeichnen=False)
+        self._gamma_zeigen(); self._show_sf(); self._verwerfen(); self._draw()
         self._projekt_titel(p)
         self._log(T("Projekt geladen: {name} (gespeichert {wann})").format(
             name=os.path.basename(p), wann=d.get("gespeichert", "?")))
@@ -826,18 +969,20 @@ class App:
         self.root.title("Laserwerk" + (" – " + os.path.basename(pfad) if pfad else ""))
 
     def clear_motif(self):
-        """Bild, Vorschau und erzeugten/geladenen G-Code verwerfen."""
+        """Alle Elemente und den erzeugten G-Code verwerfen."""
         if self.grbl.job_running:
             messagebox.showinfo(T("Motiv"), T("Während eines Jobs nicht möglich."))
             return
+        self.elemente = []
+        self.aktiv = -1
         self.src = self.src_path = None
-        self.vec = self.cut_polys = self.vec_bb = self._vecdreh = None
-        self.lines = self.info = self.preview_img = None
-        self.preview_pil = self._prev_cache = self._live_cache = None
+        self.vec = self.vec_bb = self._vecdreh = None
+        self._live_cache = None
         self.drag = None
+        self._verwerfen()
         self.lbl_src.configure(text="-")
-        self.lbl_info.configure(text="")
-        self._gen_knopf()
+        if hasattr(self, "lb_el"):
+            self._liste_auffrischen()
         self._draw()
 
     def _vec_bbox(self):
@@ -980,7 +1125,13 @@ class App:
         self.btn_gen.configure(style="Accent.TButton" if fehlt else "TButton")
 
     def _stale(self):
-        """Größe/Drehung geändert: erzeugter G-Code passt nicht mehr."""
+        """Größe/Drehung geändert: erzeugter G-Code passt nicht mehr.
+
+        Beim Umschalten zwischen Elementen aendern sich die Felder ebenfalls -
+        das ist keine Benutzereingabe und darf das Ergebnis nicht verwerfen.
+        """
+        if getattr(self, "_still", False):
+            return
         if self.src is not None and self.lines is not None:
             self.lines = self.info = self.preview_img = self.cut_polys = None
             self.preview_pil = self._prev_cache = None
@@ -1001,8 +1152,61 @@ class App:
         self._draw()
 
     def generate(self):
-        if self.src is None:
+        """G-Code fuer alle Elemente: erst alles Gravieren, dann alles
+        Schneiden. Umgekehrt faellt ein Teil heraus, bevor der Rest
+        graviert ist."""
+        if not self.elemente:
             messagebox.showinfo(T("Kein Motiv"), T("Erst ein Bild oder SVG öffnen."))
+            return
+        self._element_sichern()
+        merke = self.aktiv
+        gravur, schnitt = [], []
+        sekunden = brennweg = 0.0
+        try:
+            for i in range(len(self.elemente)):
+                self._element_laden(i, zeichnen=False)
+                self.lines = self.info = None
+                self.preview_pil = self.cut_polys = None
+                self._erzeuge_eines()
+                if self.lines is None:
+                    return
+                self._element_sichern()     # z.B. angehobener Versatz X
+                e = self.elemente[i]
+                e["ergebnis"] = dict(lines=self.lines, info=self.info,
+                                     preview_pil=self.preview_pil,
+                                     preview_pos=self.preview_pos,
+                                     cut_polys=self.cut_polys,
+                                     text=self.lbl_info.cget("text"))
+                sekunden += self.info.get("sekunden", 0)
+                brennweg += self.info.get("cut_m", 0)
+                (schnitt if self.v_job.get() == "schnitt" else gravur).append(i)
+        finally:
+            self._element_laden(merke, zeichnen=False)
+        folge = gravur + schnitt
+        zeilen = []
+        for i in folge:
+            teil = self.elemente[i]["ergebnis"]["lines"]
+            if zeilen and zeilen[-1].startswith("G0 X0 Y0"):
+                zeilen = zeilen[:-1]        # Rueckfahrt zwischen Teilen sparen
+            zeilen += teil
+        self.lines = zeilen
+        erste = self.elemente[folge[0]]["ergebnis"]["info"]
+        self.info = dict(erste)
+        self.info.update(befehle=len(zeilen), sekunden=sekunden, cut_m=brennweg)
+        if len(self.elemente) > 1:
+            self.lbl_info.configure(text=T(
+                "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\n"
+                "Laufzeit ca. {min:.0f} min").format(
+                    n=len(self.elemente), b=len(zeilen), m=brennweg,
+                    min=sekunden / 60) + "\n\n" + "\n\n".join(
+                "%d. %s\n%s" % (i + 1, self.elemente[i]["anzeige"],
+                                 self.elemente[i]["ergebnis"]["text"])
+                for i in folge))
+        self._gen_knopf()
+        self._draw()
+
+    def _erzeuge_eines(self):
+        if self.src is None:
             return
         try:
             w, h, line = self.v_w.get(), self.v_h.get(), self.v_line.get()
@@ -1277,6 +1481,10 @@ class App:
             return True
         except tk.TclError:
             return False
+
+    def _schneidet(self):
+        """Wird irgendwo geschnitten? Dann beim Start vor Brandgefahr warnen."""
+        return any(e.get("v_job") in ("schnitt", "beides") for e in self.elemente)
 
     def _schnittwerte(self):
         """Leistung und Vorschub fuers Schneiden - eigene oder die vom Material."""
@@ -1796,7 +2004,7 @@ class App:
                       ).format(name=name, x0=x0, x1=x1, y0=y0, y1=y1, zeit=t)
                     + (T("\n\nSCHNEIDEN: Brandgefahr - Material kann "
                          "weiterglimmen!")
-                       if self.cut_polys and lines is self.lines else "")):
+                       if self._schneidet() and lines is self.lines else "")):
                 return
         self.job_t0 = time.time()
         self.prog["value"] = 0
@@ -2196,35 +2404,44 @@ class App:
             cv.create_line(mx, ay, mx, by2, fill="#6b4f2f", dash=(3, 3))
             cv.create_line(ax, my, bx2, my, fill="#6b4f2f", dash=(3, 3))
         box = self._box()
-        gezeigt = False
-        if self.preview_pil is not None and self.preview_pos and self.info:
-            ax, ay = self._mm(*self.preview_pos)      # erzeugte G-Code-Vorschau
+        # Alle Elemente zeigen - das gewaehlte bekommt zusaetzlich den
+        # Rahmen mit den Anfassern.
+        for i, e in enumerate(self.elemente):
+            r = e.get("ergebnis")
+            gemalt = False
+            if r:
+                bild, pos = self._vorschau(e)
+                if bild is not None:
+                    cv.create_image(*self._mm(*pos), image=bild, anchor="nw")
+                    gemalt = True
+                for pl in (r.get("cut_polys") or ()):
+                    pts = [c for p in pl["pts"] for c in self._mm(*p)]
+                    if pl["closed"]:
+                        pts += list(self._mm(*pl["pts"][0]))
+                    if len(pts) >= 4:
+                        cv.create_line(*pts, fill=S.DANGER, width=1)
+                        gemalt = True
+            if gemalt:
+                continue
+            if i == self.aktiv and box and self.src is not None:
+                x, y, b, h = box
+                img = self._live_image(b, h)
+                if img is not None:
+                    cv.create_image(*self._mm(x, y + h), image=img, anchor="nw")
+            else:                                   # noch nicht erzeugt
+                try:
+                    x, y = float(e["v_xoff"]), float(e["v_yoff"])
+                    b, h = float(e["v_w"]), float(e["v_h"])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                a1, b1 = self._mm(x, y + h)
+                a2, b2 = self._mm(x + b, y)
+                cv.create_rectangle(a1, b1, a2, b2, outline=S.MUTED, dash=(2, 4))
+        if not self.elemente and self.preview_pil is not None and self.preview_pos:
+            ax, ay = self._mm(*self.preview_pos)     # geladener G-Code
             self._prepare_preview()
             if self.preview_img is not None:
                 cv.create_image(ax, ay, image=self.preview_img, anchor="nw")
-                gezeigt = True
-        if self.cut_polys:              # Schnittkonturen: echte Geometrie
-            for pl in self.cut_polys:
-                pts = [c for p in pl["pts"] for c in self._mm(*p)]
-                if pl["closed"]:
-                    pts += list(self._mm(*pl["pts"][0]))
-                if len(pts) >= 4:
-                    cv.create_line(*pts, fill=S.DANGER, width=1)
-            gezeigt = True
-        if not gezeigt and box and self.src is not None:   # Platzierung live
-            x, y, b, h = box
-            img = self._live_image(b, h)
-            if img is not None:
-                cv.create_image(*self._mm(x, y + h), image=img, anchor="nw")
-        if box:                         # Rahmen und Anfasser zum Ziehen
-            x, y, b, h = box
-            ax, ay = self._mm(x, y + h); cx, cy = self._mm(x + b, y)
-            cv.create_rectangle(ax, ay, cx, cy, outline=S.ACCENT, dash=(3, 2))
-            for hx, hy in ((ax, ay), (cx, ay), (ax, cy), (cx, cy)):
-                cv.create_rectangle(hx - 4, hy - 4, hx + 4, hy + 4,
-                                    fill=S.ACCENT, outline="")
-            cv.create_text((ax + cx) / 2, ay - 8, fill=S.ACCENT, anchor="s",
-                           text=T('{0:.1f} x {1:.1f} mm').format(b, h))
         if self.lines and not box:      # geladener G-Code ohne Motiv
             ex = J.brenn_extent(self.lines)
             a, b = self._mm(ex[0], ex[3]); c, d = self._mm(ex[1], ex[2])
@@ -2430,6 +2647,28 @@ class App:
         img = tk.PhotoImage(data=base64.b64encode(b64.getvalue()))
         self._live_cache = (key, img)
         return img
+
+    def _vorschau(self, e):
+        """Erzeugte Vorschau eines Elements als Bild in der aktuellen
+        Zoomstufe. Jedes Element haelt seinen eigenen Zwischenspeicher."""
+        r = e.get("ergebnis")
+        if not r or r.get("preview_pil") is None or not r.get("preview_pos"):
+            return None, None
+        i = r["info"]
+        s = self._scale()
+        w = max(1, min(int(i["breite"] * s), 4000))
+        h = max(1, min(int(i["hoehe"] * s), 4000))
+        if e.get("_cache", (None,))[0] != (w, h):
+            im = r["preview_pil"].resize((w, h), Image.LANCZOS)
+            alpha = im.point(lambda v: 255 - v)
+            im = Image.merge("RGBA", (im.point(lambda v: 60),
+                                      im.point(lambda v: 38),
+                                      im.point(lambda v: 24), alpha))
+            b = io.BytesIO()
+            im.save(b, format="PNG")
+            e["_cache"] = ((w, h),
+                           tk.PhotoImage(data=base64.b64encode(b.getvalue())))
+        return e["_cache"][1], r["preview_pos"]
 
     def _prepare_preview(self):
         """Vorschaubild in der aktuellen Zoomstufe bereitstellen (zwischengespeichert)."""

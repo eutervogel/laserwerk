@@ -39,6 +39,10 @@ settings for a new material.
   button that takes the black and white point from the image. Photos nearly
   always need it: a light grey background otherwise burns as a thin carpet of
   dots and eats the subject's contrast.
+- **Several elements** — artwork as a PNG, frame as an SVG, both on the same
+  workpiece: each element with its own file, placement and settings, together
+  in one preview, one G-code run and one project file. Everything is engraved
+  first, then everything is cut.
 - **Place** — enter the length and width of your workpiece, then drag the
   artwork onto it with the mouse and resize it by its corners, snapping to
   edges, corners and centre. Rotate to any angle, not just multiples of 90°.

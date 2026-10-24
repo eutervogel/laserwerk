@@ -723,4 +723,9 @@ EN = {
     "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min":
         "\n\nPlus cut: {k} contours, {m:.2f} m x {p}\n"
         "S{s}/F{f} = S/F {sf:.2f}, about {min:.0f} min",
+    # ---- Elementliste
+    "Entfernen": "Remove",
+    "gravieren": "engrave", "schneiden": "cut", "beides": "both",
+    "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min":
+        "{n} elements\n{b} commands, {m:.1f} m burnt\nabout {min:.0f} min",
 }

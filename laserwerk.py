@@ -2426,14 +2426,15 @@ class App:
             if i == self.aktiv and box and self.src is not None:
                 x, y, b, h = box
                 img = self._live_image(b, h)
-                if img is not None:
-                    cv.create_image(*self._mm(x, y + h), image=img, anchor="nw")
-            else:                                   # noch nicht erzeugt
-                try:
-                    x, y = float(e["v_xoff"]), float(e["v_yoff"])
-                    b, h = float(e["v_w"]), float(e["v_h"])
-                except (KeyError, ValueError, TypeError):
+            else:                       # noch nicht erzeugt: trotzdem zeigen
+                kasten = self._box_von(e)
+                if not kasten:
                     continue
+                x, y, b, h = kasten
+                img = self._bild_von(e, b, h)
+            if img is not None:
+                cv.create_image(*self._mm(x, y + h), image=img, anchor="nw")
+            else:
                 a1, b1 = self._mm(x, y + h)
                 a2, b2 = self._mm(x + b, y)
                 cv.create_rectangle(a1, b1, a2, b2, outline=S.MUTED, dash=(2, 4))
@@ -2474,6 +2475,67 @@ class App:
         self.cfg["einrasten"] = bool(self.v_snap.get())
         P.save_config(self.cfg)
         self._draw()
+
+    def _box_von(self, e):
+        """Motivrechteck eines Elements aus seinen gespeicherten Werten."""
+        try:
+            b, h = float(e["v_w"]), float(e["v_h"])
+            x, y = float(e["v_xoff"]), float(e["v_yoff"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if e.get("v_job") == "schnitt" and e.get("vec"):
+            x0, y0, x1, y1 = V.bbox(V.rotate(V.flatten(e["vec"], 1.0),
+                                             float(e.get("v_rot", 0) or 0)))
+            bw, bh = x1 - x0, y1 - y0
+            if bw > 0 and bh > 0:
+                sc = min(b / bw, h / bh)
+                b, h = bw * sc, bh * sc
+        sp = e.get("v_spiegel", "nein")
+        a = float(e.get("v_achse", 50.0))
+        if sp == "x":
+            x = 2 * a - x - b
+        elif sp == "y":
+            y = 2 * a - y - h
+        return x, y, b, h
+
+    def _bild_von(self, e, b, h):
+        """Das Motiv eines Elements als durchscheinendes Bild - fuer alle
+        Elemente, nicht nur das gewaehlte. Sonst sieht man von den anderen
+        nur ein Rechteck und weiss nicht, was darin steht."""
+        im0 = e.get("src")
+        if im0 is None:
+            return None
+        s = self._scale()
+        w_px, h_px = max(1, int(b * s)), max(1, int(h * s))
+        if w_px * h_px > 4_000_000:
+            return None
+        schluessel = (w_px, h_px, e.get("v_rot"), e.get("v_inv"),
+                      e.get("v_spiegel"), round(e.get("v_hell", 0)),
+                      round(e.get("v_kontrast", 0)), round(e.get("v_schaerfe", 0)))
+        if e.get("_lcache", (None,))[0] == schluessel:
+            return e["_lcache"][1]
+        im = im0
+        rot = float(e.get("v_rot", 0) or 0)
+        if rot:
+            im = im.rotate(-rot, expand=True, fillcolor=255)
+        if e.get("v_spiegel") == "x":
+            im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        elif e.get("v_spiegel") == "y":
+            im = im.transpose(Image.FLIP_TOP_BOTTOM)
+        im = im.resize((w_px, h_px), Image.BILINEAR)
+        im = J.bildkorrektur(im, e.get("v_hell", 0), e.get("v_kontrast", 0),
+                             e.get("v_schaerfe", 0))
+        if e.get("v_inv"):
+            from PIL import ImageOps
+            im = ImageOps.invert(im)
+        alpha = im.point(lambda v: 255 - v)
+        im = Image.merge("RGBA", (im.point(lambda v: 60), im.point(lambda v: 38),
+                                  im.point(lambda v: 24), alpha))
+        b64 = io.BytesIO()
+        im.save(b64, format="PNG")
+        e["_lcache"] = (schluessel,
+                        tk.PhotoImage(data=base64.b64encode(b64.getvalue())))
+        return e["_lcache"][1]
 
     def _box(self):
         """Motivrechteck in Werkstueckkoordinaten (x, y, b, h), inkl. Rueckseite."""

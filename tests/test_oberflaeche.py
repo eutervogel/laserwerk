@@ -1000,3 +1000,55 @@ class RahmenUndAnfasser(Grundlage):
         self.app._draw()
         mitten = [self.app.cv.coords(g)[0] for g in self.anfasser()]
         self.assertAlmostEqual(min(mitten) + 4, self.app._mm(60.0, 0)[0], delta=1.5)
+
+
+@ohne_bildschirm
+class AlleElementeSichtbar(Grundlage):
+    """Von den nicht gewaehlten Elementen war nur ein Rechteck zu sehen -
+    man wusste nicht, was darin steht."""
+
+    def zwei(self):
+        self.motiv()
+        self.app.v_w.set(60.0)
+        self.app.v_h.set(30.0)
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(10.0)
+        self.app._element_sichern()
+        zweites = dict(self.app.elemente[0])
+        zweites["anzeige"] = "zweites.png"
+        zweites["src"] = Image.new("L", (200, 100), 80)
+        self.app.elemente.append(zweites)
+        self.app._element_laden(1)
+        self.app.v_w.set(40.0)
+        self.app.v_h.set(20.0)
+        self.app.v_xoff.set(80.0)
+        self.app.v_yoff.set(50.0)
+        self.app._element_sichern()
+        self.app._draw()
+
+    def test_beide_motive_werden_gezeichnet(self):
+        self.zwei()
+        bilder = [i for i in self.app.cv.find_all()
+                  if self.app.cv.type(i) == "image"]
+        self.assertEqual(len(bilder), 2)
+
+    def test_nur_das_gewaehlte_hat_anfasser(self):
+        import lw_style as S
+        self.zwei()
+        griffe = [i for i in self.app.cv.find_all()
+                  if self.app.cv.type(i) == "rectangle"
+                  and self.app.cv.itemcget(i, "fill") == S.ACCENT]
+        self.assertEqual(len(griffe), 4)
+
+    def test_kasten_eines_fremden_elements(self):
+        self.zwei()
+        e = self.app.elemente[0]
+        self.assertEqual(tuple(round(v, 1) for v in self.app._box_von(e)),
+                         (10.0, 10.0, 60.0, 30.0))
+
+    def test_kasten_beachtet_die_rueckseite(self):
+        self.zwei()
+        e = self.app.elemente[0]
+        e["v_spiegel"] = "x"
+        e["v_achse"] = 60.0
+        self.assertAlmostEqual(self.app._box_von(e)[0], 2 * 60 - 10 - 60, places=1)

@@ -2442,6 +2442,16 @@ class App:
             self._prepare_preview()
             if self.preview_img is not None:
                 cv.create_image(ax, ay, image=self.preview_img, anchor="nw")
+        if box:                         # Rahmen und Anfasser des gewaehlten
+            x, y, b, h = box
+            ax, ay = self._mm(x, y + h)
+            cx, cy = self._mm(x + b, y)
+            cv.create_rectangle(ax, ay, cx, cy, outline=S.ACCENT, dash=(3, 2))
+            for hx, hy in ((ax, ay), (cx, ay), (ax, cy), (cx, cy)):
+                cv.create_rectangle(hx - 4, hy - 4, hx + 4, hy + 4,
+                                    fill=S.ACCENT, outline="")
+            cv.create_text((ax + cx) / 2, ay - 8, fill=S.ACCENT, anchor="s",
+                           text=T('{0:.1f} x {1:.1f} mm').format(b, h))
         if self.lines and not box:      # geladener G-Code ohne Motiv
             ex = J.brenn_extent(self.lines)
             a, b = self._mm(ex[0], ex[3]); c, d = self._mm(ex[1], ex[2])

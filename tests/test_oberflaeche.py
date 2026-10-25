@@ -930,3 +930,73 @@ class AltesProjekt(Grundlage):
         self.assertEqual(self.app.v_s.get(), 444)
         self.assertAlmostEqual(self.app.v_bw.get(), 150.0, places=1)
         shutil.rmtree(ordner, ignore_errors=True)
+
+
+@ohne_bildschirm
+class RahmenUndAnfasser(Grundlage):
+    """Beim Umbau auf mehrere Elemente war dieser Block versehentlich mit
+    herausgeschnitten - ohne Anfasser laesst sich nichts mehr ziehen."""
+
+    def anfasser(self):
+        """Die vier kleinen gefuellten Rechtecke in Akzentfarbe."""
+        import lw_style as S
+        return [i for i in self.app.cv.find_all()
+                if self.app.cv.type(i) == "rectangle"
+                and self.app.cv.itemcget(i, "fill") == S.ACCENT]
+
+    def test_vier_anfasser_am_gewaehlten_element(self):
+        self.motiv()
+        self.app.v_w.set(80.0)
+        self.app.v_h.set(40.0)
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(5.0)
+        self.app._draw()
+        griffe = self.anfasser()
+        self.assertEqual(len(griffe), 4)
+        ecken = {tuple(self.app.cv.coords(g)[:2]) for g in griffe}
+        self.assertEqual(len(ecken), 4)
+
+    def test_anfasser_sitzen_auf_den_ecken(self):
+        self.motiv()
+        self.app.v_w.set(80.0)
+        self.app.v_h.set(40.0)
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(5.0)
+        self.app._draw()
+        mitten = sorted((self.app.cv.coords(g)[0] + 4,
+                         self.app.cv.coords(g)[1] + 4) for g in self.anfasser())
+        links_unten = self.app._mm(10.0, 5.0)
+        rechts_oben = self.app._mm(90.0, 45.0)
+        self.assertAlmostEqual(min(m[0] for m in mitten), links_unten[0], delta=1.5)
+        self.assertAlmostEqual(max(m[0] for m in mitten), rechts_oben[0], delta=1.5)
+
+    def test_massangabe_steht_am_rahmen(self):
+        self.motiv()
+        self.app.v_w.set(63.5)
+        self.app.v_h.set(31.75)
+        self.app._draw()
+        texte = [self.app.cv.itemcget(i, "text") for i in self.app.cv.find_all()
+                 if self.app.cv.type(i) == "text"]
+        self.assertTrue(any("63.5" in t and "31.8" in t for t in texte), texte)
+
+    def test_ohne_motiv_keine_anfasser(self):
+        self.app.clear_motif()
+        self.app._draw()
+        self.assertEqual(self.anfasser(), [])
+
+    def test_anfasser_folgen_dem_umschalten(self):
+        self.motiv()
+        self.app.v_w.set(80.0)
+        self.app.v_h.set(40.0)
+        self.app.v_xoff.set(10.0)
+        self.app._element_sichern()
+        zweites = dict(self.app.elemente[0])
+        zweites["anzeige"] = "zweites.png"
+        self.app.elemente.append(zweites)
+        self.app._element_laden(1)
+        self.app.v_w.set(30.0)
+        self.app.v_h.set(15.0)
+        self.app.v_xoff.set(60.0)
+        self.app._draw()
+        mitten = [self.app.cv.coords(g)[0] for g in self.anfasser()]
+        self.assertAlmostEqual(min(mitten) + 4, self.app._mm(60.0, 0)[0], delta=1.5)

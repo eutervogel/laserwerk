@@ -1239,3 +1239,69 @@ class Zeilenzaehler(Grundlage):
         self.app.lbl_marke.configure(text="Zeile 5 von 9")
         self.app._event("jobend", ("Gravur", "fertig"))
         self.assertEqual(self.app.lbl_marke.cget("text"), "")
+
+
+@ohne_bildschirm
+class MotivFolgtDemRahmen(Grundlage):
+    """Nach dem Erzeugen blieb das Vorschaubild stehen, waehrend der Rahmen
+    schon verschoben war - man zog einen leeren Kasten durch die Gegend."""
+
+    def setUp(self):
+        super().setUp()
+        self.motiv()
+        self.app.v_mode.set("schwelle")
+        self.app.v_bw.set(140.0)
+        self.app.v_bh.set(100.0)
+        self.app.v_w.set(60.0)
+        self.app.v_h.set(30.0)
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(10.0)
+        self.app.v_job.set("gravur")
+        self.app.generate()
+
+    def ziehen(self, von_mm, nach_mm):
+        import types
+        p = self.app._mm(*von_mm)
+        q = self.app._mm(*nach_mm)
+        self.app._press(types.SimpleNamespace(x=int(round(p[0])), y=int(round(p[1]))))
+        self.app._drag_move(types.SimpleNamespace(x=int(round(q[0])),
+                                                  y=int(round(q[1]))))
+        self.app.drag = None
+
+    def test_verschieben_verwirft_die_alte_vorschau(self):
+        self.assertIn("ergebnis", self.app.elemente[0])
+        self.app.v_snap.set(False)
+        self.ziehen((40, 25), (70, 45))
+        self.assertNotIn("ergebnis", self.app.elemente[0])
+        self.assertIsNone(self.app.lines)
+
+    def test_bild_sitzt_nach_dem_ziehen_am_rahmen(self):
+        self.app.v_snap.set(False)
+        self.ziehen((40, 25), (70, 45))
+        self.app._draw()
+        kasten = self.app._box()
+        bilder = [i for i in self.app.cv.find_all()
+                  if self.app.cv.type(i) == "image"]
+        self.assertEqual(len(bilder), 1)
+        x, y = self.app.cv.coords(bilder[0])
+        soll = self.app._mm(kasten[0], kasten[1] + kasten[3])
+        self.assertAlmostEqual(x, soll[0], delta=2)
+        self.assertAlmostEqual(y, soll[1], delta=2)
+
+    def test_groesse_aendern_zieht_das_bild_mit(self):
+        self.app.v_snap.set(False)
+        self.app.v_lock.set(False)
+        vorher = self.app.v_w.get()
+        self.ziehen((70, 40), (90, 55))        # rechte obere Ecke
+        self.assertGreater(self.app.v_w.get(), vorher)
+        self.app._draw()
+        bilder = [i for i in self.app.cv.find_all()
+                  if self.app.cv.type(i) == "image"]
+        self.assertEqual(len(bilder), 1)
+        breite_px = self.app.cv.bbox(bilder[0])[2] - self.app.cv.bbox(bilder[0])[0]
+        self.assertAlmostEqual(breite_px, self.app.v_w.get() * self.app._scale(),
+                               delta=3)
+
+    def test_zahlenfeld_wirkt_genauso(self):
+        self.app.v_xoff.set(55.0)
+        self.assertNotIn("ergebnis", self.app.elemente[0])

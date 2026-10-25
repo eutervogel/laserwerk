@@ -1199,10 +1199,15 @@ class App:
         """
         if getattr(self, "_still", False):
             return
-        if self.src is not None and self.lines is not None:
-            self.lines = self.info = self.preview_img = self.cut_polys = None
-            self.preview_pil = self._prev_cache = None
-            self.lbl_info.configure(text=T("Einstellung geändert -\nVorschau neu erzeugen."))
+        if self.src is None:
+            return
+        # Auch die Ergebnisse der einzelnen Elemente wegwerfen: sonst bleibt
+        # das erzeugte Vorschaubild an seiner alten Stelle stehen, waehrend
+        # der Rahmen schon verschoben ist.
+        if self.lines is None and not any("ergebnis" in e for e in self.elemente):
+            return
+        self._verwerfen()
+        self.lbl_info.configure(text=T("Einstellung geändert -\nVorschau neu erzeugen."))
         self._gen_knopf()
 
     def fit(self):

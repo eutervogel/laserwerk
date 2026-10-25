@@ -39,6 +39,10 @@ settings for a new material.
   button that takes the black and white point from the image. Photos nearly
   always need it: a light grey background otherwise burns as a thin carpet of
   dots and eats the subject's contrast.
+- **Colours as layers** — an SVG with several stroke colours can be split
+  into layers on loading: red is cut, the rest engraved. Every layer keeps
+  the scale and position of the whole drawing, so they stay in register.
+  What gets engraved is the layer's line work, not the filled original.
 - **Several elements** — artwork as a PNG, frame as an SVG, both on the same
   workpiece: each element with its own file, placement and settings, together
   in one preview, one G-code run and one project file. Everything is engraved

@@ -706,7 +706,7 @@ class App:
         if p:
             self.lade_motiv(p)
 
-    def lade_motiv(self, p, anzeige=None):
+    def lade_motiv(self, p, anzeige=None, fragen=True):
         """Datei einlesen und als Motiv setzen. 'anzeige' ueberschreibt den
         Namen im Fenster - ein Projekt zeigt den urspruenglichen, nicht den
         der ausgepackten Kopie."""
@@ -739,6 +739,8 @@ class App:
         self.src, self.src_path, self.vec = im, p, vec
         self.quelle_pfad = p
         self.vec_bb = V.bbox(V.flatten(vec, 1.0)) if vec else None
+        self.vec_voll = vec
+        self.ebene = None
         self._vecdreh = self._live_cache = None
         if ext == ".dxf":
             self.v_job.set("schnitt")       # DXF = nur Konturen
@@ -749,13 +751,64 @@ class App:
         self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
             name, im.width, im.height))
         self.elemente.append({"anzeige": name, "src": im, "vec": vec,
-                              "vec_bb": self.vec_bb, "pfad": p, "quelle": p})
+                              "vec_voll": vec, "vec_bb": self.vec_bb,
+                              "pfad": p, "quelle": p})
         self.aktiv = len(self.elemente) - 1
         self.fit()                       # setzt Groesse, sichert gleich mit
         self._element_sichern()
         self._liste_auffrischen()
         self._gen_knopf()
+        if vec and fragen:
+            self._ebenen_anbieten()
         return True
+
+    def _ebenen_anbieten(self):
+        """Mehrfarbige Zeichnung in Ebenen aufteilen.
+
+        Gewohnheit aus anderen Programmen: rot wird geschnitten, der Rest
+        graviert. Alle Ebenen behalten Massstab und Lage der ganzen
+        Zeichnung, sonst wuerde jede fuer sich eingepasst und sie laegen
+        nicht mehr uebereinander.
+        """
+        e = self.elemente[self.aktiv]
+        farben = V.farben(e["vec"])
+        if len(farben) < 2:
+            return
+        if not messagebox.askyesno(T("Farben als Ebenen"),
+                T("Die Zeichnung hat {n} Strichfarben.\n\n"
+                  "Als getrennte Ebenen laden? Rot wird geschnitten, der Rest "
+                  "graviert - die Zuordnung lässt sich danach je Element "
+                  "ändern.\n\nGraviert wird dann die Strichzeichnung der "
+                  "Ebene, nicht das gefüllte Original.").format(n=len(farben))):
+            return
+        vorlage = dict(e)
+        del self.elemente[self.aktiv]
+        alle = e["vec"]
+        for farbe, anzahl in farben:
+            teil = V.nur_farbe(alle, farbe)
+            neu = dict(vorlage)
+            neu["vec"] = teil
+            neu["vec_voll"] = alle
+            neu["src"] = V.render_preview(V.flatten(teil, 1.0), bezug=V.flatten(alle, 1.0))
+            neu["anzeige"] = "%s  %s" % (vorlage["anzeige"], farbe)
+            neu["ebene"] = farbe
+            neu["v_job"] = "schnitt" if self._ist_rot(farbe) else "gravur"
+            neu.pop("_lcache", None)
+            neu.pop("ergebnis", None)
+            self.elemente.append(neu)
+        self.aktiv = len(self.elemente) - 1
+        self._element_laden(self.aktiv)
+        self._log(T("{n} Ebenen aus {d}: {f}").format(
+            n=len(farben), d=vorlage["anzeige"],
+            f=", ".join("%s (%d)" % (f, a) for f, a in farben)))
+
+    @staticmethod
+    def _ist_rot(farbe):
+        try:
+            r = int(farbe[1:3], 16); g = int(farbe[3:5], 16); b = int(farbe[5:7], 16)
+        except (ValueError, IndexError):
+            return False
+        return r > 120 and r > g * 2 and r > b * 2
 
     # --------------------------------------------------------- Elemente
     # Alles, was zu einem einzelnen Motiv gehoert. Werkstueck, Material-
@@ -779,6 +832,8 @@ class App:
             except tk.TclError:
                 pass
         e.update(src=self.src, vec=self.vec, vec_bb=self.vec_bb,
+                 vec_voll=getattr(self, "vec_voll", None) or self.vec,
+                 ebene=getattr(self, "ebene", None),
                  pfad=self.src_path, quelle=self.quelle_pfad)
 
     def _element_laden(self, i, zeichnen=True):
@@ -789,6 +844,8 @@ class App:
         self.aktiv = i
         self.src, self.vec = e["src"], e["vec"]
         self.vec_bb, self.src_path = e["vec_bb"], e["pfad"]
+        self.vec_voll = e.get("vec_voll") or e["vec"]
+        self.ebene = e.get("ebene")
         self.quelle_pfad = e.get("quelle") or e["pfad"]
         self._vecdreh = self._live_cache = None
         self._still = True
@@ -836,6 +893,7 @@ class App:
         else:
             self.aktiv = -1
             self.src = self.src_path = self.vec = self.vec_bb = None
+            self.vec_voll = None
             self.lbl_src.configure(text="-")
             self._liste_auffrischen()
             self._gen_knopf()
@@ -936,7 +994,8 @@ class App:
                     T("Die Vorlage '{name}' steckt nicht in der Datei und liegt "
                       "nicht mehr am gemerkten Ort.").format(name=name))
                 return
-            if not self.lade_motiv(quelle, anzeige=el.get("anzeige") or name):
+            if not self.lade_motiv(quelle, anzeige=el.get("anzeige") or name,
+                                   fragen=False):
                 return
             self._still = True
             try:
@@ -976,7 +1035,7 @@ class App:
         self.elemente = []
         self.aktiv = -1
         self.src = self.src_path = None
-        self.vec = self.vec_bb = self._vecdreh = None
+        self.vec = self.vec_bb = self.vec_voll = self._vecdreh = None
         self._live_cache = None
         self.drag = None
         self._verwerfen()
@@ -1029,7 +1088,8 @@ class App:
             grad = 0.0
         if self._vecdreh and self._vecdreh[0] == grad:
             return self._vecdreh[1]
-        x0, y0, x1, y1 = V.bbox(V.rotate(V.flatten(self.vec, 1.0), grad))
+        bezug = getattr(self, "vec_voll", None) or self.vec
+        x0, y0, x1, y1 = V.bbox(V.rotate(V.flatten(bezug, 1.0), grad))
         self._vecdreh = (grad, (x1 - x0, y1 - y0))
         return self._vecdreh[1]
 
@@ -1219,9 +1279,17 @@ class App:
             return self._generate_cut(w, h, cs, cf)
         self.cut_polys = None
         src = self.src
-        if self.src_path.lower().endswith(".svg"):
+        need = int(w / line * 3)
+        if getattr(self, "ebene", None) and self.vec:
+            # Nur diese Farbebene neu zeichnen. Die ganze Datei zu rendern
+            # wuerde die Schnittlinien mitgravieren - genau das, was die
+            # Trennung verhindern soll.
+            if need > src.width * 1.2:
+                src = V.render_preview(V.flatten(self.vec, 1.0),
+                                       px=min(need, 6000),
+                                       bezug=V.flatten(self.vec_voll, 1.0))
+        elif self.src_path.lower().endswith(".svg"):
             # SVG in passender Aufloesung neu rendern: scharfe Kanten
-            need = int(w / line * 3)
             if need > src.width * 1.2:
                 src = J.autocrop(J.load_source(self.src_path, need), 245)
         p = J.prepare(src, w, h, line, invert=self.v_inv.get(),
@@ -1303,10 +1371,11 @@ class App:
             return None
         bw, bh = self._vec_dreh_bb()
         sc = min(w / bw if bw else 1e9, h / bh if bh else 1e9)
-        polys = V.flatten(self.vec, sc)
-        polys = V.rotate(polys, self.v_rot.get())
+        bezug = getattr(self, "vec_voll", None) or self.vec
+        polys = V.rotate(V.flatten(self.vec, sc), self.v_rot.get())
+        ganz = V.rotate(V.flatten(bezug, sc), self.v_rot.get())
         polys, _ = V.fit(polys, w, h, max(0.0, float(self.v_xoff.get())),
-                         max(0.0, float(self.v_yoff.get())))
+                         max(0.0, float(self.v_yoff.get())), bezug=ganz)
         sp, achse = self.v_spiegel.get(), float(self.v_achse.get())
         if sp != "nein":
             polys = V.mirror(polys, sp, achse)

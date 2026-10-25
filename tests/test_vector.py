@@ -145,3 +145,58 @@ class OffeneLinien(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Farben(unittest.TestCase):
+    """Die Strichfarbe trennt Gravieren von Schneiden in einer Zeichnung."""
+
+    def setUp(self):
+        self.p = schreib('''<svg xmlns="http://www.w3.org/2000/svg" width="100"
+ height="60" viewBox="0 0 100 60">
+ <g stroke="black"><path d="M 10 10 L 50 10 L 50 40 Z"/></g>
+ <path d="M 1 1 L 99 1 L 99 59 L 1 59 Z" fill="none" stroke="#ff0000"/>
+ <path d="M 60 20 L 80 20" style="stroke:rgb(255,0,0);fill:none"/>
+</svg>''')
+
+    def test_farben_werden_gelesen(self):
+        f = dict(V.farben(V.load_svg(self.p)))
+        self.assertEqual(f.get("#ff0000"), 2)
+        self.assertEqual(f.get("#000000"), 1)
+
+    def test_farbwort_und_rgb_werden_umgerechnet(self):
+        subs = V.load_svg(self.p)
+        self.assertIn("#ff0000", {s["farbe"] for s in subs})
+
+    def test_eine_farbe_herausziehen(self):
+        subs = V.load_svg(self.p)
+        self.assertEqual(len(V.nur_farbe(subs, "#ff0000")), 2)
+        self.assertEqual(len(V.nur_farbe(subs, "#000000")), 1)
+
+    def test_farbe_ueberlebt_flatten_und_drehen(self):
+        polys = V.rotate(V.flatten(V.load_svg(self.p), 1.0), 30)
+        self.assertTrue({p.get("farbe") for p in polys} >= {"#000000", "#ff0000"})
+
+    def test_ebenen_bleiben_in_deckung(self):
+        """Eine Ebene allein eingepasst saesse falsch - mit Bezug nicht."""
+        polys = V.flatten(V.load_svg(self.p), 1.0)
+        # die schwarze Ebene liegt innen - allein eingepasst wuerde sie auf
+        # die volle Groesse gezogen und saesse an der falschen Stelle
+        schwarz = V.nur_farbe(polys, "#000000")
+        ganz, _ = V.fit(polys, 80.0, 48.0)
+        teil, _ = V.fit(schwarz, 80.0, 48.0, bezug=polys)
+        allein, _ = V.fit(schwarz, 80.0, 48.0)
+        # im Bezug sitzt sie innerhalb der ganzen Zeichnung
+        x0, y0, x1, y1 = V.bbox(teil)
+        gx0, gy0, gx1, gy1 = V.bbox(ganz)
+        self.assertGreater(x0, gx0 + 1)
+        self.assertLess(x1, gx1 - 1)
+        # allein eingepasst fuellt sie den ganzen Rahmen - also daneben
+        self.assertEqual([round(v, 1) for v in V.bbox(allein)][:2], [0.0, 0.0])
+        self.assertGreater(V.bbox(allein)[2], x1)
+
+    def test_vorschau_mit_bezug_hat_dasselbe_format(self):
+        polys = V.flatten(V.load_svg(self.p), 1.0)
+        rot = V.nur_farbe(polys, "#ff0000")
+        a = V.render_preview(polys, 400)
+        b = V.render_preview(rot, 400, bezug=polys)
+        self.assertEqual(a.size, b.size)

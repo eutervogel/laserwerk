@@ -728,4 +728,17 @@ EN = {
     "gravieren": "engrave", "schneiden": "cut", "beides": "both",
     "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min":
         "{n} elements\n{b} commands, {m:.1f} m burnt\nabout {min:.0f} min",
+    # ---- Farben als Ebenen
+    "Farben als Ebenen": "Colours as layers",
+    "Die Zeichnung hat {n} Strichfarben.\n\n"
+    "Als getrennte Ebenen laden? Rot wird geschnitten, der Rest graviert - "
+    "die Zuordnung lässt sich danach je Element ändern.\n\n"
+    "Graviert wird dann die Strichzeichnung der Ebene, nicht das gefüllte "
+    "Original.":
+        "The drawing has {n} stroke colours.\n\n"
+        "Load them as separate layers? Red is cut, the rest engraved - you "
+        "can change that per element afterwards.\n\n"
+        "What gets engraved is then the layer's line work, not the filled "
+        "original.",
+    "{n} Ebenen aus {d}: {f}": "{n} layers from {d}: {f}",
 }

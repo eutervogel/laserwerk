@@ -200,6 +200,42 @@ def normalize(path):
     return out
 
 
+FARBWORTE = {"black": "#000000", "red": "#ff0000", "blue": "#0000ff",
+             "green": "#008000", "lime": "#00ff00", "yellow": "#ffff00",
+             "magenta": "#ff00ff", "cyan": "#00ffff", "white": "#ffffff"}
+
+
+def _farbe(el):
+    """Strichfarbe eines Elements, aus Attribut oder style. None = geerbt.
+
+    Nach verbreiteter Gewohnheit steht die Farbe fuer die Betriebsart:
+    rot wird geschnitten, der Rest graviert. Damit laesst sich beides in
+    einer Zeichnung halten.
+    """
+    wert = el.get("stroke")
+    stil = el.get("style") or ""
+    if not wert and "stroke" in stil:
+        m = re.search(r"(?:^|;)\s*stroke\s*:\s*([^;]+)", stil)
+        if m:
+            wert = m.group(1).strip()
+    if not wert or wert in ("none", "inherit"):
+        wert = el.get("fill")
+        if not wert and "fill" in stil:
+            m = re.search(r"(?:^|;)\s*fill\s*:\s*([^;]+)", stil)
+            if m:
+                wert = m.group(1).strip()
+    if not wert or wert in ("none", "inherit"):
+        return None
+    wert = wert.strip().lower()
+    wert = FARBWORTE.get(wert, wert)
+    m = re.match(r"rgb\s*\(\s*(\d+)\D+(\d+)\D+(\d+)", wert)
+    if m:
+        wert = "#%02x%02x%02x" % tuple(int(x) for x in m.groups())
+    if re.fullmatch(r"#[0-9a-f]{3}", wert):
+        wert = "#" + "".join(c * 2 for c in wert[1:])
+    return wert if re.fullmatch(r"#[0-9a-f]{6}", wert) else None
+
+
 def load_svg(path):
     """-> Liste Unterpfade in mm (Y nach oben), Segmente wie parse_path."""
     tmp = normalize(path)
@@ -218,21 +254,23 @@ def load_svg(path):
         base = (25.4/96, 0, 0, 25.4/96, 0, 0)
     subs = []
 
-    def walk(el, m):
+    def walk(el, m, farbe):
         tag = el.tag.split("}")[-1]
         if tag in ("defs", "clipPath", "mask", "metadata", "title", "desc", "symbol"):
             return
         m = mat_mul(m, parse_transform(el.get("transform")))
+        farbe = _farbe(el) or farbe
         if tag == "path" and el.get("d"):
             for sp in parse_path(el.get("d")):
                 segs = []
                 for s in sp["seg"]:
                     segs.append((s[0],) + tuple(apply(m, p) for p in s[1:]))
-                subs.append({"seg": segs, "closed": sp["closed"]})
+                subs.append({"seg": segs, "closed": sp["closed"],
+                             "farbe": farbe or "#000000"})
         for ch in el:
-            walk(ch, m)
+            walk(ch, m, farbe)
 
-    walk(root, base)
+    walk(root, base, None)
     # SVG hat Y nach unten -> spiegeln
     for sp in subs:
         sp["seg"] = [(s[0],) + tuple((p[0], -p[1]) for p in s[1:]) for s in sp["seg"]]
@@ -418,10 +456,15 @@ def load_vector(path):
     return load_dxf(path) if path.lower().endswith(".dxf") else load_svg(path)
 
 
-def render_preview(polys, px=1500):
-    """Konturen als Bild (fuer Vorschau/Seitenverhaeltnis bei DXF)."""
+def render_preview(polys, px=1500, bezug=None):
+    """Konturen als Bild (fuer Vorschau/Seitenverhaeltnis bei DXF).
+
+    'bezug' legt den Bildausschnitt fest, wenn nur ein Teil gezeichnet wird:
+    so haben alle Ebenen einer Zeichnung dasselbe Format und liegen
+    uebereinander, statt jede auf ihren eigenen Inhalt beschnitten zu sein.
+    """
     from PIL import Image, ImageDraw
-    x0, y0, x1, y1 = bbox(polys)
+    x0, y0, x1, y1 = bbox(bezug if bezug else polys)
     s = px / max(x1 - x0, y1 - y0, 1e-9)
     w, h = int((x1 - x0) * s) + 4, int((y1 - y0) * s) + 4
     im = Image.new("L", (w, h), 255)
@@ -465,7 +508,8 @@ def flatten(subs, scale, tol_mm=0.15):
             closed = sp["closed"] or (len(clean) > 2 and math.dist(clean[0], clean[-1]) * scale < 0.01)
             if closed and math.dist(clean[0], clean[-1]) * scale < 0.01:
                 clean = clean[:-1]
-            polys.append({"pts": clean, "closed": closed})
+            polys.append({"pts": clean, "closed": closed,
+                          "farbe": sp.get("farbe", "#000000")})
     return join_open(polys, 0.02 / max(scale, 1e-9))
 
 
@@ -473,17 +517,21 @@ def join_open(polys, tol):
     """Offene Stuecke, deren Enden sich treffen, zu Ketten verbinden.
     CAD-Exporte (FreeCAD-DXF) schreiben Rechtecke oft als 4 einzelne
     Linien - ohne Verbinden gaebe es keine geschlossene Kontur und damit
-    keine Innen-vor-aussen-Reihenfolge."""
+    keine Innen-vor-aussen-Reihenfolge.
+
+    Die Farbe des ersten Stuecks gilt fuer die ganze Kette; sonst fiele
+    die Ebenenzuordnung beim Verbinden weg."""
     closed = [p for p in polys if p["closed"]]
-    offen = [list(p["pts"]) for p in polys if not p["closed"]]
+    offen = [(list(p["pts"]), p.get("farbe", "#000000"))
+             for p in polys if not p["closed"]]
     near = lambda a, b: abs(a[0]-b[0]) <= tol and abs(a[1]-b[1]) <= tol
     ketten = []
     while offen:
-        k = offen.pop()
+        k, farbe = offen.pop()
         gewachsen = True
         while gewachsen:
             gewachsen = False
-            for i, s in enumerate(offen):
+            for i, (s, _) in enumerate(offen):
                 if near(k[-1], s[0]):   k += s[1:]
                 elif near(k[-1], s[-1]): k += s[-2::-1]
                 elif near(k[0], s[-1]):  k = s[:-1] + k
@@ -496,8 +544,22 @@ def join_open(polys, tol):
         zu = len(k) > 2 and near(k[0], k[-1])
         if zu:
             k = k[:-1]
-        ketten.append({"pts": k, "closed": zu})
+        ketten.append({"pts": k, "closed": zu, "farbe": farbe})
     return closed + ketten
+
+
+def farben(subs):
+    """Welche Strichfarben kommen vor, haeufigste zuerst."""
+    zaehler = {}
+    for sp in subs or ():
+        f = sp.get("farbe", "#000000")
+        zaehler[f] = zaehler.get(f, 0) + 1
+    return sorted(zaehler.items(), key=lambda p: -p[1])
+
+
+def nur_farbe(subs, farbe):
+    """Unterpfade einer Farbe herausziehen."""
+    return [sp for sp in subs or () if sp.get("farbe", "#000000") == farbe]
 
 
 def bbox(polys):
@@ -506,14 +568,19 @@ def bbox(polys):
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def fit(polys, w_mm, h_mm, x_off=0.0, y_off=0.0):
-    """Auf Zielgroesse skalieren (Seitenverhaeltnis bleibt), unten links auf Offset."""
-    x0, y0, x1, y1 = bbox(polys)
+def fit(polys, w_mm, h_mm, x_off=0.0, y_off=0.0, bezug=None):
+    """Auf Zielgroesse skalieren (Seitenverhaeltnis bleibt), unten links auf Offset.
+
+    'bezug' bestimmt Massstab und Lage, falls nur ein Teil gezeichnet werden
+    soll: so bleiben die Ebenen einer Zeichnung zueinander in Deckung,
+    statt jede fuer sich eingepasst zu werden.
+    """
+    x0, y0, x1, y1 = bbox(bezug if bezug else polys)
     s = min(w_mm / (x1 - x0) if x1 > x0 else 1e9, h_mm / (y1 - y0) if y1 > y0 else 1e9)
     out = []
     for pl in polys:
         out.append({"pts": [((p[0]-x0)*s + x_off, (p[1]-y0)*s + y_off) for p in pl["pts"]],
-                    "closed": pl["closed"]})
+                    "closed": pl["closed"], "farbe": pl.get("farbe", "#000000")})
     return out, s
 
 
@@ -522,7 +589,8 @@ def rotate(polys, deg):
         return polys
     a = math.radians(-deg); c, s = math.cos(a), math.sin(a)
     return [{"pts": [(p[0]*c - p[1]*s, p[0]*s + p[1]*c) for p in pl["pts"]],
-             "closed": pl["closed"]} for pl in polys]
+             "closed": pl["closed"], "farbe": pl.get("farbe", "#000000")}
+            for pl in polys]
 
 
 def _inside(pt, poly):

@@ -39,6 +39,11 @@ Material ausprobieren will.
   Auto-Knopf, der Schwarz- und Weißpunkt aus dem Bild holt. Fotos brauchen
   das fast immer: ein hellgrauer Hintergrund brennt sonst als dünner
   Punkteteppich mit und frisst den Kontrast des Motivs.
+- **Farben als Ebenen** — eine SVG mit mehreren Strichfarben lässt sich
+  beim Laden in Ebenen aufteilen: Rot wird geschnitten, der Rest graviert.
+  Alle Ebenen behalten Maßstab und Lage der ganzen Zeichnung, liegen also
+  in Deckung. Graviert wird die Strichzeichnung der Ebene, nicht das
+  gefüllte Original.
 - **Mehrere Elemente** — Motiv als PNG, Rahmen als SVG, beides auf demselben
   Werkstück: jedes Element mit eigener Datei, eigener Platzierung und eigenen
   Werten, gemeinsam in einer Vorschau, einem G-Code und einer Projektdatei.

@@ -1052,3 +1052,120 @@ class AlleElementeSichtbar(Grundlage):
         e["v_spiegel"] = "x"
         e["v_achse"] = 60.0
         self.assertAlmostEqual(self.app._box_von(e)[0], 2 * 60 - 10 - 60, places=1)
+
+
+@ohne_bildschirm
+class FarbEbenen(Grundlage):
+    """Motiv und Schnittkontur in einer Datei, getrennt durch die Farbe."""
+
+    def svg(self):
+        import os
+        import tempfile
+        p = os.path.join(tempfile.mkdtemp(), "layer.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="100" '
+                    'height="60" viewBox="0 0 100 60">'
+                    '<path d="M 20 20 L 50 20 L 50 40 Z" stroke="black" '
+                    'fill="none"/>'
+                    '<path d="M 1 1 L 99 1 L 99 59 L 1 59 Z" stroke="#ff0000" '
+                    'fill="none"/></svg>')
+        return p
+
+    def laden(self, aufteilen=True):
+        self.L.messagebox.askyesno = lambda t, m: aufteilen
+        self.L.filedialog.askopenfilename = lambda **k: self.svg()
+        self.app.open_image()
+
+    def test_aufteilen_macht_zwei_elemente(self):
+        self.laden()
+        self.assertEqual(len(self.app.elemente), 2)
+        arten = {e["anzeige"].split()[-1]: e["v_job"] for e in self.app.elemente}
+        self.assertEqual(arten.get("#ff0000"), "schnitt")
+        self.assertEqual(arten.get("#000000"), "gravur")
+
+    def test_ablehnen_laesst_eine_datei(self):
+        self.laden(aufteilen=False)
+        self.assertEqual(len(self.app.elemente), 1)
+
+    def test_ebenen_bleiben_in_deckung(self):
+        self.laden()
+        for e in self.app.elemente:
+            e["v_w"] = 80.0
+            e["v_h"] = 48.0
+            e["v_xoff"] = 10.0
+            e["v_yoff"] = 5.0
+        self.app._element_laden(0)
+        self.app.generate()
+        kaesten = [tuple(round(v, 1) for v in (
+            e["ergebnis"]["info"]["xmin"], e["ergebnis"]["info"]["xmax"]))
+            for e in self.app.elemente]
+        # die rote Aussenkontur umschliesst die schwarze Zeichnung
+        rot = next(k for k, e in zip(kaesten, self.app.elemente)
+                   if e["v_job"] == "schnitt")
+        schwarz = next(k for k, e in zip(kaesten, self.app.elemente)
+                       if e["v_job"] == "gravur")
+        self.assertLess(rot[0], schwarz[0])
+        self.assertGreater(rot[1], schwarz[1])
+
+    def test_rot_erkennen(self):
+        self.assertTrue(self.app._ist_rot("#ff0000"))
+        self.assertTrue(self.app._ist_rot("#e01010"))
+        self.assertFalse(self.app._ist_rot("#000000"))
+        self.assertFalse(self.app._ist_rot("#ff00ff"))
+        self.assertFalse(self.app._ist_rot("kaputt"))
+
+    def test_einfarbige_zeichnung_fragt_nicht(self):
+        import os
+        import tempfile
+        gefragt = []
+        self.L.messagebox.askyesno = lambda t, m: (gefragt.append(1), True)[1]
+        p = os.path.join(tempfile.mkdtemp(), "eine.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
+                    'height="20" viewBox="0 0 40 20"><rect width="40" '
+                    'height="20" fill="none" stroke="black"/></svg>')
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_image()
+        self.assertEqual(gefragt, [])
+        self.assertEqual(len(self.app.elemente), 1)
+
+
+@ohne_bildschirm
+class EbeneWirdNichtMitgraviert(FarbEbenen):
+    """Der Kern der Sache: die Gravurebene darf die Schnittlinie nicht
+    mitbrennen. Beim Erzeugen wurde frueher die ganze Datei neu gerendert."""
+
+    def test_gravur_bleibt_innerhalb_des_schnitts(self):
+        self.laden()
+        for e in self.app.elemente:
+            e["v_w"] = 80.0
+            e["v_h"] = 48.0
+            e["v_xoff"] = 10.0
+            e["v_yoff"] = 5.0
+        self.app._element_laden(0)
+        self.app.generate()
+        grenzen = {}
+        for e in self.app.elemente:
+            grenzen[e["v_job"]] = J.brenn_extent(e["ergebnis"]["lines"])
+        g, s = grenzen["gravur"], grenzen["schnitt"]
+        self.assertGreater(g[0], s[0] + 5)      # links innerhalb
+        self.assertLess(g[1], s[1] - 5)         # rechts innerhalb
+        self.assertGreater(g[2], s[2] + 5)
+        self.assertLess(g[3], s[3] - 5)
+
+    def test_hohe_aufloesung_bleibt_bei_der_ebene(self):
+        """Auch beim Nachschaerfen darf nicht die ganze Datei gerendert
+        werden."""
+        self.laden()
+        e = next(e for e in self.app.elemente if e["v_job"] == "gravur")
+        self.app._element_laden(self.app.elemente.index(e))
+        self.app.v_w.set(200.0)                 # verlangt mehr Aufloesung
+        self.app.v_h.set(120.0)
+        self.app.v_line.set(0.05)
+        self.app.v_xoff.set(5.0)
+        self.app.v_yoff.set(5.0)
+        self.app._element_sichern()
+        self.app.generate()
+        x0, x1, y0, y1 = J.brenn_extent(e["ergebnis"]["lines"])
+        self.assertGreater(x0, 20.0)            # nicht am Rand des Rahmens
+        self.assertLess(x1, 190.0)

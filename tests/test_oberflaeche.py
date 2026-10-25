@@ -1169,3 +1169,73 @@ class EbeneWirdNichtMitgraviert(FarbEbenen):
         x0, x1, y0, y1 = J.brenn_extent(e["ergebnis"]["lines"])
         self.assertGreater(x0, 20.0)            # nicht am Rand des Rahmens
         self.assertLess(x1, 190.0)
+
+
+@ohne_bildschirm
+class Zeilenzaehler(Grundlage):
+    """Wie der Schichtzaehler am 3D-Drucker: wo im Bild steht der Kopf?"""
+
+    def test_marken_im_rastercode(self):
+        self.motiv()
+        self.app.v_mode.set("schwelle")
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.generate()
+        marken = self.app.info["marken"]
+        self.assertEqual(len(marken), self.app.info["rows"])
+        self.assertEqual(marken[0][1], "zeile")
+        self.assertEqual(marken[-1][2], self.app.info["rows"])
+        # streng aufsteigend
+        self.assertEqual([m[0] for m in marken],
+                         sorted(m[0] for m in marken))
+
+    def test_text_zur_befehlsnummer(self):
+        self.motiv()
+        self.app.v_mode.set("schwelle")
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.generate()
+        self.app.marken = self.app.info["marken"]
+        self.app._marken_idx = [m[0] for m in self.app.marken]
+        gesamt = self.app.info["rows"]
+        self.assertIn("1", self.app._marke_text(self.app._marken_idx[0]))
+        letzte = self.app._marke_text(self.app._marken_idx[-1])
+        self.assertIn(str(gesamt), letzte)
+        self.assertEqual(self.app._marke_text(0), "")
+
+    def test_zaehler_laeuft_waehrend_des_jobs(self):
+        self.motiv()
+        self.app.v_mode.set("schwelle")
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.generate()
+        self.app.marken = self.app.info["marken"]
+        self.app._marken_idx = [m[0] for m in self.app.marken]
+        mitte = len(self.app.lines) // 2
+        self.app._event("prog", (mitte, len(self.app.lines), 10.0, 0))
+        text = self.app.lbl_marke.cget("text")
+        self.assertTrue(text, "kein Zeilenzaehler")
+        self.assertIn("von", text)
+
+    def test_schnitt_zaehlt_konturen(self):
+        import os
+        import tempfile
+        p = os.path.join(tempfile.mkdtemp(), "k.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
+                    'height="20" viewBox="0 0 40 20">'
+                    '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/>'
+                    '<circle cx="20" cy="10" r="5"/></svg>')
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_image()
+        self.app.v_job.set("schnitt")
+        self.app.generate()
+        marken = self.app.info["marken"]
+        self.assertTrue(marken)
+        self.assertEqual(marken[0][1], "kontur")
+
+    def test_zaehler_verschwindet_am_ende(self):
+        self.motiv()
+        self.app.lbl_marke.configure(text="Zeile 5 von 9")
+        self.app._event("jobend", ("Gravur", "fertig"))
+        self.assertEqual(self.app.lbl_marke.cget("text"), "")

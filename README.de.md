@@ -91,6 +91,10 @@ Materialwerte als Preset, Achsensteuerung und die Tests:
 
 ![Tests](bilder/05-tests.png)
 
+Während eines Laufs steht in der Statuszeile, bei welcher Zeile von wie
+vielen der Kopf gerade ist — wie der Schichtzähler am 3D-Drucker. Beim
+Schneiden zählt es Konturen statt Zeilen.
+
 ## Braucht
 
 - Python 3.10 oder neuer, mit tkinter (`apt install python3-tk`)

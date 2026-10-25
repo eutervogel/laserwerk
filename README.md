@@ -90,6 +90,10 @@ Material values as a preset, jogging, and the tests:
 
 ![Tests](bilder/en-05-tests.png)
 
+While a job runs, the status line says which row out of how many the head
+is on — like a 3D printer's layer counter. For cutting it counts contours
+instead of rows.
+
 ## What it needs
 
 - Python 3.10 or newer, with tkinter (`apt install python3-tk`)

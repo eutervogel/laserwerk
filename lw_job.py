@@ -153,6 +153,7 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
          f"S{s_max}/F{feed} = S/F {s_max/feed:.2f}",
          "; origin = bottom left corner", "G21", "G90", "G94", "M4 S0"]
     xm = lambda i: x_off + i * line
+    marken = []                      # (Befehlsnummer, Art, Nummer, gesamt)
     cut = trav = 0.0
     xprev = 0.0
     rows = 0
@@ -163,6 +164,7 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
         if not vals.any():
             continue
         rows += 1
+        marken.append(len(g))
         y = y_off + r * line
         rev = rows % 2 == 0
         idx = np.flatnonzero(vals)
@@ -204,6 +206,8 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
     info = dict(rows=rows, cut_m=cut / 1000, trav_m=trav / 1000,
                 befehle=len(g), xmin=xmin, xmax=xmax,
                 breite=nx * line, hoehe=ny * line,
+                marken=[(idx, "zeile", k + 1, rows)
+                        for k, idx in enumerate(marken)],
                 sekunden=estimate(segs_len, feed, rows))
     return g, info
 

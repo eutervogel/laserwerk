@@ -741,4 +741,6 @@ EN = {
         "What gets engraved is then the layer's line work, not the filled "
         "original.",
     "{n} Ebenen aus {d}: {f}": "{n} layers from {d}: {f}",
+    "Zeile {nr} von {n}": "Row {nr} of {n}",
+    "Kontur {nr} von {n}": "Contour {nr} of {n}",
 }

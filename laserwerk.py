@@ -5,7 +5,7 @@ Laserwerk - Oberflaeche fuer GRBL-Diodenlaser.
 Bild oder SVG laden, skalieren, Material waehlen, Achsen steuern,
 Nullpunkt setzen, Fokus testen, gravieren.
 """
-import base64, io, math, os, queue, re, threading, time
+import base64, bisect, io, math, os, queue, re, threading, time
 from PIL import Image
 import tkinter as tk
 from tkinter import ttk
@@ -157,7 +157,9 @@ class App:
         self.prog = ttk.Progressbar(jb, length=90, maximum=1000)
         self.prog.grid(row=0, column=7, padx=8, sticky="ew")
         self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=18, anchor="w")
+
         self.lbl_prog.grid(row=0, column=8)
+
         jb.columnconfigure(7, weight=1)
 
         if TG.lade().get("auto") and self.v_tg_token.get().strip():
@@ -165,7 +167,12 @@ class App:
 
         self.lbl_status = ttk.Label(main, text=T("nicht verbunden"), anchor="w",
                                     style="Status.TLabel")
-        self.lbl_status.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.lbl_status.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        # Zeilenzaehler in die Statuszeile - die Jobleiste ist voll, und hier
+        # steht er neben Zustand und Vorschub, wo man ihn sucht.
+        self.lbl_marke = ttk.Label(main, text="", anchor="e",
+                                   style="Status.TLabel")
+        self.lbl_marke.grid(row=2, column=1, sticky="ew", pady=(6, 0))
 
     def _scrollbereich(self, nb, titel):
         """Reiterinhalt in einen scrollbaren Bereich packen - die Spalte ist
@@ -1249,10 +1256,19 @@ class App:
             if zeilen and zeilen[-1].startswith("G0 X0 Y0"):
                 zeilen = zeilen[:-1]        # Rueckfahrt zwischen Teilen sparen
             zeilen += teil
+        marken, versatz = [], 0
+        for i in folge:
+            teil = self.elemente[i]["ergebnis"]
+            for idx, art, nr, gesamt in teil["info"].get("marken", ()):
+                marken.append((idx + versatz, art, nr, gesamt))
+            versatz += len(teil["lines"])
+            if versatz and zeilen[versatz - 1:versatz] == ["G0 X0 Y0"]:
+                versatz -= 1          # dieselbe Kuerzung wie oben
         self.lines = zeilen
         erste = self.elemente[folge[0]]["ergebnis"]["info"]
         self.info = dict(erste)
-        self.info.update(befehle=len(zeilen), sekunden=sekunden, cut_m=brennweg)
+        self.info.update(befehle=len(zeilen), sekunden=sekunden, cut_m=brennweg,
+                         marken=marken)
         if len(self.elemente) > 1:
             self.lbl_info.configure(text=T(
                 "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\n"
@@ -2076,6 +2092,8 @@ class App:
                        if self._schneidet() and lines is self.lines else "")):
                 return
         self.job_t0 = time.time()
+        self.marken = (self.info or {}).get("marken") if lines is self.lines else None
+        self._marken_idx = [m[0] for m in self.marken] if self.marken else None
         self.prog["value"] = 0
         self._log(T('{0} gestartet').format(name))
 
@@ -2194,6 +2212,7 @@ class App:
                 text=T("{p} %   noch ~{min:.0f} min").format(p=done * 100 // tot,
                                                              min=rest / 60)
                 + (T("   {n} Fehler").format(n=er) if er else ""))
+            self.lbl_marke.configure(text=self._marke_text(done))
         elif k == "jobend":
             name, res = d
             txt = {"fertig": T("fertig"),
@@ -2202,6 +2221,7 @@ class App:
                    "verbindung": T("Verbindung verloren"),
                    "fehler": T("zu viele Übertragungsfehler")}.get(res, res)
             self.lbl_prog.configure(text=T('{0}: {1}').format(name, txt))
+            self.lbl_marke.configure(text="")
             self._log(T('{0}: {1}').format(name, txt))
             self._melde(f"{name}: {txt}")
             if res != "fertig":
@@ -2252,6 +2272,21 @@ class App:
                 antwort.put(T("Fehler: {e}").format(e=e))
 
     # ============================================================ Telegram
+    def _marke_text(self, done):
+        """Bei welcher Zeile oder Kontur steht er gerade?
+
+        Wie der Schichtzaehler am 3D-Drucker: der Prozentwert sagt wenig
+        darueber, wo im Bild der Kopf ist.
+        """
+        if not getattr(self, "_marken_idx", None):
+            return ""
+        i = bisect.bisect_right(self._marken_idx, done) - 1
+        if i < 0:
+            return ""
+        _, art, nr, gesamt = self.marken[i]
+        return (T("Zeile {nr} von {n}") if art == "zeile"
+                else T("Kontur {nr} von {n}")).format(nr=nr, n=gesamt)
+
     def _melde(self, t):
         if self.fern is not None:
             self.fern.melde(t)

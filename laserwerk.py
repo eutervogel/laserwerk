@@ -1486,7 +1486,8 @@ class App:
         if not p:
             return
         self.clear_motif()
-        self.lines = [l for l in (x.split(";")[0].strip() for x in open(p)) if l]
+        with open(p) as f:
+            self.lines = [l for l in (x.split(";")[0].strip() for x in f) if l]
         png, (x0, y0, x1, y1), info = J.gcode_preview(self.lines, (CANVAS - 20) / self.area)
         if info is None:
             messagebox.showerror(T("G-Code"), T("Keine Fahrbewegungen in der Datei gefunden."))
@@ -1504,6 +1505,7 @@ class App:
         # G91 = relative Fahrten. Dann haengt alles davon ab, wo der Kopf
         # beim Start steht - bei unseren eigenen Dateien nie der Fall.
         rel = any(re.match(r"\s*G0*91\b", l.upper()) for l in self.lines)
+        zb = J.z_extent(self.lines)
         neg = x0 < -0.01 or y0 < -0.01
         self.lbl_info.configure(text=(
             T("{datei}\n"
@@ -1518,7 +1520,9 @@ class App:
             + (T("\nHinweis: negative Koordinaten - Nullpunkt\n"
                  "liegt nicht links unten!") if neg else "")
             + (T("\nHinweis: nutzt G91 - die Datei fährt relativ!\n"
-                 "Erst auf den Startpunkt fahren.") if rel else "")))
+                 "Erst auf den Startpunkt fahren.") if rel else "")
+            + (T("\nZ von {u:.2f} bis {o:.2f} mm").format(u=zb[0], o=zb[1])
+               if zb else "")))
         self._draw()
 
     # ================================================================ Material
@@ -2072,6 +2076,21 @@ class App:
         # Nicht die Spanne pruefen, sondern wo der Kopf wirklich hin muss.
         # Die Spanne verschweigt einen Job, der weit draussen liegt, und
         # verbietet einen, der nur zum Nullpunkt zurueckfaehrt.
+        # Tiefer als das Material heisst: in die Unterlage. Beim Lasern
+        # kommt Z nur im Fokustest vor und liegt dort ueber null.
+        z = J.z_extent(lines)
+        if z and z[0] < -0.01:
+            try:
+                dicke = float(self.v_dicke.get())
+            except tk.TclError:
+                dicke = 0.0
+            if dicke > 0 and z[0] < -(dicke + 0.5):
+                if not messagebox.askokcancel(T("Tiefe"),
+                        T("Die Datei geht bis Z {z:.2f} mm hinunter, das "
+                          "Material ist {d:.2f} mm dick.\n\n"
+                          "Das schneidet in die Unterlage. Trotzdem "
+                          "starten?").format(z=z[0], d=dicke)):
+                    return
         x0, x1, y0, y1 = J.extent(lines)
         xm, ym = float(self.cfg["x_max"]), float(self.cfg["y_max"])
         if x1 > xm + 0.05 or y1 > ym + 0.05 or x0 < -0.05 or y0 < -0.05:

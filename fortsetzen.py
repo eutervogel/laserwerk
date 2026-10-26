@@ -63,18 +63,31 @@ def position(s):
 
 
 def endpunkte(lines):
-    """Endposition (x, y) nach jeder Zeile, dazu zuletzt gueltiges F."""
-    x = y = 0.0
+    """Endposition (x, y, z) nach jeder Zeile, dazu zuletzt gueltiges F.
+
+    Z gehoert dazu, sobald die Datei zustellt (Fraesen, mehrere Tiefen):
+    dort liegen Bahnen uebereinander, und ohne Z waere fast jede Stelle
+    mehrdeutig - das Skript wuerde abbrechen, obwohl sie mit der Tiefe
+    eindeutig bestimmbar ist.
+    """
+    x = y = z = 0.0
     feed = None
     out = []
     for l in lines:
         mx = re.search(r"X([-\d.]+)", l); my = re.search(r"Y([-\d.]+)", l)
+        mz = re.search(r"Z([-\d.]+)", l)
         mf = re.search(r"F([\d.]+)", l)
         if mx: x = float(mx.group(1))
         if my: y = float(my.group(1))
+        if mz: z = float(mz.group(1))
         if mf: feed = float(mf.group(1))
-        out.append((x, y, feed, bool(mx or my)))
+        out.append((x, y, z, feed, bool(mx or my or mz)))
     return out
+
+
+def hat_z(lines):
+    """Stellt die Datei Z zu? Reine Lasergravuren tun das nicht."""
+    return any(re.search(r"Z[-\d.]", l) for l in lines)
 
 
 def main():
@@ -99,12 +112,16 @@ def main():
     state, mpos, wco, wpos = position(s)
     print(T("Port {p}").format(p=p))
     print(T("Zustand {z}   MPos {m}   WCO {w}").format(
-        z=state, m=mpos[:2], w=wco[:2]))
-    print(T("Werkstueckposition  X {x:.3f}  Y {y:.3f}").format(
-        x=wpos[0], y=wpos[1]))
+        z=state, m=mpos[:3], w=wco[:3]))
+    print(T("Werkstueckposition  X {x:.3f}  Y {y:.3f}  Z {z:.3f}").format(
+        x=wpos[0], y=wpos[1], z=wpos[2]))
 
-    treffer = [i for i, (x, y, f, bew) in enumerate(ep)
-               if bew and abs(x - wpos[0]) <= TOL and abs(y - wpos[1]) <= TOL]
+    # Z nur vergleichen, wenn die Datei es ueberhaupt anfaehrt - sonst steht
+    # der Kopf auf irgendeiner Fokushoehe und kein Treffer passt.
+    mit_z = hat_z(lines)
+    treffer = [i for i, (x, y, z, f, bew) in enumerate(ep)
+               if bew and abs(x - wpos[0]) <= TOL and abs(y - wpos[1]) <= TOL
+               and (not mit_z or abs(z - wpos[2]) <= TOL)]
     if not treffer:
         s.close()
         sys.exit(T("Keine Zeile endet an dieser Position - wurde der Controller "
@@ -116,7 +133,7 @@ def main():
         s.close()
         sys.exit(T("Stelle nicht eindeutig - nicht automatisch fortsetzen."))
     idx = treffer[0]
-    feed = next((ep[i][2] for i in range(idx, -1, -1) if ep[i][2]), 1000.0)
+    feed = next((ep[i][3] for i in range(idx, -1, -1) if ep[i][3]), 1000.0)
     rest = lines[idx + 1:]
     print(T("\nStopp-Stelle gefunden: nach Zeile {i} von {n} ({p:.1f} %)").format(
         i=idx + 1, n=len(lines), p=(idx + 1) * 100 / len(lines)))

@@ -547,8 +547,8 @@ EN = {
         "Position not readable (no MPos/WCO received).",
     "Port {p}": "Port {p}",
     "Zustand {z}   MPos {m}   WCO {w}": "State {z}   MPos {m}   WCO {w}",
-    "Werkstueckposition  X {x:.3f}  Y {y:.3f}":
-        "Workpiece position  X {x:.3f}  Y {y:.3f}",
+    "Werkstueckposition  X {x:.3f}  Y {y:.3f}  Z {z:.3f}":
+        "Workpiece position  X {x:.3f}  Y {y:.3f}  Z {z:.3f}",
     "Keine Zeile endet an dieser Position - wurde der Controller "
     "zurueckgesetzt oder der Kopf bewegt? Dann nicht fortsetzen.":
         "No line ends at this position - was the controller reset or the head "
@@ -743,4 +743,10 @@ EN = {
     "{n} Ebenen aus {d}: {f}": "{n} layers from {d}: {f}",
     "Zeile {nr} von {n}": "Row {nr} of {n}",
     "Kontur {nr} von {n}": "Contour {nr} of {n}",
+    "Tiefe": "Depth",
+    "Die Datei geht bis Z {z:.2f} mm hinunter, das Material ist {d:.2f} mm "
+    "dick.\n\nDas schneidet in die Unterlage. Trotzdem starten?":
+        "The file goes down to Z {z:.2f} mm, the material is {d:.2f} mm "
+        "thick.\n\nThat cuts into the bed. Start anyway?",
+    "\nZ von {u:.2f} bis {o:.2f} mm": "\nZ from {u:.2f} to {o:.2f} mm",
 }

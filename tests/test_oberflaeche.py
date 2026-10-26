@@ -1305,3 +1305,66 @@ class MotivFolgtDemRahmen(Grundlage):
     def test_zahlenfeld_wirkt_genauso(self):
         self.app.v_xoff.set(55.0)
         self.assertNotIn("ergebnis", self.app.elemente[0])
+
+
+class Tiefe(Grundlage):
+    """Fraesen: geht die Datei tiefer als das Material, schneidet sie in
+    die Unterlage. Beim Lasern ist Z konstant, da darf nichts fragen."""
+
+    def tasche(self, tiefe):
+        return ["G21", "G90", "G0 Z5.000", "G0 X10.000 Y10.000",
+                f"G1 Z{-tiefe:.3f} F200", "G1 X50.000 F600",
+                "G1 Y40.000", "G0 Z5.000", "G0 X0.000 Y0.000"]
+
+    def setUp(self):
+        super().setUp()
+        self.gefragt = []
+        self.antwort = True
+        self.L.messagebox.askokcancel = lambda t, m: (
+            self.gefragt.append(m), self.antwort)[1]
+        self.app.v_dicke.set(12.0)
+
+    def test_zu_tief_wird_gefragt(self):
+        self.app._run(self.tasche(18.0), "Test")
+        self.assertTrue(self.gefragt)
+        self.assertIn("18", self.gefragt[0])
+
+    def test_abbrechen_startet_nicht(self):
+        self.antwort = False
+        self.app.grbl.protokoll.clear()
+        self.app._run(self.tasche(18.0), "Test")
+        self.assertFalse([z for z in self.app.grbl.protokoll
+                          if z.startswith("JOB")])
+
+    def test_im_material_bleibt_still(self):
+        self.app._run(self.tasche(6.0), "Test")
+        self.assertEqual(self.gefragt, [])
+
+    def test_knapp_durch_ist_erlaubt(self):
+        """Durchfraesen heisst bis knapp unter die Materialunterkante -
+        ein halber Millimeter Zugabe ist normal, keine Warnung wert."""
+        self.app._run(self.tasche(12.3), "Test")
+        self.assertEqual(self.gefragt, [])
+
+    def test_ohne_materialdicke_keine_frage(self):
+        self.app.v_dicke.set(0.0)
+        self.app._run(self.tasche(18.0), "Test")
+        self.assertEqual(self.gefragt, [])
+
+    def test_gravur_ohne_z_fragt_nicht(self):
+        self.app._run(["G21", "G90", "G1 X10.000 Y10.000 S300 F1000"], "Test")
+        self.assertEqual(self.gefragt, [])
+
+    def test_infotext_nennt_die_z_spanne(self):
+        """Geladene Fremddateien: die Z-Spanne gehoert mit ins Infofeld,
+        sonst sieht man erst beim Start, dass die Datei zustellt."""
+        import tempfile
+        f = tempfile.NamedTemporaryFile("w", suffix=".nc", delete=False)
+        f.write("\n".join(self.tasche(2.0)) + "\n")
+        f.close()
+        self.L.filedialog.askopenfilename = lambda **k: f.name
+        self.app.load_gcode()
+        text = self.app.lbl_info.cget("text")
+        self.assertIn("Z", text)
+        self.assertIn("-2.00", text)
+        self.assertIn("5.00", text)

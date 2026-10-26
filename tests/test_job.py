@@ -303,3 +303,29 @@ class Bildkorrektur(unittest.TestCase):
     def test_auto_bei_einfarbigem_bild(self):
         flach = Image.fromarray(np.full((50, 50), 128, dtype=np.uint8))
         self.assertEqual(J.auto_tonwerte(flach), (0.0, 0.0))
+
+
+class ZAusdehnung(unittest.TestCase):
+    """Fuer die Fraese: wie tief geht die Datei?"""
+
+    TASCHE = ["G21", "G90", "G0 Z5.000", "G0 X10 Y10",
+              "G1 Z-1.000 F200", "G1 X50 F600", "G1 Y40",
+              "G0 Z5.000", "G1 Z-2.500 F200", "G1 X10", "G0 Z5.000"]
+
+    def test_tiefster_und_hoechster_wert(self):
+        self.assertEqual(J.z_extent(self.TASCHE), (-2.5, 5.0))
+
+    def test_ohne_z_kommt_nichts(self):
+        self.assertIsNone(J.z_extent(["G1 X10 Y10 F600", "G1 X20"]))
+
+    def test_kommentare_zaehlen_nicht(self):
+        self.assertIsNone(J.z_extent(["G1 X10 ; Z-9 waere falsch"]))
+
+    def test_kleinschreibung(self):
+        self.assertEqual(J.z_extent(["g1 z-3.0 f200"]), (-3.0, -3.0))
+
+    def test_fokustest_bleibt_ueber_null(self):
+        """Beim Lasern kommt Z nur im Fokustest vor - und dort oberhalb
+        des Materials. Die Tiefenabfrage darf da nicht anspringen."""
+        g, _ = J.fokustest_z(12.0, 4.0, 1.0, 120, 1000)
+        self.assertGreater(J.z_extent(g)[0], 0.0)

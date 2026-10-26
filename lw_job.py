@@ -408,6 +408,25 @@ def extent(lines):
     return min(xs), max(xs), min(ys), max(ys)
 
 
+def z_extent(lines):
+    """Tiefster und hoechster Z-Wert einer Datei, oder None ohne Z.
+
+    Beim Lasern kommt Z hoechstens im Fokustest vor; beim Fraesen ist es
+    die Zustellung, und zu tief heisst: in die Unterlage.
+    """
+    import re
+    werte = []
+    for l in lines:
+        c = l.split(";")[0].upper()
+        m = re.search(r"Z(-?[\d.]+)", c)
+        if m:
+            try:
+                werte.append(float(m.group(1)))
+            except ValueError:
+                pass
+    return (min(werte), max(werte)) if werte else None
+
+
 def brenn_extent(lines):
     """Ausdehnung dessen, was wirklich gebrannt wird.
 

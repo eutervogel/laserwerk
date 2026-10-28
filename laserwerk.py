@@ -241,10 +241,18 @@ class App:
         f = self.tab_motiv
         ob = ttk.Frame(f)
         ob.grid(row=0, column=0, columnspan=3, sticky="ew")
-        ttk.Button(ob, text=T("Datei öffnen …"), command=self.open_image
+        o1 = ttk.Frame(ob)
+        o1.pack(fill="x")
+        ttk.Button(o1, text=T("Datei öffnen …"), command=self.open_image
                    ).pack(side="left", fill="x", expand=True)
-        ttk.Button(ob, text=T("Entfernen"), command=self.element_entfernen
+        ttk.Button(o1, text=T("Entfernen"), command=self.element_entfernen
                    ).pack(side="left", padx=(4, 0))
+        o2 = ttk.Frame(ob)
+        o2.pack(fill="x", pady=(4, 0))
+        ttk.Button(o2, text=T("Rechteck …"), command=self.form_dialog
+                   ).pack(side="left", fill="x", expand=True)
+        ttk.Button(o2, text=T("Rahmen …"), command=self.rahmen_dialog
+                   ).pack(side="left", fill="x", expand=True, padx=(4, 0))
         self.lb_el = tk.Listbox(f, height=4, exportselection=False,
                                 activestyle="none")
         self.lb_el.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 2))
@@ -769,6 +777,129 @@ class App:
             self._ebenen_anbieten()
         return True
 
+    # ----------------------------------------------------------- Formen
+    # Eine gezeichnete Form ist ein ganz normales Element, nur ohne Datei:
+    # Konturen im selben Format wie aus einer SVG. Gespeichert werden ihre
+    # Parameter, nicht ein eingebettetes Bild - das ist kleiner, exakt und
+    # altert nicht.
+    def _form_anlegen(self, form, anzeige):
+        if self.grbl.job_running:
+            messagebox.showinfo(T("Motiv"), T("Während eines Jobs nicht möglich."))
+            return False
+        try:
+            polys = V.form(form)
+        except (ValueError, KeyError) as e:
+            messagebox.showerror(T("Form"), str(e))
+            return False
+        self._element_sichern()
+        self._verwerfen()
+        im = V.render_preview(polys)
+        self.src, self.src_path, self.vec = im, None, polys
+        self.quelle_pfad = None
+        self.vec_bb = V.bbox(polys)
+        self.vec_voll = polys
+        self.ebene = None
+        self._vecdreh = self._live_cache = None
+        self.v_rot.set(0)
+        self.v_job.set("schnitt")          # eine Form ist zum Schneiden da
+        self.lbl_src.configure(text=anzeige)
+        self.elemente.append({"anzeige": anzeige, "src": im, "vec": polys,
+                              "vec_voll": polys, "vec_bb": self.vec_bb,
+                              "pfad": None, "quelle": None, "form": dict(form)})
+        self.aktiv = len(self.elemente) - 1
+        # 1:1, nicht einpassen: ein Rechteck von 80 x 50 soll 80 x 50 sein.
+        self.v_w.set(round(float(form["b"]), 2))
+        self.v_h.set(round(float(form["h"]), 2))
+        self._element_sichern()
+        self._liste_auffrischen()
+        self._gen_knopf()
+        self._draw()
+        return True
+
+    def form_rechteck(self, b, h, radius=0.0):
+        return self._form_anlegen({"art": "rechteck", "b": b, "h": h, "r": radius},
+                                  T("Rechteck {b:g} × {h:g} mm").format(b=b, h=h))
+
+    def rahmen_um_motiv(self, abstand, radius=0.0):
+        """Rechteck um das gewaehlte Element, mit Abstand ringsum."""
+        kasten = self._box()
+        if kasten is None:
+            messagebox.showinfo(T("Rahmen"), T("Erst ein Motiv wählen."))
+            return False
+        name = self.elemente[self.aktiv]["anzeige"] if self.elemente else ""
+        x, y, b, h = kasten
+        nb, nh = b + 2 * abstand, h + 2 * abstand
+        if nb <= 0 or nh <= 0:
+            messagebox.showinfo(T("Rahmen"),
+                T("Der Abstand ist so negativ, dass nichts übrig bleibt."))
+            return False
+        if not self._form_anlegen({"art": "rechteck", "b": nb, "h": nh, "r": radius},
+                                  T("Rahmen um {name}").format(name=name)):
+            return False
+        self._set_box(x - abstand, y - abstand)
+        if x - abstand < -0.005 or y - abstand < -0.005:
+            self._log(T("Der Rahmen ragt über den Werkstückrand hinaus - "
+                        "er wurde an die Kante gesetzt."))
+        self._element_sichern()
+        self._raender_zeigen()
+        self._draw()
+        return True
+
+    def _masse_fragen(self, titel, felder):
+        """Kleiner Dialog mit Zahlenfeldern. Gibt die Werte oder None."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(titel)
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+        vars_ = {}
+        for i, (schluessel, beschriftung, vorgabe) in enumerate(felder):
+            ttk.Label(dlg, text=T(beschriftung)).grid(
+                row=i, column=0, sticky="w", padx=8, pady=4)
+            v = tk.DoubleVar(value=vorgabe)
+            vars_[schluessel] = v
+            e = ttk.Entry(dlg, textvariable=v, width=8)
+            e.grid(row=i, column=1, padx=4, pady=4)
+            ttk.Label(dlg, text="mm").grid(row=i, column=2, sticky="w", padx=(0, 8))
+            if i == 0:
+                e.focus_set()
+                e.select_range(0, "end")
+        aus = {}
+
+        def ok(*_):
+            try:
+                aus.update({k: float(v.get()) for k, v in vars_.items()})
+            except tk.TclError:
+                messagebox.showerror(T("Eingabe"), T("Zahlenfeld ungültig."))
+                return
+            dlg.destroy()
+
+        kn = ttk.Frame(dlg)
+        kn.grid(row=len(felder), column=0, columnspan=3, sticky="e", padx=8, pady=8)
+        ttk.Button(kn, text=T("Abbrechen"), command=dlg.destroy).pack(side="right")
+        ttk.Button(kn, text=T("OK"), command=ok).pack(side="right", padx=(0, 6))
+        dlg.bind("<Return>", ok)
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.grab_set()
+        self.root.wait_window(dlg)
+        return aus or None
+
+    def form_dialog(self):
+        w = self._masse_fragen(T("Rechteck"),
+                               [("b", "Breite", 80.0), ("h", "Höhe", 50.0),
+                                ("r", "Eckradius", 0.0)])
+        if w:
+            self.form_rechteck(w["b"], w["h"], w["r"])
+
+    def rahmen_dialog(self):
+        if self._box() is None:
+            messagebox.showinfo(T("Rahmen"), T("Erst ein Motiv wählen."))
+            return
+        w = self._masse_fragen(T("Rahmen ums Motiv"),
+                               [("a", "Abstand ringsum", 5.0),
+                                ("r", "Eckradius", 0.0)])
+        if w:
+            self.rahmen_um_motiv(w["a"], w["r"])
+
     def _ebenen_anbieten(self):
         """Mehrfarbige Zeichnung in Ebenen aufteilen.
 
@@ -950,6 +1081,8 @@ class App:
         werte["gewaehlt"] = self.aktiv
         elemente = [{"anzeige": e["anzeige"],
                      "quelle": e.get("quelle") or e["pfad"],
+                     # Gezeichnete Formen haben keine Vorlage, nur Zahlen
+                     "form": e.get("form"),
                      "werte": {k: e[k] for k in self.ELEMENTFELDER if k in e}}
                     for e in self.elemente]
         try:
@@ -995,15 +1128,20 @@ class App:
                                 if s in d["werte"]}}]
         self.clear_motif()
         for nr, el in enumerate(liste):
-            quelle, name = PR.vorlage_auspacken(el, ordner, nr)
-            if not quelle:
-                messagebox.showerror(T("Projekt"),
-                    T("Die Vorlage '{name}' steckt nicht in der Datei und liegt "
-                      "nicht mehr am gemerkten Ort.").format(name=name))
-                return
-            if not self.lade_motiv(quelle, anzeige=el.get("anzeige") or name,
-                                   fragen=False):
-                return
+            if el.get("form"):
+                if not self._form_anlegen(el["form"],
+                                          el.get("anzeige") or T("Rechteck")):
+                    return
+            else:
+                quelle, name = PR.vorlage_auspacken(el, ordner, nr)
+                if not quelle:
+                    messagebox.showerror(T("Projekt"),
+                        T("Die Vorlage '{name}' steckt nicht in der Datei und liegt "
+                          "nicht mehr am gemerkten Ort.").format(name=name))
+                    return
+                if not self.lade_motiv(quelle, anzeige=el.get("anzeige") or name,
+                                       fragen=False):
+                    return
             self._still = True
             try:
                 for feld, wert in (el.get("werte") or {}).items():
@@ -1050,6 +1188,15 @@ class App:
         if hasattr(self, "lb_el"):
             self._liste_auffrischen()
         self._draw()
+
+    def _quellname(self):
+        """Name fuer die Kommentarzeile im G-Code. Eine gezeichnete Form hat
+        keine Datei - dann steht dort ihr Name aus der Liste."""
+        if self.src_path:
+            return os.path.basename(self.src_path)
+        if 0 <= self.aktiv < len(self.elemente):
+            return self.elemente[self.aktiv].get("anzeige", "")
+        return ""
 
     def _vec_bbox(self):
         """Exakte Ausdehnung der Konturen in mm (aus der Datei, nicht geschätzt)."""
@@ -1348,7 +1495,7 @@ class App:
                 src = V.render_preview(V.flatten(self.vec, 1.0),
                                        px=min(need, 6000),
                                        bezug=V.flatten(self.vec_voll, 1.0))
-        elif self.src_path.lower().endswith(".svg"):
+        elif self.src_path and self.src_path.lower().endswith(".svg"):
             # SVG in passender Aufloesung neu rendern: scharfe Kanten
             if need > src.width * 1.2:
                 src = J.autocrop(J.load_source(self.src_path, need), 245)
@@ -1391,7 +1538,7 @@ class App:
             p, line, self._s(s), f,
             s_min=self._s(self._s_unten(s)) if self.v_mode.get() == "grau" else 0,
             overscan=over, x_off=xoff, y_off=yoff,
-            kommentar=os.path.basename(self.src_path)
+            kommentar=self._quellname()
                       + ("  RUECKSEITE" if sp != "nein" else ""))
         self.preview_pil = J.preview_image(p)
         self.preview_img = None
@@ -1458,7 +1605,7 @@ class App:
         cs, cf = self._schnittwerte()
         passes = max(1, self.v_passes.get())
         g, ci = V.cut_gcode(polys, self._s(cs), cf, passes,
-                            kommentar=os.path.basename(self.src_path or ""))
+                            kommentar=self._quellname())
         # Die Rueckfahrt am Ende der Gravur faellt weg, der Schnitt faengt
         # ohnehin mit einer eigenen Anfahrt an.
         if self.lines and self.lines[-1].startswith("G0 X0 Y0"):
@@ -1488,7 +1635,7 @@ class App:
         sp = self.v_spiegel.get()
         passes = max(1, self.v_passes.get())
         self.lines, self.info = V.cut_gcode(polys, self._s(s), f, passes,
-                                            kommentar=os.path.basename(self.src_path))
+                                            kommentar=self._quellname())
         self.cut_polys = polys
         self.preview_img = None
         self._gen_knopf()

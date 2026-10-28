@@ -48,6 +48,10 @@ Material ausprobieren will.
   Werkstück: jedes Element mit eigener Datei, eigener Platzierung und eigenen
   Werten, gemeinsam in einer Vorschau, einem G-Code und einer Projektdatei.
   Erst wird alles graviert, dann alles geschnitten.
+- **Formen zeichnen** — ein Rechteck mit Maßen und Eckradius, oder gleich ein
+  Rahmen um das gewählte Motiv mit einem Abstand ringsum. Braucht keine
+  Zeichensoftware für den einfachen Fall und steht danach als ganz normales
+  Element da. In der Projektdatei stehen nur die paar Zahlen, kein Bild.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
   darauf schieben und an den Ecken skalieren, mit Einrasten auf Kanten, Ecken
   und Mitte. Drehen in beliebigen Winkeln, nicht nur in 90er-Schritten.
@@ -210,7 +214,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-238 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+258 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

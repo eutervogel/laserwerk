@@ -755,4 +755,22 @@ EN = {
     "nur schneiden, nicht gravieren.":
         "Width and height must be greater than 0.\n\n"
         "A straight line has no area - it can only be cut, not engraved.",
+    "Rechteck …": "Rectangle …",
+    "Rahmen …": "Frame …",
+    "Rechteck": "Rectangle",
+    "Rahmen ums Motiv": "Frame around the artwork",
+    "Form": "Shape",
+    "Eckradius": "Corner radius",
+    "Abstand ringsum": "Margin all round",
+    "Rechteck {b:g} × {h:g} mm": "Rectangle {b:g} × {h:g} mm",
+    "Rahmen um {name}": "Frame around {name}",
+    "Erst ein Motiv wählen.": "Select an element first.",
+    "Der Abstand ist so negativ, dass nichts übrig bleibt.":
+        "The margin is so negative that nothing is left.",
+    "Der Rahmen ragt über den Werkstückrand hinaus - "
+    "er wurde an die Kante gesetzt.":
+        "The frame sticks out past the edge of the workpiece - "
+        "it was placed at the edge.",
+    "OK": "OK",
+    "Abbrechen": "Cancel",
 }

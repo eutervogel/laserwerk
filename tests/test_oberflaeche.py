@@ -1526,3 +1526,141 @@ class Skalieren(Grundlage):
         a = self.app._aspect()
         self.assertAlmostEqual(self.app.v_w.get() / self.app.v_h.get(), a,
                                places=2)
+
+
+class GezeichneteFormen(Grundlage):
+    """Rechteck und Rahmen aus dem Programm heraus, ohne Datei."""
+
+    def test_rechteck_wird_ein_element(self):
+        self.assertTrue(self.app.form_rechteck(80.0, 50.0))
+        self.assertEqual(len(self.app.elemente), 1)
+        self.assertEqual(self.app.v_job.get(), "schnitt")
+        self.assertEqual((self.app.v_w.get(), self.app.v_h.get()), (80.0, 50.0))
+        self.assertIsNone(self.app.src_path)
+
+    def test_rechteck_bleibt_massgenau(self):
+        """1:1, nicht eingepasst - 80 x 50 soll 80 x 50 ergeben."""
+        self.app.form_rechteck(80.0, 50.0)
+        self.app.v_xoff.set(10.0); self.app.v_yoff.set(5.0)
+        self.app.generate()
+        self.assertIsNotNone(self.app.lines)
+        x0, x1, y0, y1 = J.brenn_extent(self.app.lines)
+        self.assertAlmostEqual(x1 - x0, 80.0, delta=0.05)
+        self.assertAlmostEqual(y1 - y0, 50.0, delta=0.05)
+        self.assertAlmostEqual(x0, 10.0, delta=0.05)
+        self.assertAlmostEqual(y0, 5.0, delta=0.05)
+
+    def test_null_masse_werden_abgelehnt(self):
+        self.gezeigt.clear()
+        self.assertFalse(self.app.form_rechteck(0.0, 50.0))
+        self.assertTrue(self.gezeigt)
+
+    def test_rahmen_legt_sich_um_das_motiv(self):
+        self.motiv(400, 200)
+        self.app.v_w.set(80.0); self.app.v_h.set(40.0)
+        self.app.v_xoff.set(20.0); self.app.v_yoff.set(15.0)
+        self.assertTrue(self.app.rahmen_um_motiv(5.0))
+        self.assertEqual(len(self.app.elemente), 2)
+        self.assertEqual((self.app.v_w.get(), self.app.v_h.get()), (90.0, 50.0))
+        self.assertEqual((self.app.v_xoff.get(), self.app.v_yoff.get()),
+                         (15.0, 10.0))
+
+    def test_rahmen_ist_konzentrisch_zum_motiv(self):
+        self.motiv(400, 200)
+        self.app.v_w.set(80.0); self.app.v_h.set(40.0)
+        self.app.v_xoff.set(20.0); self.app.v_yoff.set(15.0)
+        mx = 20.0 + 80.0 / 2
+        my = 15.0 + 40.0 / 2
+        self.app.rahmen_um_motiv(7.5)
+        x, y, b, h = self.app._box()
+        self.assertAlmostEqual(x + b / 2, mx, places=2)
+        self.assertAlmostEqual(y + h / 2, my, places=2)
+
+    def test_rahmen_am_rand_wird_gemeldet(self):
+        self.motiv(400, 200)
+        self.app.v_w.set(80.0); self.app.v_h.set(40.0)
+        self.app.v_xoff.set(1.0); self.app.v_yoff.set(1.0)
+        self.app.rahmen_um_motiv(5.0)
+        self.assertEqual(self.app.v_xoff.get(), 0.0)
+        self.assertEqual(self.app.v_yoff.get(), 0.0)
+
+    def test_ohne_motiv_kein_rahmen(self):
+        self.gezeigt.clear()
+        self.assertFalse(self.app.rahmen_um_motiv(5.0))
+        self.assertTrue(self.gezeigt)
+
+    def test_gravur_und_rahmen_in_einem_lauf(self):
+        self.motiv(400, 200)
+        self.app.v_mode.set("schwelle")
+        self.app.v_w.set(60.0); self.app.v_h.set(30.0)
+        self.app.v_xoff.set(20.0); self.app.v_yoff.set(20.0)
+        self.app.rahmen_um_motiv(5.0)
+        self.app.generate()
+        self.assertIsNotNone(self.app.lines)
+        x0, x1, y0, y1 = J.brenn_extent(self.app.lines)
+        self.assertAlmostEqual(x0, 15.0, delta=0.2)      # Rahmenkante
+        self.assertAlmostEqual(x1, 85.0, delta=0.2)
+
+    def test_projekt_haelt_die_form_ohne_datei(self):
+        import tempfile, os
+        self.app.form_rechteck(70.0, 45.0, 3.0)
+        self.app.v_xoff.set(12.0)
+        p = os.path.join(tempfile.mkdtemp(prefix="laserwerk-form-"), "p.lwp")
+        self.L.filedialog.asksaveasfilename = lambda **k: p
+        self.app.save_project()
+        self.assertTrue(os.path.exists(p))
+        import json
+        with open(p) as f:
+            d = json.load(f)
+        self.assertEqual(d["elemente"][0]["form"]["art"], "rechteck")
+        self.assertNotIn("vorlage", d["elemente"][0])     # kein Bild eingebettet
+        self.app.clear_motif()
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_project()
+        self.assertEqual(len(self.app.elemente), 1)
+        self.assertEqual(self.app.elemente[0]["form"]["r"], 3.0)
+        self.assertEqual((self.app.v_w.get(), self.app.v_h.get()), (70.0, 45.0))
+        self.assertEqual(self.app.v_xoff.get(), 12.0)
+
+    def test_form_laesst_sich_verschieben_und_ziehen(self):
+        import types
+        self.app.form_rechteck(60.0, 40.0)
+        self.app.v_bw.set(200.0); self.app.v_bh.set(120.0)
+        self.app.v_xoff.set(20.0); self.app.v_yoff.set(20.0)
+        self.app.v_snap.set(False)
+        x, y, b, h = self.app._box()
+        p = self.app._mm(x + b / 2, y + h / 2)
+        q = self.app._mm(x + b / 2 + 10.0, y + h / 2)
+        self.app._press(types.SimpleNamespace(x=int(round(p[0])), y=int(round(p[1]))))
+        self.assertEqual(self.app.drag[0], "move")
+        self.app._drag_move(types.SimpleNamespace(x=int(round(q[0])),
+                                                  y=int(round(q[1]))))
+        self.app.drag = None
+        self.assertAlmostEqual(self.app.v_xoff.get(), 30.0, delta=1.0)
+
+    def _dialog_bedienen(self, knopf):
+        """Den naechsten modalen Dialog anklicken, sobald er da ist."""
+        def tun():
+            for k in self.wurzel.winfo_children():
+                if k.winfo_class() == "Toplevel":
+                    for kind in k.winfo_children():
+                        for b in kind.winfo_children():
+                            if b.winfo_class() == "TButton" and \
+                                    b.cget("text") == knopf:
+                                b.invoke()
+                                return
+                    k.destroy()
+                    return
+            self.wurzel.after(50, tun)
+        self.wurzel.after(50, tun)
+
+    def test_dialog_liefert_die_werte(self):
+        self._dialog_bedienen("OK")
+        w = self.app._masse_fragen("Rechteck", [("b", "Breite", 80.0),
+                                                ("h", "Höhe", 50.0)])
+        self.assertEqual(w, {"b": 80.0, "h": 50.0})
+
+    def test_dialog_abbrechen_gibt_nichts(self):
+        self._dialog_bedienen("Abbrechen")
+        self.assertIsNone(self.app._masse_fragen(
+            "Rechteck", [("b", "Breite", 80.0)]))

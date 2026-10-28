@@ -488,6 +488,12 @@ def flatten(subs, scale, tol_mm=0.15):
     """Unterpfade -> Polylinien. scale = mm am Werkstueck je SVG-mm."""
     polys = []
     for sp in subs:
+        if "seg" not in sp:
+            # Schon flach: im Programm gezeichnete Formen bestehen von
+            # vornherein aus Punkten. Flachmachen ist dann nichts zu tun.
+            polys.append({"pts": list(sp["pts"]), "closed": sp["closed"],
+                          "farbe": sp.get("farbe", "#000000")})
+            continue
         pts = []
         for s in sp["seg"]:
             if not pts:
@@ -560,6 +566,38 @@ def farben(subs):
 def nur_farbe(subs, farbe):
     """Unterpfade einer Farbe herausziehen."""
     return [sp for sp in subs or () if sp.get("farbe", "#000000") == farbe]
+
+
+# ------------------------------------------------------------------ Formen
+# Im Programm gezeichnete Formen sind nichts anderes als Konturen im
+# gleichen Format wie aus einer SVG - alles dahinter (einpassen, drehen,
+# platzieren, schneiden) gilt unveraendert. In der Projektdatei stehen
+# darum nicht Bilddaten, sondern diese paar Zahlen.
+def rechteck(b, h, radius=0.0, schritte=8):
+    """Rechteck b x h mm, linke untere Ecke auf (0, 0), Ecken optional rund."""
+    b, h = float(b), float(h)
+    if b <= 0 or h <= 0:
+        raise ValueError("Breite und Hoehe muessen groesser als 0 sein")
+    r = max(0.0, min(float(radius), b / 2, h / 2))
+    if r <= 0:
+        pts = [(0.0, 0.0), (b, 0.0), (b, h), (0.0, h)]
+    else:
+        pts = []
+        # Vier Viertelkreise gegen den Uhrzeigersinn, beginnend rechts unten
+        for cx, cy, a0 in ((b - r, r, -90.0), (b - r, h - r, 0.0),
+                           (r, h - r, 90.0), (r, r, 180.0)):
+            for i in range(schritte + 1):
+                a = math.radians(a0 + 90.0 * i / schritte)
+                pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return [{"pts": pts, "closed": True, "farbe": "#000000"}]
+
+
+def form(d):
+    """Form aus ihren Parametern bauen, so wie sie im Projekt steht."""
+    art = d.get("art", "rechteck")
+    if art == "rechteck":
+        return rechteck(d["b"], d["h"], d.get("r", 0.0))
+    raise ValueError("unbekannte Form: %s" % art)
 
 
 def bbox(polys):

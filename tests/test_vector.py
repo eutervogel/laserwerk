@@ -200,3 +200,57 @@ class Farben(unittest.TestCase):
         a = V.render_preview(polys, 400)
         b = V.render_preview(rot, 400, bezug=polys)
         self.assertEqual(a.size, b.size)
+
+
+class Formen(unittest.TestCase):
+    """Im Programm gezeichnete Formen - gleiche Konturen wie aus einer SVG."""
+
+    def test_rechteck_hat_die_masse(self):
+        p = V.rechteck(80.0, 50.0)
+        x0, y0, x1, y1 = V.bbox(p)
+        self.assertEqual((x0, y0, x1, y1), (0.0, 0.0, 80.0, 50.0))
+        self.assertTrue(p[0]["closed"])
+        self.assertEqual(len(p[0]["pts"]), 4)
+
+    def test_eckradius_bleibt_im_rechteck(self):
+        p = V.rechteck(80.0, 50.0, 5.0)
+        x0, y0, x1, y1 = V.bbox(p)
+        self.assertAlmostEqual(x1 - x0, 80.0, places=6)
+        self.assertAlmostEqual(y1 - y0, 50.0, places=6)
+        self.assertGreater(len(p[0]["pts"]), 4)
+        # die scharfe Ecke selbst darf nicht mehr vorkommen
+        self.assertNotIn((0.0, 0.0), [tuple(round(v, 6) for v in q)
+                                      for q in p[0]["pts"]])
+
+    def test_zu_grosser_radius_wird_gedeckelt(self):
+        """Radius groesser als die halbe Seite gaebe sonst Schleifen."""
+        p = V.rechteck(40.0, 20.0, 999.0)
+        x0, y0, x1, y1 = V.bbox(p)
+        self.assertAlmostEqual(x1 - x0, 40.0, places=6)
+        self.assertAlmostEqual(y1 - y0, 20.0, places=6)
+
+    def test_null_masse_werden_abgelehnt(self):
+        with self.assertRaises(ValueError):
+            V.rechteck(0.0, 50.0)
+
+    def test_form_baut_aus_parametern(self):
+        a = V.form({"art": "rechteck", "b": 30.0, "h": 20.0, "r": 2.0})
+        b = V.rechteck(30.0, 20.0, 2.0)
+        self.assertEqual(a[0]["pts"], b[0]["pts"])
+
+    def test_unbekannte_form_wirft(self):
+        with self.assertRaises(ValueError):
+            V.form({"art": "stern", "b": 10, "h": 10})
+
+    def test_rechteck_laesst_sich_schneiden(self):
+        import lw_job as J
+        g, i = V.cut_gcode(V.rechteck(60.0, 40.0), 500, 600, 1)
+        self.assertEqual(i["konturen"], 1)
+        x0, x1, y0, y1 = J.brenn_extent(g)
+        self.assertEqual((round(x0), round(x1), round(y0), round(y1)),
+                         (0, 60, 0, 40))
+
+    def test_eingepasst_bleibt_das_rechteck_massgenau(self):
+        p, _ = V.fit(V.rechteck(80.0, 50.0), 80.0, 50.0, 10.0, 5.0)
+        self.assertEqual([round(v, 6) for v in V.bbox(p)],
+                         [10.0, 5.0, 90.0, 55.0])

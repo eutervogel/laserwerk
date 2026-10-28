@@ -47,6 +47,10 @@ settings for a new material.
   workpiece: each element with its own file, placement and settings, together
   in one preview, one G-code run and one project file. Everything is engraved
   first, then everything is cut.
+- **Draw shapes** — a rectangle with its measurements and corner radius, or a
+  frame around the selected artwork with a margin all round. No drawing
+  program needed for the simple case, and the result is an ordinary element
+  like any other. The project file stores the few numbers, not an image.
 - **Place** — enter the length and width of your workpiece, then drag the
   artwork onto it with the mouse and resize it by its corners, snapping to
   edges, corners and centre. Rotate to any angle, not just multiples of 90°.
@@ -205,7 +209,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-238 tests on stdlib only, nothing to install. The interface tests need a
+258 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

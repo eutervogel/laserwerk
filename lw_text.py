@@ -749,4 +749,10 @@ EN = {
         "The file goes down to Z {z:.2f} mm, the material is {d:.2f} mm "
         "thick.\n\nThat cuts into the bed. Start anyway?",
     "\nZ von {u:.2f} bis {o:.2f} mm": "\nZ from {u:.2f} to {o:.2f} mm",
+    "Größe": "Size",
+    "Breite und Höhe müssen größer als 0 sein.\n\n"
+    "Eine gerade Linie hat keine Fläche - die lässt sich "
+    "nur schneiden, nicht gravieren.":
+        "Width and height must be greater than 0.\n\n"
+        "A straight line has no area - it can only be cut, not engraved.",
 }

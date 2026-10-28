@@ -1368,3 +1368,161 @@ class Tiefe(Grundlage):
         self.assertIn("Z", text)
         self.assertIn("-2.00", text)
         self.assertIn("5.00", text)
+
+
+class Skalieren(Grundlage):
+    """Groesse eintippen, umschalten, ziehen.
+
+    Hier steckten vier Fehler, die zusammen das Skalieren unbrauchbar
+    gemacht haben: das Umschalten der Bearbeitung setzte die Groesse aufs
+    Maximum zurueck, eine gerade Linie bekam das Seitenverhaeltnis 1
+    (Strich wird Quadrat) oder 0 (Breite wird null), eine senkrechte Linie
+    liess das Laden mit Division durch null abstuerzen, und beim Ziehen
+    wurde jeder Richtung ein Mindestmass von 2 mm aufgezwungen.
+    """
+
+    RECHTECK = '''<svg xmlns="http://www.w3.org/2000/svg" width="40mm"
+ height="20mm" viewBox="0 0 40 20"><rect x="1" y="1" width="38" height="18"
+ fill="none" stroke="black"/></svg>'''
+    WAAGRECHT = '''<svg xmlns="http://www.w3.org/2000/svg" width="50mm"
+ height="10mm" viewBox="0 0 50 10"><path d="M 5 5 L 45 5" fill="none"
+ stroke="black"/></svg>'''
+    SENKRECHT = '''<svg xmlns="http://www.w3.org/2000/svg" width="10mm"
+ height="50mm" viewBox="0 0 10 50"><path d="M 5 5 L 5 45" fill="none"
+ stroke="black"/></svg>'''
+
+    def svg(self, inhalt):
+        import tempfile
+        f = tempfile.NamedTemporaryFile("w", suffix=".svg", delete=False)
+        f.write(inhalt)
+        f.close()
+        self.assertTrue(self.app.lade_motiv(f.name, fragen=False))
+        return f.name
+
+    # ---------------------------------------------------- Umschalten
+    def test_umschalten_haelt_die_groesse(self):
+        self.svg(self.RECHTECK)
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        h = self.app.v_h.get()
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.assertEqual(self.app.v_w.get(), 40.0)
+        self.assertAlmostEqual(self.app.v_h.get(), h, delta=1.0)
+
+    def test_umschalten_springt_nicht_aufs_maximum(self):
+        self.svg(self.RECHTECK)
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        for ziel in ("schnitt", "beides", "gravur"):
+            self.app.v_job.set(ziel)
+            self.app._job_changed()
+            self.assertNotEqual(self.app.v_w.get(), self.app.v_maxw.get())
+
+    def test_umschalten_wirft_den_gcode_weg(self):
+        self.svg(self.RECHTECK)
+        self.app.v_w.set(40.0); self.app._keep_ratio("w")
+        self.app.generate()
+        self.assertIsNotNone(self.app.lines)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.assertIsNone(self.app.lines)
+
+    # ---------------------------------------------------- Gerade Linien
+    def test_waagrechte_linie_wird_kein_quadrat(self):
+        self.svg(self.WAAGRECHT)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.assertIsNone(self.app._aspect())
+        self.app.v_w.set(100.0)
+        self.app._keep_ratio("w")
+        self.assertEqual(self.app.v_w.get(), 100.0)
+        self.assertNotEqual(self.app.v_h.get(), 100.0)
+
+    def test_senkrechte_linie_laedt_ohne_absturz(self):
+        """Ging frueher mit ZeroDivisionError unter, wenn beim Laden
+        schon 'Schneiden' eingestellt war."""
+        self.svg(self.RECHTECK)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.svg(self.SENKRECHT)
+        self.assertEqual(self.app.v_w.get(), 0.0)
+        self.assertGreater(self.app.v_h.get(), 0.0)
+
+    def test_laenge_der_linie_laesst_sich_eintippen(self):
+        self.svg(self.SENKRECHT)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        for ziel in (40.0, 120.0, 7.5):
+            self.app.v_h.set(ziel)
+            self.app._keep_ratio("h")
+            self.assertEqual(self.app.v_h.get(), ziel)
+
+    def test_rahmen_zeigt_die_echte_linie(self):
+        """Der gezeichnete Kasten muss dem Schnitt entsprechen - sonst
+        steht die Linie woanders als der Rahmen."""
+        self.svg(self.WAAGRECHT)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.app.v_w.set(80.0); self.app.v_h.set(13.0)
+        x, y, b, h = self.app._box()
+        self.assertAlmostEqual(b, 80.0, places=2)
+        self.assertAlmostEqual(h, 0.0, places=2)
+
+    def test_ziehen_nagelt_die_linie_nicht_auf_2mm(self):
+        import types
+        self.svg(self.WAAGRECHT)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.app.v_bw.set(200.0); self.app.v_bh.set(120.0)
+        self.app.v_w.set(50.0); self.app.v_h.set(0.0)
+        self.app.v_xoff.set(10.0); self.app.v_yoff.set(20.0)
+        self.app.v_snap.set(False)
+        x, y, b, h = self.app._box()
+        px, py = self.app._mm(x + b, y)              # rechte Ecke
+        self.app._press(types.SimpleNamespace(x=int(round(px)), y=int(round(py))))
+        self.assertIsNotNone(self.app.drag)
+        self.assertEqual(self.app.drag[0], "size")
+        ziel = self.app._mm(x + 90.0, y)
+        self.app._drag_move(types.SimpleNamespace(x=int(round(ziel[0])),
+                                                  y=int(round(ziel[1]))))
+        self.app.drag = None
+        self.assertAlmostEqual(self.app.v_w.get(), 90.0, delta=1.5)
+        self.assertEqual(self.app.v_h.get(), 0.0)
+
+    def test_gravieren_ohne_flaeche_wird_abgelehnt(self):
+        self.svg(self.SENKRECHT)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.app.v_job.set("gravur")                 # von Hand, trotz Breite 0
+        self.app.v_w.set(0.0)
+        self.gezeigt.clear()
+        self.app.generate()
+        self.assertTrue(self.gezeigt)
+        self.assertIsNone(self.app.lines)
+
+    def test_einpassen_fuellt_die_laenge(self):
+        self.svg(self.WAAGRECHT)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.app.fit()
+        self.assertEqual(self.app.v_w.get(), self.app.v_maxw.get())
+        self.assertEqual(self.app.v_h.get(), 0.0)
+
+    # ---------------------------------------------------- Normalfall
+    def test_originalgroesse_bleibt_beim_fokuswechsel(self):
+        self.svg(self.RECHTECK)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()
+        self.app.original_size()
+        w, h = self.app.v_w.get(), self.app.v_h.get()
+        self.app._keep_ratio("w")                    # FocusOut
+        self.assertEqual((self.app.v_w.get(), self.app.v_h.get()), (w, h))
+
+    def test_verhaeltnis_bleibt_beim_eintippen(self):
+        self.svg(self.RECHTECK)
+        self.app.v_w.set(76.0)
+        self.app._keep_ratio("w")
+        a = self.app._aspect()
+        self.assertAlmostEqual(self.app.v_w.get() / self.app.v_h.get(), a,
+                               places=2)

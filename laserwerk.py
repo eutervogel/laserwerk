@@ -1081,7 +1081,13 @@ class App:
         if self.v_job.get() == "schnitt":
             self._log(T("Schnittmodus: passendes Material-Preset wählen "
                         "(z.B. Papier S500/F600)"))
-        self.fit()
+        # Hier stand fit(): das Umschalten hat die eingetippte Groesse jedes
+        # Mal auf das Maximum zurueckgesetzt. Die Masse bleiben jetzt stehen;
+        # dass der Schnitt ein anderes Seitenverhaeltnis hat als das
+        # gerenderte Bild, rechnet _box() beim Zeichnen heraus.
+        self._stale()
+        self._raender_zeigen()
+        self._draw()
 
     def _vec_dreh_bb(self):
         """Ausdehnung der GEDREHTEN Konturen. Das gedrehte Rechteck um eine
@@ -1110,26 +1116,47 @@ class App:
         c, s = abs(math.cos(a)), abs(math.sin(a))
         return w * c + h * s, w * s + h * c
 
-    def _aspect(self):
+    def _bezug_bb(self):
+        """Ausdehnung der Vorlage, auf die sich Breite und Hoehe beziehen.
+
+        Beim Schneiden ist das die echte Kontur, beim Gravieren das
+        gerenderte Bild - das ist breiter, weil die Strichdicke mitzaehlt.
+        """
         if self.src is None:
-            return 1.0
+            return 0.0, 0.0
         if self.v_job.get() == "schnitt" and self.vec:
-            w, h = self._vec_dreh_bb()
-        else:
-            w, h = self._dreh_bb(*self.src.size)
-        return w / h if h else 1.0
+            return self._vec_dreh_bb()
+        return self._dreh_bb(*self.src.size)
+
+    def _aspect(self):
+        """Seitenverhaeltnis der Vorlage, oder None, wenn es keines gibt.
+
+        Eine gerade Linie als SVG hat im Schnittmodus in einer Richtung die
+        Ausdehnung null. Das frueher zurueckgegebene 1.0 bzw. 0.0 hat die
+        Masse zerstoert: ein Strich wurde zum Quadrat, eine senkrechte Linie
+        setzte die Breite auf 0 oder brach mit Division durch null ab.
+        """
+        w, h = self._bezug_bb()
+        return w / h if w > 0 and h > 0 else None
 
     def _keep_ratio(self, which):
+        """Das jeweils andere Mass nachziehen - nur wenn es eines gibt.
+
+        Ohne Seitenverhaeltnis (gerade Linie) bleiben beide Felder so, wie
+        sie eingetippt wurden. V.fit skaliert dann ueber die Richtung mit
+        Ausdehnung, das andere Mass spielt keine Rolle.
+        """
         if not self.v_lock.get() or self.src is None:
             return
-        try:
-            a = self._aspect()
-            if which == "w":
-                self.v_h.set(round(self.v_w.get() / a, 2))
-            else:
-                self.v_w.set(round(self.v_h.get() * a, 2))
-        except tk.TclError:
-            pass
+        a = self._aspect()
+        if a:
+            try:
+                if which == "w":
+                    self.v_h.set(round(self.v_w.get() / a, 2))
+                else:
+                    self.v_w.set(round(self.v_h.get() * a, 2))
+            except tk.TclError:
+                pass
         self._stale()
         self._draw()
 
@@ -1215,9 +1242,15 @@ class App:
             return
         a = self._aspect()
         mw, mh = self.v_maxw.get(), self.v_maxh.get()
-        w, h = mw, mw / a
-        if h > mh:
-            h, w = mh, mh * a
+        if a:
+            w, h = mw, mw / a
+            if h > mh:
+                h, w = mh, mh * a
+        else:
+            # Gerade Linie: nur die Richtung mit Ausdehnung zaehlt, genau wie
+            # V.fit rechnet. Die andere bleibt null statt irgendetwas.
+            bw, bh = self._bezug_bb()
+            w, h = (mw, 0.0) if bw > 0 else (0.0, mh)
         self.v_w.set(round(w, 2))
         self.v_h.set(round(h, 2))
         self._stale()
@@ -1298,6 +1331,12 @@ class App:
         if self.v_job.get() == "schnitt":
             cs, cf = self._schnittwerte()
             return self._generate_cut(w, h, cs, cf)
+        if w <= 0 or h <= 0:
+            messagebox.showinfo(T("Größe"),
+                T("Breite und Höhe müssen größer als 0 sein.\n\n"
+                  "Eine gerade Linie hat keine Fläche - die lässt sich "
+                  "nur schneiden, nicht gravieren."))
+            return
         self.cut_polys = None
         src = self.src
         need = int(w / line * 3)
@@ -2681,6 +2720,13 @@ class App:
             bw, bh = self._vec_dreh_bb()
             if bw > 0 and bh > 0:
                 sc = min(b / bw, h / bh)
+            elif bw > 0:              # waagrechte Linie: nur die Laenge zaehlt
+                sc = b / bw
+            elif bh > 0:              # senkrechte Linie
+                sc = h / bh
+            else:
+                sc = None
+            if sc is not None:
                 b, h = bw * sc, bh * sc
         sp, a = self.v_spiegel.get(), float(self.v_achse.get())
         if sp == "x":
@@ -2725,7 +2771,12 @@ class App:
             if abs(e.x - cx) <= 9 and abs(e.y - cy) <= 9:
                 self.drag = ("size", name, box, (e.x, e.y))
                 return
-        if min(px, qx) <= e.x <= max(px, qx) and min(py, qy) <= e.y <= max(py, qy):
+        # Ein Rahmen ohne Hoehe (gerade Linie) waere sonst gar nicht zu
+        # greifen - nur bei duennen Rahmen etwas Luft geben, sonst nicht.
+        lx = 0 if abs(qx - px) > 6 else 4
+        ly = 0 if abs(qy - py) > 6 else 4
+        if min(px, qx) - lx <= e.x <= max(px, qx) + lx and \
+                min(py, qy) - ly <= e.y <= max(py, qy) + ly:
             self.drag = ("move", None, box, (e.x, e.y))
 
     def _drag_move(self, e):
@@ -2747,9 +2798,14 @@ class App:
             unten = ecke in ("ol", "or")
             nb = bb + (-dx if links else dx)
             nh = bh + (-dy if unten else dy)
-            if self.v_lock.get() and bb > 0:          # Seitenverhaeltnis halten
+            if self.v_lock.get() and bb > 0 and bh > 0:   # Verhaeltnis halten
                 nb = max(nb, 1.0); nh = nb * bh / bb
-            nb, nh = max(2.0, nb), max(2.0, nh)
+            # Mindestmass nur dort, wo die Vorlage ueberhaupt Ausdehnung hat.
+            # Einer geraden Linie 2 mm Hoehe aufzuzwingen hat den Rahmen vom
+            # Schnitt geloest und das Ziehen bei 2 mm festgenagelt.
+            qb, qh = self._bezug_bb()
+            nb = max(2.0, nb) if qb > 0 else 0.0
+            nh = max(2.0, nh) if qh > 0 else 0.0
             x = bx + bb - nb if links else bx
             y = by + bh - nh if unten else by
             # Kanten und Mitte des Werkstuecks als Rastpunkte
@@ -2758,7 +2814,7 @@ class App:
                 nb = bx + bb - x
             else:
                 rechts = self._snap(x + nb, [W, W / 2], tol); nb = rechts - x
-            if self.v_lock.get() and bb > 0:
+            if self.v_lock.get() and bb > 0 and bh > 0:
                 nh = nb * bh / bb
                 if unten: y = by + bh - nh
             self._set_box(x, y, nb, nh)

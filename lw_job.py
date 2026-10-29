@@ -19,6 +19,44 @@ POINTER_FEED = 600    # Vorschub fuer Sichtkreuz und sichtbaren Rahmen
 
 
 # ---------------------------------------------------------------- Laden
+def xlink_notdurft(path):
+    """Kopie der SVG, in der eingebettete Bilder auch ankommen - oder None.
+
+    Inkscape 1.2 zeichnet <image href="..."> nicht, es will das alte
+    xlink:href. Neuere Zeichenprogramme schreiben aber das schlichte href
+    (SVG 2). Beim Rendern fehlt dann genau das eingebettete Motiv, und
+    uebrig bleibt nur die Strichzeichnung drumherum.
+    """
+    import re
+    with open(path, encoding="utf-8", errors="replace") as f:
+        t = f.read()
+    aus, i, getan = [], 0, False
+    while True:
+        j = t.find("<image", i)
+        if j < 0:
+            aus.append(t[i:])
+            break
+        k = t.find(">", j)
+        if k < 0:
+            aus.append(t[i:])
+            break
+        tag, n = re.subn(r'(?<!xlink:)\bhref\s*=', "xlink:href=", t[j:k], count=1)
+        getan = getan or bool(n)
+        aus.append(t[i:j])
+        aus.append(tag)
+        i = k
+    if not getan:
+        return None
+    t = "".join(aus)
+    if "xmlns:xlink" not in t:
+        t = t.replace("<svg", '<svg xmlns:xlink="http://www.w3.org/1999/xlink"', 1)
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".svg", delete=False,
+                                      encoding="utf-8")
+    tmp.write(t)
+    tmp.close()
+    return tmp.name
+
+
 def load_source(path, px_w=None):
     """Bild oder SVG als Graustufenbild auf weissem Grund laden.
     SVGs werden mit Inkscape gerendert (px_w = gewuenschte Breite)."""
@@ -28,7 +66,13 @@ def load_source(path, px_w=None):
                 "--export-background=white"]
         if px_w:
             args += ["-w", str(int(px_w))]
-        subprocess.run(args + [path], check=True, capture_output=True)
+        ersatz = xlink_notdurft(path)
+        try:
+            subprocess.run(args + [ersatz or path], check=True,
+                           capture_output=True)
+        finally:
+            if ersatz:
+                os.unlink(ersatz)
         im = Image.open(tmp)
         im.load()
         os.unlink(tmp)

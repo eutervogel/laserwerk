@@ -329,3 +329,56 @@ class ZAusdehnung(unittest.TestCase):
         des Materials. Die Tiefenabfrage darf da nicht anspringen."""
         g, _ = J.fokustest_z(12.0, 4.0, 1.0, 120, 1000)
         self.assertGreater(J.z_extent(g)[0], 0.0)
+
+
+class EingebetteteBilder(unittest.TestCase):
+    """SVGs aus neueren Zeichenprogrammen betten Bilder mit dem schlichten
+    href ein (SVG 2). Inkscape 1.2 zeichnet nur xlink:href - beim Rendern
+    fiel dann genau das Motiv heraus und uebrig blieb der Rahmen."""
+
+    def setUp(self):
+        import base64, io, tempfile
+        self.d = tempfile.mkdtemp(prefix="laserwerk-svg-")
+        bild = Image.new("L", (40, 20), 0)          # schwarzes Rechteck
+        roh = io.BytesIO()
+        bild.save(roh, format="PNG")
+        self.b64 = base64.b64encode(roh.getvalue()).decode()
+
+    def svg(self, attr, mit_xlink_ns=False):
+        import os
+        ns = ' xmlns:xlink="http://www.w3.org/1999/xlink"' if mit_xlink_ns else ""
+        p = os.path.join(self.d, attr.replace(":", "_") + ".svg")
+        with open(p, "w") as f:
+            f.write(f'<svg xmlns="http://www.w3.org/2000/svg"{ns} width="40mm" '
+                    'height="20mm" viewBox="0 0 40 20">'
+                    f'<image {attr}="data:image/png;base64,{self.b64}" '
+                    'x="0" y="0" width="40" height="20"/></svg>')
+        return p
+
+    def test_haengt_xlink_davor(self):
+        neu = J.xlink_notdurft(self.svg("href"))
+        self.assertIsNotNone(neu)
+        with open(neu) as f:
+            t = f.read()
+        self.assertIn("xlink:href=", t)
+        self.assertIn("xmlns:xlink", t)
+
+    def test_laesst_xlink_in_ruhe(self):
+        self.assertIsNone(J.xlink_notdurft(self.svg("xlink:href", True)))
+
+    def test_ohne_bild_keine_kopie(self):
+        import os
+        p = os.path.join(self.d, "nur_pfad.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="10mm" '
+                    'height="10mm" viewBox="0 0 10 10">'
+                    '<path d="M1 1 L9 9" stroke="black"/></svg>')
+        self.assertIsNone(J.xlink_notdurft(p))
+
+    def test_das_bild_kommt_im_render_an(self):
+        im = J.load_source(self.svg("href"), 200)
+        self.assertEqual(im.getextrema()[0], 0, "das eingebettete Bild fehlt")
+
+    def test_xlink_rendert_weiterhin(self):
+        im = J.load_source(self.svg("xlink:href", True), 200)
+        self.assertEqual(im.getextrema()[0], 0)

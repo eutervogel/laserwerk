@@ -606,20 +606,35 @@ def bbox(polys):
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def fit(polys, w_mm, h_mm, x_off=0.0, y_off=0.0, bezug=None):
-    """Auf Zielgroesse skalieren (Seitenverhaeltnis bleibt), unten links auf Offset.
+def fit(polys, w_mm, h_mm, x_off=0.0, y_off=0.0, bezug=None, verzerren=False):
+    """Auf Zielgroesse skalieren, unten links auf Offset.
 
     'bezug' bestimmt Massstab und Lage, falls nur ein Teil gezeichnet werden
     soll: so bleiben die Ebenen einer Zeichnung zueinander in Deckung,
     statt jede fuer sich eingepasst zu werden.
+
+    'verzerren' skaliert x und y getrennt: die Kontur fuellt den Rahmen dann
+    genau aus, statt ihr Seitenverhaeltnis zu behalten. Das entspricht dem
+    Haken 'Seitenverhaeltnis halten' in der Oberflaeche - ohne ihn liess
+    sich ein Schnitt frueher gar nicht in die Breite ziehen.
     """
     x0, y0, x1, y1 = bbox(bezug if bezug else polys)
-    s = min(w_mm / (x1 - x0) if x1 > x0 else 1e9, h_mm / (y1 - y0) if y1 > y0 else 1e9)
+    sx = w_mm / (x1 - x0) if x1 > x0 else None
+    sy = h_mm / (y1 - y0) if y1 > y0 else None
+    if sx is None and sy is None:          # einzelner Punkt
+        sx = sy = 1.0
+    elif sx is None:                       # senkrechte Linie: nur Hoehe zaehlt
+        sx = sy
+    elif sy is None:                       # waagrechte Linie
+        sy = sx
+    if not verzerren:
+        sx = sy = min(sx, sy)
     out = []
     for pl in polys:
-        out.append({"pts": [((p[0]-x0)*s + x_off, (p[1]-y0)*s + y_off) for p in pl["pts"]],
+        out.append({"pts": [((p[0]-x0)*sx + x_off, (p[1]-y0)*sy + y_off)
+                            for p in pl["pts"]],
                     "closed": pl["closed"], "farbe": pl.get("farbe", "#000000")})
-    return out, s
+    return out, min(sx, sy)
 
 
 def rotate(polys, deg):

@@ -254,3 +254,44 @@ class Formen(unittest.TestCase):
         p, _ = V.fit(V.rechteck(80.0, 50.0), 80.0, 50.0, 10.0, 5.0)
         self.assertEqual([round(v, 6) for v in V.bbox(p)],
                          [10.0, 5.0, 90.0, 55.0])
+
+
+class Verzerren(unittest.TestCase):
+    """Ohne 'Seitenverhaeltnis halten' soll der Schnitt den Rahmen
+    ausfuellen - vorher war Schneiden immer seitenverhaeltnistreu."""
+
+    def setUp(self):
+        self.polys = [{"pts": [(0, 0), (40, 0), (40, 20), (0, 20)],
+                       "closed": True}]
+
+    def test_fuellt_den_rahmen_genau(self):
+        p, _ = V.fit(self.polys, 80.0, 80.0, 0.0, 0.0, verzerren=True)
+        x0, y0, x1, y1 = V.bbox(p)
+        self.assertAlmostEqual(x1 - x0, 80.0, places=3)
+        self.assertAlmostEqual(y1 - y0, 80.0, places=3)
+
+    def test_ohne_verzerren_bleibt_es_beim_verhaeltnis(self):
+        p, _ = V.fit(self.polys, 80.0, 80.0, 0.0, 0.0)
+        x0, y0, x1, y1 = V.bbox(p)
+        self.assertAlmostEqual(y1 - y0, 40.0, places=3)
+
+    def test_versatz_gilt_auch_verzerrt(self):
+        p, _ = V.fit(self.polys, 60.0, 90.0, 5.0, 7.0, verzerren=True)
+        x0, y0, x1, y1 = V.bbox(p)
+        self.assertEqual([round(v, 3) for v in (x0, y0, x1, y1)],
+                         [5.0, 7.0, 65.0, 97.0])
+
+    def test_gerade_linie_sprengt_nichts(self):
+        """Eine waagrechte Linie hat keine Hoehe - der Massstab dafuer darf
+        nicht ins Unendliche laufen."""
+        linie = [{"pts": [(0, 5), (40, 5)], "closed": False}]
+        p, _ = V.fit(linie, 80.0, 30.0, 0.0, 0.0, verzerren=True)
+        x0, y0, x1, y1 = V.bbox(p)
+        self.assertAlmostEqual(x1 - x0, 80.0, places=3)
+        self.assertAlmostEqual(y1 - y0, 0.0, places=6)
+        self.assertTrue(all(abs(q[1]) < 1e6 for q in p[0]["pts"]))
+
+    def test_einzelner_punkt_bleibt_endlich(self):
+        p, _ = V.fit([{"pts": [(3, 3)], "closed": False}], 50.0, 50.0,
+                     1.0, 2.0, verzerren=True)
+        self.assertEqual([round(v, 3) for v in p[0]["pts"][0]], [1.0, 2.0])

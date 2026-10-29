@@ -1582,7 +1582,8 @@ class App:
         polys = V.rotate(V.flatten(self.vec, sc), self.v_rot.get())
         ganz = V.rotate(V.flatten(bezug, sc), self.v_rot.get())
         polys, _ = V.fit(polys, w, h, max(0.0, float(self.v_xoff.get())),
-                         max(0.0, float(self.v_yoff.get())), bezug=ganz)
+                         max(0.0, float(self.v_yoff.get())), bezug=ganz,
+                         verzerren=not self.v_lock.get())
         sp, achse = self.v_spiegel.get(), float(self.v_achse.get())
         if sp != "nein":
             polys = V.mirror(polys, sp, achse)
@@ -2866,15 +2867,16 @@ class App:
             # Kasten groesser als der Schnitt - und "mittig" waere daneben.
             bw, bh = self._vec_dreh_bb()
             if bw > 0 and bh > 0:
-                sc = min(b / bw, h / bh)
-            elif bw > 0:              # waagrechte Linie: nur die Laenge zaehlt
-                sc = b / bw
-            elif bh > 0:              # senkrechte Linie
-                sc = h / bh
-            else:
-                sc = None
-            if sc is not None:
-                b, h = bw * sc, bh * sc
+                # Mit Haken behaelt der Schnitt sein Seitenverhaeltnis und
+                # sitzt deshalb kleiner im Rahmen - ohne Haken fuellt er ihn
+                # genau aus, so wie V.fit dann rechnet.
+                if self.v_lock.get():
+                    sc = min(b / bw, h / bh)
+                    b, h = bw * sc, bh * sc
+            elif bw > 0:              # waagrechte Linie: keine Hoehe
+                h = 0.0
+            elif bh > 0:              # senkrechte Linie: keine Breite
+                b = 0.0
         sp, a = self.v_spiegel.get(), float(self.v_achse.get())
         if sp == "x":
             x = 2 * a - x - b

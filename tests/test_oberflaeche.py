@@ -1664,3 +1664,70 @@ class GezeichneteFormen(Grundlage):
         self._dialog_bedienen("Abbrechen")
         self.assertIsNone(self.app._masse_fragen(
             "Rechteck", [("b", "Breite", 80.0)]))
+
+
+class VerzerrtSchneiden(Grundlage):
+    """Ohne den Haken 'Seitenverhaeltnis halten' muss sich auch ein Schnitt
+    in die Breite ziehen lassen. V.fit hat frueher immer gleichmaessig
+    skaliert, deshalb hat der Rahmen jede Eingabe wieder eingefangen."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.form_rechteck(80.0, 50.0)       # 8:5
+        self.app.v_bw.set(200.0); self.app.v_bh.set(120.0)
+        self.app.v_xoff.set(10.0); self.app.v_yoff.set(10.0)
+        self.app.v_snap.set(False)
+
+    def schnittmass(self):
+        self.app.generate()
+        self.assertIsNotNone(self.app.lines)
+        x0, x1, y0, y1 = J.brenn_extent(self.app.lines)
+        return round(x1 - x0, 2), round(y1 - y0, 2)
+
+    def test_mit_haken_bleibt_es_verhaeltnistreu(self):
+        self.app.v_lock.set(True)
+        self.app.v_h.set(20.0)
+        self.assertEqual(self.schnittmass(), (32.0, 20.0))
+
+    def test_ohne_haken_gilt_das_eingetippte(self):
+        self.app.v_lock.set(False)
+        self.app.v_w.set(80.0); self.app.v_h.set(20.0)
+        self.assertEqual(self.schnittmass(), (80.0, 20.0))
+
+    def test_ohne_haken_auch_in_die_hoehe(self):
+        self.app.v_lock.set(False)
+        self.app.v_h.set(90.0)
+        self.assertEqual(self.schnittmass(), (80.0, 90.0))
+
+    def test_rahmen_zeigt_was_geschnitten_wird(self):
+        self.app.v_lock.set(False)
+        self.app.v_w.set(80.0); self.app.v_h.set(20.0)
+        x, y, b, h = self.app._box()
+        self.assertEqual((round(b, 2), round(h, 2)), self.schnittmass())
+
+    def test_ziehen_ohne_haken_laesst_die_hoehe_stehen(self):
+        import types
+        self.app.v_lock.set(False)
+        x, y, b, h = self.app._box()
+        p = self.app._mm(x + b, y)
+        q = self.app._mm(x + b + 40.0, y)
+        self.app._press(types.SimpleNamespace(x=int(round(p[0])), y=int(round(p[1]))))
+        self.assertEqual(self.app.drag[0], "size")
+        self.app._drag_move(types.SimpleNamespace(x=int(round(q[0])),
+                                                  y=int(round(q[1]))))
+        self.app.drag = None
+        self.assertAlmostEqual(self.app.v_w.get(), 120.0, delta=1.5)
+        self.assertAlmostEqual(self.app.v_h.get(), 50.0, delta=0.01)
+
+    def test_ziehen_mit_haken_haelt_das_verhaeltnis(self):
+        import types
+        self.app.v_lock.set(True)
+        x, y, b, h = self.app._box()
+        p = self.app._mm(x + b, y)
+        q = self.app._mm(x + b + 40.0, y)
+        self.app._press(types.SimpleNamespace(x=int(round(p[0])), y=int(round(p[1]))))
+        self.app._drag_move(types.SimpleNamespace(x=int(round(q[0])),
+                                                  y=int(round(q[1]))))
+        self.app.drag = None
+        self.assertAlmostEqual(self.app.v_w.get() / self.app.v_h.get(),
+                               80.0 / 50.0, places=2)

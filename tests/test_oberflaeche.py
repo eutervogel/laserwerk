@@ -1731,3 +1731,80 @@ class VerzerrtSchneiden(Grundlage):
         self.app.drag = None
         self.assertAlmostEqual(self.app.v_w.get() / self.app.v_h.get(),
                                80.0 / 50.0, places=2)
+
+
+class Haengerschutz(Grundlage):
+    """Was nach dem Einfrieren gebaut wurde: Spuren sichern, Dialog
+    entschaerfen, Protokoll begrenzen."""
+
+    def test_protokoll_waechst_nicht_unbegrenzt(self):
+        self.app.LOGZEILEN = 50
+        for i in range(400):
+            self.app._log("Zeile %d" % i)
+        zeilen = int(self.app.log.index("end-1c").split(".")[0])
+        self.assertLessEqual(zeilen, 51)
+        self.assertIn("Zeile 399", self.app.log.get("1.0", "end"))
+
+    def test_herzschlag_wird_gesetzt(self):
+        import time
+        self.app._herzschlag = 0
+        self.app._poll()
+        self.root_after_abbrechen()
+        self.assertAlmostEqual(self.app._herzschlag, time.time(), delta=2.0)
+
+    def root_after_abbrechen(self):
+        try:
+            self.wurzel.after_cancel(self.app._poll_id)
+        except Exception:
+            pass
+
+    def test_falsche_eingabe_oeffnet_keinen_zweiten_dialog(self):
+        """Ein zweiter Dialog waehrend des Tk-Griffs legt das Programm
+        lahm - die Meldung muss im Dialog selbst stehen."""
+        gezeigt = []
+        self.L.messagebox.showerror = lambda t, m: gezeigt.append(m)
+
+        def tun():
+            for k in self.wurzel.winfo_children():
+                if k.winfo_class() == "Toplevel":
+                    for kind in k.winfo_children():
+                        if kind.winfo_class() == "TEntry":
+                            kind.delete(0, "end")
+                            kind.insert(0, "acht")      # keine Zahl
+                    for kind in k.winfo_children():
+                        for b in kind.winfo_children():
+                            if b.winfo_class() == "TButton" and b.cget("text") == "OK":
+                                b.invoke()
+                    self.assertTrue(k.winfo_exists(), "Dialog ist zu frueh zu")
+                    hinweise = [kind.cget("text") for kind in k.winfo_children()
+                                if kind.winfo_class() == "TLabel"]
+                    self.assertTrue(any("ungültig" in h for h in hinweise),
+                                    "kein Hinweis im Dialog: %r" % (hinweise,))
+                    k.destroy()
+                    return
+            self.wurzel.after(50, tun)
+        self.wurzel.after(50, tun)
+        self.assertIsNone(self.app._masse_fragen("Rechteck",
+                                                 [("b", "Breite", 80.0)]))
+        self.assertEqual(gezeigt, [])
+
+    def test_griff_wird_wieder_abgegeben(self):
+        self._dialog_schliessen()
+        self.app._masse_fragen("Rechteck", [("b", "Breite", 80.0)])
+        self.assertEqual(self.wurzel.grab_current(), None)
+
+    def _dialog_schliessen(self):
+        def tun():
+            for k in self.wurzel.winfo_children():
+                if k.winfo_class() == "Toplevel":
+                    k.destroy()
+                    return
+            self.wurzel.after(50, tun)
+        self.wurzel.after(50, tun)
+
+    def test_spurendatei_wird_angelegt(self):
+        import os
+        import lw_presets as P
+        pfad = self.L.haenger_spuren()
+        self.assertIsNotNone(pfad)
+        self.assertEqual(os.path.dirname(pfad), P.DIR)

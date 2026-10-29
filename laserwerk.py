@@ -846,11 +846,20 @@ class App:
         return True
 
     def _masse_fragen(self, titel, felder):
-        """Kleiner Dialog mit Zahlenfeldern. Gibt die Werte oder None."""
+        """Kleiner Dialog mit Zahlenfeldern. Gibt die Werte oder None.
+
+        Der Dialog haelt den Tk-Griff (grab_set). Solange der liegt, darf
+        von hier aus kein zweiter Dialog aufgehen: die Meldungen laufen
+        ueber zenity, also einen eigenen Prozess, der dann keine Eingabe
+        bekommt - und das ganze Programm steht. Falsche Eingaben werden
+        deshalb im Dialog selbst gemeldet, und der Griff wird in jedem
+        Fall wieder abgegeben.
+        """
         dlg = tk.Toplevel(self.root)
         dlg.title(titel)
         dlg.transient(self.root)
         dlg.resizable(False, False)
+        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         vars_ = {}
         for i, (schluessel, beschriftung, vorgabe) in enumerate(felder):
             ttk.Label(dlg, text=T(beschriftung)).grid(
@@ -864,23 +873,42 @@ class App:
                 e.focus_set()
                 e.select_range(0, "end")
         aus = {}
+        hinweis = ttk.Label(dlg, text="", style="Muted.TLabel")
+        hinweis.grid(row=len(felder), column=0, columnspan=3, sticky="w", padx=8)
 
         def ok(*_):
             try:
                 aus.update({k: float(v.get()) for k, v in vars_.items()})
             except tk.TclError:
-                messagebox.showerror(T("Eingabe"), T("Zahlenfeld ungültig."))
+                hinweis.configure(text=T("Zahlenfeld ungültig."))
                 return
             dlg.destroy()
 
         kn = ttk.Frame(dlg)
-        kn.grid(row=len(felder), column=0, columnspan=3, sticky="e", padx=8, pady=8)
+        kn.grid(row=len(felder) + 1, column=0, columnspan=3, sticky="e",
+                padx=8, pady=8)
         ttk.Button(kn, text=T("Abbrechen"), command=dlg.destroy).pack(side="right")
         ttk.Button(kn, text=T("OK"), command=ok).pack(side="right", padx=(0, 6))
         dlg.bind("<Return>", ok)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
-        dlg.grab_set()
-        self.root.wait_window(dlg)
+        # Neben das Hauptfenster setzen, nicht irgendwohin: ein Dialog, der
+        # hinter dem Fenster oder ausserhalb des Bildschirms aufgeht, sieht
+        # aus wie ein Absturz - anklicken laesst sich dann nichts mehr.
+        dlg.update_idletasks()
+        x = self.root.winfo_rootx() + max(0, (self.root.winfo_width()
+                                              - dlg.winfo_reqwidth()) // 2)
+        y = self.root.winfo_rooty() + 120
+        dlg.geometry("+%d+%d" % (max(0, x), max(0, y)))
+        try:
+            dlg.grab_set()
+            dlg.lift()
+            dlg.focus_force()
+            self.root.wait_window(dlg)
+        finally:
+            try:
+                dlg.grab_release()
+            except tk.TclError:
+                pass                      # schon zerstoert - Griff ist weg
         return aus or None
 
     def form_dialog(self):
@@ -2356,6 +2384,9 @@ class App:
 
     # ================================================================ Ereignisse
     def _poll(self):
+        # Lebenszeichen fuer den Wachhund: bleibt die Schleife stehen, wird
+        # das hier alt, und die Threadspuren landen in der Haengerdatei.
+        self._herzschlag = time.time()
         try:
             while True:
                 k, d = self.q.get_nowait()
@@ -2614,8 +2645,15 @@ class App:
         self.btn_tg.configure(text=T("Bot anhalten") if (self.fern and self.fern.aktiv)
                               else T("Bot starten"))
 
+    LOGZEILEN = 2000
+
     def _log(self, t):
         self.log.insert("end", f"{time.strftime('%H:%M:%S')} {t}\n")
+        # Begrenzen: ein Textfeld mit hunderttausend Zeilen frisst Speicher,
+        # und jedes see('end') wird langsamer, bis das Fenster steht.
+        zeilen = int(self.log.index("end-1c").split(".")[0])
+        if zeilen > self.LOGZEILEN:
+            self.log.delete("1.0", "%d.0" % (zeilen - self.LOGZEILEN + 1))
         self.log.see("end")
 
     # ================================================================ Zeichnen
@@ -3104,13 +3142,61 @@ class App:
         self.cv.create_line(x, y - 8, x, y + 8, fill="#e00", width=2, tags="head")
 
 
+HAENGERDATEI = "haenger.txt"
+_haenger_f = None          # offen halten, sonst schreibt faulthandler ins Leere
+
+
+def haenger_spuren(app=None, grenze=20.0):
+    """Spuren aller Threads sichern, wenn die Oberflaeche stehenbleibt.
+
+    Zwei Wege in dieselbe Datei:
+      * von Hand:  kill -USR1 $(pgrep -f laserwerk.py)
+      * von selbst: der Wachhund merkt, dass der Hauptthread nicht mehr
+        atmet, und schreibt die Spuren ohne Zutun.
+
+    Ohne das steht man hinterher vor einem eingefrorenen Fenster und hat
+    nichts in der Hand - genau das ist passiert.
+    """
+    global _haenger_f
+    import faulthandler, signal, threading
+    try:
+        os.makedirs(P.DIR, exist_ok=True)
+        pfad = os.path.join(P.DIR, HAENGERDATEI)
+        _haenger_f = open(pfad, "a", buffering=1)
+        faulthandler.enable(file=_haenger_f, all_threads=True)
+        if hasattr(signal, "SIGUSR1"):
+            faulthandler.register(signal.SIGUSR1, file=_haenger_f,
+                                  all_threads=True, chain=False)
+    except OSError:
+        return None
+    if app is None:
+        return pfad
+
+    def wachen():
+        gemeldet = False
+        while True:
+            time.sleep(5.0)
+            still = time.time() - getattr(app, "_herzschlag", 0)
+            if still > grenze and not gemeldet:
+                _haenger_f.write("\n==== %s: Oberflaeche steht seit %.0f s ====\n"
+                                 % (time.strftime("%Y-%m-%d %H:%M:%S"), still))
+                faulthandler.dump_traceback(file=_haenger_f, all_threads=True)
+                gemeldet = True
+            elif still < grenze:
+                gemeldet = False
+
+    threading.Thread(target=wachen, daemon=True).start()
+    return pfad
+
+
 def main():
     cfg = P.load_config()
     lw_text.setze(cfg.get("sprache", "de"))
     root = tk.Tk()
     S.apply(root, cfg.get("theme", "dunkel"))
     root.minsize(1100, 720)
-    App(root)
+    app = App(root)
+    haenger_spuren(app)
     root.mainloop()
 
 

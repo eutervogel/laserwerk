@@ -25,12 +25,12 @@ xvfb-run -a python3 -m unittest discover -s tests -t tests
 
 | Datei | Inhalt |
 |---|---|
-| `test_job.py` | Rastern, Anlauf, Tonwertkurve, Rasterung, Laufzeitmodell, Testmuster |
+| `test_job.py` | Rastern, Anlauf, Tonwertkurve, Rasterung, Laufzeitmodell, Testmuster, Schnittvorlagen |
 | `test_vector.py` | SVG und DXF einlesen, einpassen, drehen, spiegeln, innen vor außen |
-| `test_grbl.py` | Statusberichte, auch die, an denen der Lesethread einmal starb |
+| `test_grbl.py` | Statusberichte (auch die, an denen der Lesethread einmal starb), Streamen, Pause am Zeilenende |
 | `test_text.py` | Vollständigkeit und Platzhalter beider Sprachen |
 | `test_projekt.py` | Projektdateien hin und zurück, auch ohne Originalvorlage |
-| `test_oberflaeche.py` | Platzieren, Grenzen, Leistungsumrechnung, Nullpunkt nach STOPP, Schnitttiefe |
+| `test_oberflaeche.py` | Platzieren, Grenzen, Leistungsumrechnung, Nullpunkt nach STOPP, Schnitttiefe, Jobleiste |
 | `test_fortsetzen.py` | Stopp-Stelle wiederfinden, mit Tiefe auch bei mehreren Zustellungen |
 | `test_waechter.py` | Anzeigetexte deuten, fremdes Fenster erkennen, niemals `getUpdates` |
 

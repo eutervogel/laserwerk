@@ -43,6 +43,12 @@ settings for a new material.
   into layers on loading: red is cut, the rest engraved. Every layer keeps
   the scale and position of the whole drawing, so they stay in register.
   What gets engraved is the layer's line work, not the filled original.
+- **Cut templates without their cut lines** — an SVG that carries the artwork
+  as an embedded image and the cut lines as paths around it is rastered as if
+  only the image were in it. Otherwise the jigsaw pattern burns straight
+  across the artwork, and the template is of no use for the next run. The
+  switch sits with the engraving settings and only appears when the file
+  really holds both.
 - **Several elements** — artwork as a PNG, frame as an SVG, both on the same
   workpiece: each element with its own file, placement and settings, together
   in one preview, one G-code run and one project file. Everything is engraved
@@ -71,6 +77,15 @@ settings for a new material.
 - **Remote control via Telegram** — jog the axes and trace the sight cross from
   your phone while you stand at the workpiece. It reports back when a job
   finishes or runs into an alarm.
+- **Pause at the row end** — a feed hold stops at once, in the middle of a
+  row. The beam does go out, but the braking trace lies in the artwork, and
+  on resuming the row starts from standstill. With the switch in the job bar
+  the pause waits for the next row: the head comes to rest in the overscan
+  beside the artwork, the laser goes out with `M5`, and "Resume" restores the
+  mode the job was running in.
+- **Transmission errors in the log** — at the end of the job, not only while
+  it runs. If a row turns out missing in the workpiece afterwards, the error
+  count is the only trace that could still explain it.
 - **Resume** — `fortsetzen.py` finds the exact stopping point of a stalled job
   by matching the position, then streams the rest.
 - **The origin survives a STOP** — aborting soft-resets the controller, which
@@ -236,7 +251,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-311 tests on stdlib only, nothing to install. The interface tests need a
+352 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

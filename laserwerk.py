@@ -36,6 +36,8 @@ class App:
         self.grbl = G.Grbl(lambda k, d: self.q.put((k, d)))
         self.src = None            # Graustufenbild (zugeschnitten)
         self.src_path = None
+        self.bildlinien = False    # SVG mit eingebettetem Bild UND Linien
+        self.src_nurbild = False   # und ob src davon nur das Bild zeigt
         self.lines = None          # erzeugter/geladener G-Code
         self.info = None
         self.preview_img = None
@@ -68,6 +70,7 @@ class App:
         self.v_zeig_s = tk.IntVar(value=50)     # Leistung Sichtkreuz/Rahmen
         self.v_zeig_a = tk.DoubleVar(value=3.0)  # Armlaenge des Kreuzes
         self.v_frame_laser = tk.BooleanVar(value=True)
+        self.v_pause_ende = tk.BooleanVar(value=True)   # Pause am Zeilenende
         self.v_xoff = tk.DoubleVar(value=2.0)   # Platz links fuer den Anlauf
         self.v_over = tk.DoubleVar(value=1.5)   # Anlauf je Zeilenende
         self.v_yoff = tk.DoubleVar(value=0.0)
@@ -132,7 +135,8 @@ class App:
                   self.v_xoff, self.v_over, self.v_yoff, self.v_gamma,
                   self.v_cs, self.v_cf,
                   self.v_spiegel, self.v_achse,
-                  self.v_hell, self.v_kontrast, self.v_schaerfe):
+                  self.v_hell, self.v_kontrast, self.v_schaerfe,
+                  self.v_nurbild):
             v.trace_add("write", lambda *a: self._stale())
         for v in (self.v_f, self.v_over):
             v.trace_add("write", lambda *a: self._anlauf_zeigen())
@@ -152,15 +156,21 @@ class App:
                                         ("Weiter", self.resume, "TButton"),
                                         ("STOPP", self.stop, "Danger.TButton")]):
             ttk.Button(jb, text=T(t), command=f, style=st).grid(row=0, column=i + 1, padx=3)
-        ttk.Checkbutton(jb, text=T("Rahmen sichtbar"), variable=self.v_frame_laser
-                        ).grid(row=0, column=6, padx=(10, 2))
-        self.prog = ttk.Progressbar(jb, length=90, maximum=1000)
-        self.prog.grid(row=0, column=7, padx=8, sticky="ew")
+        # Die beiden Schalter in eine eigene Spalte - frueher lagen sie in
+        # derselben Zelle wie STOPP und deckten den Knopf zu.
+        sch = ttk.Frame(jb)
+        sch.grid(row=0, column=7, padx=(10, 2))
+        ttk.Checkbutton(sch, text=T("Rahmen sichtbar"), variable=self.v_frame_laser
+                        ).pack(anchor="w")
+        ttk.Checkbutton(sch, text=T("Pause am Zeilenende"),
+                        variable=self.v_pause_ende).pack(anchor="w")
+        self.prog = ttk.Progressbar(jb, length=78, maximum=1000)
+        self.prog.grid(row=0, column=8, padx=8, sticky="ew")
         self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=18, anchor="w")
 
-        self.lbl_prog.grid(row=0, column=8)
+        self.lbl_prog.grid(row=0, column=9)
 
-        jb.columnconfigure(7, weight=1)
+        jb.columnconfigure(8, weight=1)
 
         if TG.lade().get("auto") and self.v_tg_token.get().strip():
             self.root.after(800, self.fern_start)
@@ -371,9 +381,21 @@ class App:
                        width=4 if grad else 3,
                        command=lambda g=grad: self._dreh_setzen(g)).pack(side="left")
 
+        iv = ttk.Frame(f)
+        iv.grid(row=10, column=0, columnspan=3, sticky="w")
         self.v_inv = tk.BooleanVar(value=False)
-        ttk.Checkbutton(f, text=T("Invertieren (Hell und Dunkel tauschen)"), variable=self.v_inv
-                        ).grid(row=10, column=0, columnspan=3, sticky="w")
+        ttk.Checkbutton(iv, text=T("Invertieren (Hell und Dunkel tauschen)"),
+                        variable=self.v_inv).pack(anchor="w")
+        # Nur sichtbar, wenn die SVG beides enthaelt: ein eingebettetes Bild
+        # und Linien drumherum. Sonst gibt es nichts auszublenden.
+        self.v_nurbild = tk.BooleanVar(value=True)
+        self.chk_nurbild = ttk.Checkbutton(
+            iv, text=T("Nur das eingebettete Bild gravieren"),
+            variable=self.v_nurbild, command=self._nurbild_anwenden)
+        self.lbl_nurbild = ttk.Label(
+            iv, text=T("Die Schnittlinien der Vorlage bleiben dann aus dem\n"
+                       "Motiv heraus - sonst brennt das Puzzlemuster mit."),
+            style="Muted.TLabel")
         self.v_mode = tk.StringVar(value="schwelle")
         ttk.Radiobutton(f, text=T("Schwarzweiß (Strichgrafik)"), value="schwelle",
                         variable=self.v_mode).grid(row=13, column=0, columnspan=3, sticky="w")
@@ -728,6 +750,15 @@ class App:
         ext = os.path.splitext(p)[1].lower()
         vec = None
         im = None
+        # Eine Schnittvorlage traegt beides: das Motiv als eingebettetes Bild
+        # und die Schnittlinien als Pfade. Gerastert wird dann nur das Bild.
+        bildlinien = False
+        if ext == ".svg":
+            try:
+                nb, nv = J.svg_anteile(p)
+                bildlinien = bool(nb and nv)
+            except Exception:
+                pass
         try:
             if ext in (".svg", ".dxf"):
                 try:
@@ -742,7 +773,8 @@ class App:
                 # DXF hat keine Flaechen - Vorschau aus den Konturen zeichnen
                 im = V.render_preview(V.flatten(vec, 1.0))
             else:
-                im = J.autocrop(J.load_source(p, 3000 if ext == ".svg" else None), 245)
+                im = J.autocrop(J.load_source(p, 3000 if ext == ".svg" else None,
+                                              nur_bild=bildlinien), 245)
         except Exception as e:
             messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
             return False
@@ -757,6 +789,13 @@ class App:
         self.vec_voll = vec
         self.ebene = None
         self._vecdreh = self._live_cache = None
+        self.bildlinien = bildlinien
+        self.src_nurbild = bildlinien
+        self.v_nurbild.set(True)
+        self._nurbild_zeigen()
+        if bildlinien:
+            self._log(T("{n} Vektorelemente neben dem eingebetteten Bild - "
+                        "graviert wird nur das Bild.").format(n=nv))
         if ext == ".dxf":
             self.v_job.set("schnitt")       # DXF = nur Konturen
         elif not vec and self.v_job.get() in ("schnitt", "beides"):
@@ -776,6 +815,45 @@ class App:
         if vec and fragen:
             self._ebenen_anbieten()
         return True
+
+    # ------------------------------------------- Bild statt Strichzeichnung
+    def _nurbild_zeigen(self):
+        """Den Schalter nur zeigen, wenn es etwas auszublenden gibt."""
+        if not hasattr(self, "chk_nurbild"):
+            return
+        if getattr(self, "bildlinien", False):
+            self.chk_nurbild.pack(anchor="w")
+            self.lbl_nurbild.pack(anchor="w")
+        else:
+            self.chk_nurbild.pack_forget()
+            self.lbl_nurbild.pack_forget()
+
+    def _nurbild_anwenden(self):
+        """Schalter umgelegt: die Quelle neu rendern.
+
+        Ohne das zeigte die Vorschau weiter das zuletzt gerenderte Bild -
+        und der G-Code enthielte die Linien, die gerade abgeschaltet wurden.
+        """
+        soll = bool(getattr(self, "bildlinien", False) and self.v_nurbild.get())
+        if soll == getattr(self, "src_nurbild", False):
+            return
+        if not (self.src_path and self.src_path.lower().endswith(".svg")):
+            return
+        try:
+            im = J.autocrop(J.load_source(self.src_path, 3000, nur_bild=soll), 245)
+        except Exception as e:
+            messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
+            self.v_nurbild.set(not self.v_nurbild.get())
+            return
+        self.src, self.src_nurbild = im, soll
+        self._vecdreh = self._live_cache = None
+        anzeige = self._quellname()
+        if 0 <= self.aktiv < len(self.elemente):
+            anzeige = self.elemente[self.aktiv].get("anzeige") or anzeige
+        self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
+            anzeige, im.width, im.height))
+        self._element_sichern()
+        self._draw()
 
     # ----------------------------------------------------------- Formen
     # Eine gezeichnete Form ist ein ganz normales Element, nur ohne Datei:
@@ -980,7 +1058,7 @@ class App:
     # Alles, was zu einem einzelnen Motiv gehoert. Werkstueck, Material-
     # dicke und Maschine gelten fuer alle gemeinsam.
     ELEMENTFELDER = (
-        "v_w", "v_h", "v_lock", "v_rot", "v_inv", "v_mode", "v_schw",
+        "v_w", "v_h", "v_lock", "v_rot", "v_inv", "v_nurbild", "v_mode", "v_schw",
         "v_gamma", "v_hell", "v_kontrast", "v_schaerfe",
         "v_xoff", "v_yoff", "v_over", "v_spiegel", "v_achse",
         "v_job", "v_passes", "v_cs", "v_cf",
@@ -1000,6 +1078,8 @@ class App:
         e.update(src=self.src, vec=self.vec, vec_bb=self.vec_bb,
                  vec_voll=getattr(self, "vec_voll", None) or self.vec,
                  ebene=getattr(self, "ebene", None),
+                 bildlinien=getattr(self, "bildlinien", False),
+                 src_nurbild=getattr(self, "src_nurbild", False),
                  pfad=self.src_path, quelle=self.quelle_pfad)
 
     def _element_laden(self, i, zeichnen=True):
@@ -1012,6 +1092,8 @@ class App:
         self.vec_bb, self.src_path = e["vec_bb"], e["pfad"]
         self.vec_voll = e.get("vec_voll") or e["vec"]
         self.ebene = e.get("ebene")
+        self.bildlinien = e.get("bildlinien", False)
+        self.src_nurbild = e.get("src_nurbild", False)
         self.quelle_pfad = e.get("quelle") or e["pfad"]
         self._vecdreh = self._live_cache = None
         self._still = True
@@ -1028,6 +1110,7 @@ class App:
             e["anzeige"], e["src"].width, e["src"].height))
         self._bk_zeigen(); self._gamma_zeigen(); self._show_sf()
         self._anlauf_zeigen()
+        self._nurbild_zeigen()
         self._liste_auffrischen()
         if zeichnen:
             self._draw()
@@ -1180,6 +1263,9 @@ class App:
                             pass
             finally:
                 self._still = False
+            # Der Schalter kam aus der Datei, das Bild ist aber schon
+            # gerendert - stimmt beides nicht ueberein, noch einmal.
+            self._nurbild_anwenden()
             self._element_sichern()
         for feld, schluessel in self.PROJEKTFELDER:
             if schluessel in d["werte"]:
@@ -1210,6 +1296,8 @@ class App:
         self.src = self.src_path = None
         self.vec = self.vec_bb = self.vec_voll = self._vecdreh = None
         self._live_cache = None
+        self.bildlinien = self.src_nurbild = False
+        self._nurbild_zeigen()
         self.drag = None
         self._verwerfen()
         self.lbl_src.configure(text="-")
@@ -1526,7 +1614,9 @@ class App:
         elif self.src_path and self.src_path.lower().endswith(".svg"):
             # SVG in passender Aufloesung neu rendern: scharfe Kanten
             if need > src.width * 1.2:
-                src = J.autocrop(J.load_source(self.src_path, need), 245)
+                src = J.autocrop(J.load_source(
+                    self.src_path, need,
+                    nur_bild=getattr(self, "src_nurbild", False)), 245)
         p = J.prepare(src, w, h, line, invert=self.v_inv.get(),
                       gamma=max(0.2, float(self.v_gamma.get())),
                       helligkeit=self.v_hell.get(),
@@ -2337,14 +2427,28 @@ class App:
         self._log(T('{0} gestartet').format(name))
 
         def run():
-            res = self.grbl.run_job(lines, lambda d, t, el, er: self.q.put(("prog", (d, t, el, er))))
+            res = self.grbl.run_job(
+                lines, lambda d, t, el, er: self.q.put(("prog", (d, t, el, er))),
+                marken=self._marken_idx)
             self.q.put(("jobend", (name, res)))
         threading.Thread(target=run, daemon=True).start()
 
     def pause(self):
-        if self.grbl.connected:
-            self.grbl.pause()
-            self._log(T("Pause (Feed Hold) - Laser aus. 'Weiter' setzt fort."))
+        """Anhalten - entweder sofort oder am Ende der laufenden Zeile.
+
+        Ein Feed Hold bremst mitten in der Zeile ab. Im Lasermodus geht der
+        Strahl dabei zwar aus, aber die Bremsspur liegt im Motiv, und beim
+        Weiterfahren faengt die Zeile aus dem Stand wieder an - beides sieht
+        man hinterher. Am Zeilenende steht der Kopf im Anlauf daneben.
+        """
+        if not self.grbl.connected:
+            return
+        if self.v_pause_ende.get() and self.grbl.job_running:
+            self.grbl.pause_am_zeilenende()
+            self._log(T("Pause angemeldet - hält am Ende der laufenden Zeile."))
+            return
+        self.grbl.pause()
+        self._log(T("Pause (Feed Hold) - Laser aus. 'Weiter' setzt fort."))
 
     def resume(self):
         if self.grbl.connected:
@@ -2462,15 +2566,32 @@ class App:
                    "alarm": T("ALARM - gestoppt"),
                    "verbindung": T("Verbindung verloren"),
                    "fehler": T("zu viele Übertragungsfehler")}.get(res, res)
-            self.lbl_prog.configure(text=T('{0}: {1}').format(name, txt))
+            er = getattr(self.grbl, "job_errors", 0)
+            gesendet = getattr(self.grbl, "job_done", 0)
+            self.lbl_prog.configure(text=T('{0}: {1}').format(name, txt)
+                                    + (T("   {n} Fehler").format(n=er) if er else ""))
             self.lbl_marke.configure(text="")
             self._log(T('{0}: {1}').format(name, txt))
-            self._melde(f"{name}: {txt}")
+            # Die Fehlerzahl stand bisher nur in der Fortschrittsanzeige und
+            # war mit dem Jobende weg. Hinterher ist sie die einzige Spur,
+            # die eine ausgelassene Zeile erklaeren koennte.
+            self._log(T("Übertragung: {n} Fehler in {g} Befehlen").format(
+                n=er, g=gesendet))
+            self._melde(f"{name}: {txt}"
+                        + (T("\n{n} Übertragungsfehler").format(n=er) if er else ""))
             if res != "fertig":
                 # Soft-Reset/Abriss: Offsets sind nicht mehr verlaesslich
                 self.zero_ok = self.zref_ok = False
                 if res != "abgebrochen":
                     messagebox.showwarning(name, txt)
+        elif k == "pausiert":
+            t = T("Pause am Zeilenende - Laser aus, Kopf steht. "
+                  "'Weiter' setzt fort.")
+            self._log(t)
+            self._melde(t)
+        elif k == "weiter":
+            self._log(T("weiter ab {marke}").format(
+                marke=self.lbl_marke.cget("text") or T("der nächsten Zeile")))
         elif k == "alarm":
             self._log(d)
             self._melde(f"ALARM: {d}")

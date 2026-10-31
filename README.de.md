@@ -44,6 +44,12 @@ Material ausprobieren will.
   Alle Ebenen behalten Maßstab und Lage der ganzen Zeichnung, liegen also
   in Deckung. Graviert wird die Strichzeichnung der Ebene, nicht das
   gefüllte Original.
+- **Schnittvorlage ohne Schnittlinien** — eine SVG, die das Motiv als
+  eingebettetes Bild und die Schnittlinien als Pfade drumherum trägt, wird
+  gerastert, als stünde nur das Bild darin. Sonst brennt sich das
+  Puzzlemuster quer durchs Motiv, und die Vorlage taugt für den nächsten
+  Durchgang nichts mehr. Der Schalter steht bei den Gravureinstellungen und
+  taucht nur auf, wenn die Datei wirklich beides enthält.
 - **Mehrere Elemente** — Motiv als PNG, Rahmen als SVG, beides auf demselben
   Werkstück: jedes Element mit eigener Datei, eigener Platzierung und eigenen
   Werten, gemeinsam in einer Vorschau, einem G-Code und einer Projektdatei.
@@ -72,6 +78,15 @@ Material ausprobieren will.
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man
   am Werkstück steht. Meldet sich, wenn ein Job fertig ist oder in Alarm geht.
+- **Pause am Zeilenende** — ein Feed Hold hält sofort an, mitten in der Zeile.
+  Der Strahl geht dabei zwar aus, aber die Bremsspur liegt im Motiv, und beim
+  Weiterfahren fängt die Zeile aus dem Stand an. Mit dem Schalter in der
+  Jobleiste wartet die Pause bis zur nächsten Zeile: der Kopf bleibt im
+  Anlauf neben dem Motiv stehen, der Laser geht mit `M5` aus, und „Weiter"
+  stellt den Modus wieder her, in dem der Job lief.
+- **Übertragungsfehler im Protokoll** — am Jobende, nicht nur währenddessen in
+  der Fortschrittsanzeige. Fehlt hinterher eine Zeile im Werkstück, ist die
+  Fehlerzahl die einzige Spur, die das noch erklären könnte.
 - **Fortsetzen** — `fortsetzen.py` findet nach einem hängengebliebenen Job die
   genaue Stoppstelle über die Position und streamt den Rest.
 - **Nullpunkt übersteht STOPP** — der Abbruch setzt den Controller zurück und
@@ -242,7 +257,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-311 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+352 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

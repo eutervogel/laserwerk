@@ -55,6 +55,7 @@ EN = {
     "Weiter": "Resume",
     "STOPP": "STOP",
     "Rahmen sichtbar": "Visible frame",
+    "Pause am Zeilenende": "Pause at the row end",
     "kein Job": "no job",
     "nicht verbunden": "not connected",
     "getrennt": "disconnected",
@@ -98,6 +99,15 @@ EN = {
         "Centre line of the fixture, not of the artwork.",
     "Drehen": "Rotate",
     "Invertieren (Hell und Dunkel tauschen)": "Invert (swap light and dark)",
+    "Nur das eingebettete Bild gravieren": "Engrave only the embedded image",
+    "Die Schnittlinien der Vorlage bleiben dann aus dem\n"
+    "Motiv heraus - sonst brennt das Puzzlemuster mit.":
+        "Keeps the template's cut lines out of the artwork -\n"
+        "otherwise the jigsaw pattern burns in with it.",
+    "{n} Vektorelemente neben dem eingebetteten Bild - "
+    "graviert wird nur das Bild.":
+        "{n} vector elements beside the embedded image - "
+        "engraving the image only.",
     "Graustufen (Leistung variiert)": "Greyscale (power varies)",
     "Schwarzweiß (Strichgrafik)": "Black and white (line art)",
     "Schwelle": "Threshold",
@@ -387,6 +397,19 @@ EN = {
         '{0}: {1}',
     "Pause (Feed Hold) - Laser aus. 'Weiter' setzt fort.":
         "Pause (feed hold) - laser off. 'Resume' carries on.",
+    "Pause angemeldet - hält am Ende der laufenden Zeile.":
+        "Pause requested - will stop at the end of the current row.",
+    "Pause am Zeilenende - Laser aus, Kopf steht. 'Weiter' setzt fort.":
+        "Paused at the row end - laser off, head standing. "
+        "'Resume' carries on.",
+    "weiter ab {marke}":
+        "resumed at {marke}",
+    "der nächsten Zeile":
+        "the next row",
+    "Übertragung: {n} Fehler in {g} Befehlen":
+        "Transmission: {n} errors in {g} commands",
+    "\n{n} Übertragungsfehler":
+        "\n{n} transmission errors",
     'weiter':
         'resumed',
     'Controller neu gestartet - Nullpunkt und Z-Referenz neu setzen!':

@@ -97,5 +97,145 @@ class Einstellungen(unittest.TestCase):
         self.assertNotIn("30", self.g.settings)
 
 
+class Strom(G.Grbl):
+    """Grbl ohne Port: jede gesendete Zeile wird sofort quittiert.
+
+    'pause_bei' meldet mitten im Strom eine Pause an; auf die Meldung
+    'pausiert' wird gleich wieder fortgesetzt, sonst stuende der Test.
+    """
+
+    def __init__(self, fehler_bei=(), pause_bei=None):
+        self.ereignisse = []
+        self.gesendet = []
+        self.bei_pause = None
+        self.fehler_bei = set(fehler_bei)
+        self.pause_bei = pause_bei
+        self.nr = 0
+        super().__init__(self._ereignis)
+        self.alive = True
+
+    def _ereignis(self, art, daten):
+        self.ereignisse.append((art, daten))
+        if art == "pausiert":
+            self.bei_pause = list(self.gesendet)
+            self.resume()
+
+    def write(self, data):
+        for zeile in data.decode().splitlines():
+            self.gesendet.append(zeile)
+            self.oks.put("error:1" if self.nr in self.fehler_bei else "ok")
+            self.nr += 1
+            if self.nr == self.pause_bei:
+                self.pause_am_zeilenende()
+
+    def wait_idle(self, timeout=120.0):
+        return True
+
+
+ZEILEN = ["G1 X%07.3f Y%07.3f S500" % (i, i) for i in range(40)]
+MARKEN = [0, 8, 16, 24, 32]
+
+
+class Streamen(unittest.TestCase):
+    def test_alles_kommt_an(self):
+        g = Strom()
+        self.assertEqual(g.run_job(ZEILEN, lambda *a: None), "fertig")
+        self.assertEqual(g.gesendet, ZEILEN)
+        self.assertEqual(g.job_done, len(ZEILEN))
+
+    def test_fehler_werden_gezaehlt(self):
+        """Nach dem Job ist die Fehlerzahl die einzige Spur, die eine
+        ausgelassene Zeile im Werkstueck noch erklaeren koennte."""
+        g = Strom(fehler_bei=(3, 17))
+        g.run_job(ZEILEN, lambda *a: None)
+        self.assertEqual(g.job_errors, 2)
+
+    def test_ohne_fehler_steht_null(self):
+        g = Strom()
+        g.run_job(ZEILEN, lambda *a: None)
+        self.assertEqual(g.job_errors, 0)
+
+
+class PauseAmZeilenende(unittest.TestCase):
+    """Ein Feed Hold bremst mitten in der Zeile ab - die Spur liegt im
+    Motiv. Am Zeilenende steht der Kopf im Anlauf daneben."""
+
+    def setUp(self):
+        self.g = Strom(pause_bei=10)
+        self.g.run_job(ZEILEN, lambda *a: None, marken=MARKEN)
+        self.job = [z for z in self.g.gesendet if z.startswith("G1")]
+
+    def test_haelt_an_einer_marke(self):
+        vorher = [z for z in self.g.bei_pause if z.startswith("G1")]
+        self.assertIn(len(vorher), MARKEN)
+
+    def test_laser_aus_waehrend_der_pause(self):
+        self.assertEqual(self.g.bei_pause[-1], "M5")
+
+    def test_danach_wieder_im_selben_modus(self):
+        """Nach dem M5 muss genau der Modus wieder gelten, in dem der Job
+        laeuft - sonst brennt der Rest mit konstanter Leistung."""
+        i = self.g.gesendet.index("M5")
+        self.assertEqual(self.g.gesendet[i + 1], "M4")
+
+    def test_keine_zeile_geht_verloren(self):
+        self.assertEqual(self.job, ZEILEN)
+
+    def test_der_job_laeuft_zu_ende(self):
+        self.assertEqual(self.g.job_done, len(ZEILEN))
+
+    def test_kein_feed_hold(self):
+        """'!' wuerde genau die Delle bremsen, die vermieden werden soll."""
+        self.assertNotIn("realtime", [a for a, _ in self.g.ereignisse])
+        self.assertNotIn("!", self.g.gesendet)
+
+    def test_meldet_anhalten_und_weiterfahren(self):
+        self.assertEqual([a for a, _ in self.g.ereignisse],
+                         ["pausiert", "weiter"])
+
+
+class AbbruchInDerPause(unittest.TestCase):
+    """STOPP waehrend der Pause darf nicht im Wartelauf haengen bleiben."""
+
+    class Abbrecher(Strom):
+        def _ereignis(self, art, daten):
+            self.ereignisse.append((art, daten))
+            if art == "pausiert":
+                self._stop = True
+
+    def test_bricht_ab(self):
+        g = self.Abbrecher(pause_bei=10)
+        self.assertEqual(g.run_job(ZEILEN, lambda *a: None, marken=MARKEN),
+                         "abgebrochen")
+        self.assertLess(len([z for z in g.gesendet if z.startswith("G1")]),
+                        len(ZEILEN))
+
+
+class Marken(unittest.TestCase):
+    def test_naechste_marke(self):
+        self.assertEqual(G.Grbl._naechste_marke([0, 8, 16], 5), 8)
+
+    def test_marke_genau_davor(self):
+        self.assertEqual(G.Grbl._naechste_marke([0, 8, 16], 8), 16)
+
+    def test_ohne_marke_dahinter_sofort(self):
+        """Keine Marke mehr vor uns: anhalten, sobald der Puffer leer ist -
+        auch das haelt kontrolliert an, nur eben nicht am Zeilenende."""
+        self.assertEqual(G.Grbl._naechste_marke([0, 8], 12), 12)
+
+    def test_ganz_ohne_marken(self):
+        self.assertEqual(G.Grbl._naechste_marke(None, 7), 7)
+
+    def test_modus_m4(self):
+        self.assertEqual(G.Grbl._laser_modus(["M4 S0", "G1 X1"], 2), "M4")
+
+    def test_modus_m3(self):
+        self.assertEqual(G.Grbl._laser_modus(["M3 S300", "G1 X1"], 2), "M3")
+
+    def test_modus_kommentar_zaehlt_nicht(self):
+        self.assertEqual(G.Grbl._laser_modus(["M4 S0", "; M3 waere falsch"], 2),
+                         "M4")
+
+
 if __name__ == "__main__":
     unittest.main()

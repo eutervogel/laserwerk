@@ -1808,3 +1808,185 @@ class Haengerschutz(Grundlage):
         pfad = self.L.haenger_spuren()
         self.assertIsNotNone(pfad)
         self.assertEqual(os.path.dirname(pfad), P.DIR)
+
+
+@ohne_bildschirm
+class Jobleiste(Grundlage):
+    """Die Leiste mit Start, Pause und STOPP.
+
+    Der STOPP-Knopf lag jahrelang in derselben Gitterzelle wie der Schalter
+    'Rahmen sichtbar' - der Schalter deckte ihn zu, und ein Klick auf STOPP
+    schaltete nur den Rahmen um.
+    """
+
+    def kaesten(self):
+        self.wurzel.deiconify()
+        self.wurzel.update()
+        return [(c.winfo_x(), c.winfo_y(), c.winfo_width(), c.winfo_height())
+                for c in self.app.btn_gen.master.winfo_children()]
+
+    def test_nichts_deckt_sich(self):
+        k = self.kaesten()
+        for i in range(len(k)):
+            for j in range(i + 1, len(k)):
+                a, b = k[i], k[j]
+                quer = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+                hoch = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+                self.assertLessEqual(min(quer, hoch), 0,
+                                     "Jobleiste: %r deckt %r zu" % (a, b))
+
+    def test_stopp_ist_anklickbar(self):
+        """Direkt an die Stelle des Knopfes fassen - wer dort liegt, kriegt
+        den Klick."""
+        self.wurzel.deiconify()
+        self.wurzel.update()
+        knopf = [c for c in self.app.btn_gen.master.winfo_children()
+                 if c.winfo_class() == "TButton"
+                 and c.cget("text") in ("STOPP", "STOP")][0]
+        x = knopf.winfo_rootx() + knopf.winfo_width() // 2
+        y = knopf.winfo_rooty() + knopf.winfo_height() // 2
+        self.assertIs(self.wurzel.winfo_containing(x, y), knopf)
+
+
+@ohne_bildschirm
+class PauseAmZeilenende(Grundlage):
+    def setUp(self):
+        super().setUp()
+        self.app.grbl.job_running = True
+
+    def test_schalter_an_meldet_die_pause_an(self):
+        self.app.v_pause_ende.set(True)
+        self.app.pause()
+        self.assertIn("Pause am Zeilenende", self.app.grbl.protokoll)
+        self.assertNotIn("Pause", self.app.grbl.protokoll)
+
+    def test_schalter_aus_haelt_sofort(self):
+        self.app.v_pause_ende.set(False)
+        self.app.pause()
+        self.assertIn("Pause", self.app.grbl.protokoll)
+
+    def test_ohne_job_sofort(self):
+        """Vor dem Start gibt es keine Zeile, an deren Ende man halten
+        koennte - dann ist Pause eben Feed Hold."""
+        self.app.grbl.job_running = False
+        self.app.v_pause_ende.set(True)
+        self.app.pause()
+        self.assertIn("Pause", self.app.grbl.protokoll)
+
+    def test_marken_gehen_an_den_job(self):
+        self.app.grbl.job_running = False
+        self.motiv()
+        self.app.v_w.set(40.0)
+        self.app.generate()
+        self.app.start()
+        self.wurzel.update()
+        self.assertTrue(getattr(self.app.grbl, "marken", None),
+                        "ohne Marken kann der Job nicht am Zeilenende halten")
+
+
+@ohne_bildschirm
+class FehlerNachDemJob(Grundlage):
+    """Die Fehlerzahl stand bisher nur in der Fortschrittsanzeige und war
+    mit dem Jobende weg. Hinterher ist sie die einzige Spur, die eine
+    ausgelassene Zeile im Werkstueck erklaeren koennte."""
+
+    def protokoll(self):
+        return self.app.log.get("1.0", "end")
+
+    def test_fehler_landen_im_protokoll(self):
+        self.app.grbl.job_errors = 3
+        self.app.grbl.job_done = 1200
+        self.app._event("jobend", ("Gravur", "fertig"))
+        self.assertRegex(self.protokoll(), r"3 Fehler in 1200")
+
+    def test_auch_ohne_fehler(self):
+        self.app.grbl.job_errors = 0
+        self.app.grbl.job_done = 90
+        self.app._event("jobend", ("Gravur", "fertig"))
+        self.assertRegex(self.protokoll(), r"0 Fehler in 90")
+
+    def test_fehler_stehen_in_der_anzeige(self):
+        self.app.grbl.job_errors = 2
+        self.app._event("jobend", ("Gravur", "abgebrochen"))
+        self.assertIn("2", self.app.lbl_prog.cget("text"))
+
+
+@ohne_bildschirm
+class NurDasBild(Grundlage):
+    """Eine Schnittvorlage mit eingebettetem Bild: gerastert wird das Bild,
+    nicht die Schnittlinien drumherum."""
+
+    def vorlage(self, bild=True, linien=True):
+        import base64, io, os, tempfile
+        roh = io.BytesIO()
+        Image.new("L", (40, 20), 255).save(roh, format="PNG")
+        b64 = base64.b64encode(roh.getvalue()).decode()
+        teile = ['<svg xmlns="http://www.w3.org/2000/svg" '
+                 'xmlns:xlink="http://www.w3.org/1999/xlink" width="40mm" '
+                 'height="20mm" viewBox="0 0 40 20">']
+        if bild:
+            teile.append('<image xlink:href="data:image/png;base64,%s" '
+                         'x="0" y="0" width="40" height="20"/>' % b64)
+        if linien:
+            teile.append('<path d="M0 10 H40" stroke="#000000" '
+                         'stroke-width="0.6" fill="none"/>')
+        teile.append("</svg>")
+        p = os.path.join(tempfile.mkdtemp(), "vorlage.svg")
+        with open(p, "w") as f:
+            f.write("".join(teile))
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.open_image()
+        return p
+
+    def test_schalter_erscheint(self):
+        self.vorlage()
+        self.assertTrue(self.app.bildlinien)
+        self.assertTrue(self.app.chk_nurbild.winfo_manager())
+
+    def test_schalter_bleibt_weg_ohne_bild(self):
+        self.vorlage(bild=False)
+        self.assertFalse(self.app.bildlinien)
+        self.assertFalse(self.app.chk_nurbild.winfo_manager())
+
+    def test_schalter_bleibt_weg_ohne_linien(self):
+        self.vorlage(linien=False)
+        self.assertFalse(self.app.bildlinien)
+
+    def test_linien_kommen_nicht_in_den_gcode(self):
+        """Das eingebettete Bild ist weiss, die Linie schwarz: taucht im
+        Raster ueberhaupt Leistung auf, ist die Linie mitgraviert."""
+        self.vorlage()
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.assertEqual(max(s_werte(self.app.lines), default=0), 0)
+
+    def test_ausgeschaltet_brennt_die_linie_mit(self):
+        self.vorlage()
+        self.app.v_nurbild.set(False)
+        self.app._nurbild_anwenden()
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.assertGreater(max(s_werte(self.app.lines), default=0), 0)
+
+    def test_umschalten_rendert_neu(self):
+        self.vorlage()
+        vorher = self.app.src
+        self.app.v_nurbild.set(False)
+        self.app._nurbild_anwenden()
+        self.assertIsNot(self.app.src, vorher)
+        self.assertFalse(self.app.src_nurbild)
+
+
+def s_werte(zeilen):
+    import re
+    raus = []
+    for z in zeilen:
+        if z.startswith("G1"):
+            m = re.search(r"S(\d+)", z)
+            if m:
+                raus.append(int(m.group(1)))
+    return raus

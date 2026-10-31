@@ -382,3 +382,83 @@ class EingebetteteBilder(unittest.TestCase):
     def test_xlink_rendert_weiterhin(self):
         im = J.load_source(self.svg("xlink:href", True), 200)
         self.assertEqual(im.getextrema()[0], 0)
+
+
+class Schnittvorlage(unittest.TestCase):
+    """Eine Schnittvorlage traegt beides: das Motiv als eingebettetes Bild
+    und die Schnittlinien als Pfade drumherum.
+
+    Wer so eine Datei rastert, graviert sich die Schnittlinien mitten ins
+    Motiv. Das Werkstueck ist dann zwar fertig, aber die Vorlage fuer den
+    naechsten Durchgang ist hin - genau so ist ein Puzzlemuster in ein
+    zehnstuendiges Hundebild gebrannt worden.
+    """
+
+    def setUp(self):
+        import base64, io, os, tempfile
+        self.d = tempfile.mkdtemp(prefix="laserwerk-schnitt-")
+        roh = io.BytesIO()
+        Image.new("L", (40, 20), 255).save(roh, format="PNG")   # weisses Bild
+        self.b64 = base64.b64encode(roh.getvalue()).decode()
+        self.os = os
+
+    def vorlage(self, name="beides.svg", bild=True, linien=True):
+        p = self.os.path.join(self.d, name)
+        teile = ['<svg xmlns="http://www.w3.org/2000/svg" '
+                 'xmlns:xlink="http://www.w3.org/1999/xlink" width="40mm" '
+                 'height="20mm" viewBox="0 0 40 20">',
+                 '<defs><clipPath id="rahmen">'
+                 '<rect width="40" height="20"/></clipPath></defs>']
+        if bild:
+            teile.append('<image xlink:href="data:image/png;base64,%s" '
+                         'x="0" y="0" width="40" height="20" '
+                         'clip-path="url(#rahmen)"/>' % self.b64)
+        if linien:
+            teile.append('<g id="schnittlinien" fill="none" stroke="#000000" '
+                         'stroke-width="0.6"><path d="M0 10 H40"/>'
+                         '<path d="M20 0 V20"/></g>')
+        teile.append("</svg>")
+        with open(p, "w") as f:
+            f.write("".join(teile))
+        return p
+
+    def test_anteile(self):
+        self.assertEqual(J.svg_anteile(self.vorlage()), (1, 2))
+
+    def test_vorlagen_zaehlen_nicht_mit(self):
+        """Das rect im clipPath wird nie gezeichnet - es ist keine Linie,
+        die mitgraviert wuerde."""
+        self.assertEqual(J.svg_anteile(self.vorlage(linien=False)), (1, 0))
+
+    def test_nur_bilder_laesst_die_linien_weg(self):
+        neu = J.nur_bilder(self.vorlage())
+        self.assertEqual(J.svg_anteile(neu), (1, 0))
+
+    def test_der_rahmen_bleibt_stehen(self):
+        """Ohne clipPath und viewBox landet das Bild woanders als vorher."""
+        with open(J.nur_bilder(self.vorlage())) as f:
+            t = f.read()
+        self.assertIn("clipPath", t)
+        self.assertIn('viewBox="0 0 40 20"', t)
+
+    def test_ohne_linien_keine_kopie(self):
+        self.assertIsNone(J.nur_bilder(self.vorlage(linien=False)))
+
+    def test_ohne_bild_keine_kopie(self):
+        self.assertIsNone(J.nur_bilder(self.vorlage(bild=False)))
+
+    def test_gerendert_bleiben_die_linien_draussen(self):
+        p = self.vorlage()
+        voll = J.load_source(p, 200)
+        nur = J.load_source(p, 200, nur_bild=True)
+        self.assertEqual(voll.size, nur.size, "das Bild muss gleich liegen")
+        self.assertEqual(voll.getextrema()[0], 0, "die Linien fehlen schon so")
+        self.assertEqual(nur.getextrema(), (255, 255),
+                         "die Schnittlinien sind mitgerendert worden")
+
+    def test_schalter_wirkt_nur_bei_svg(self):
+        """Ein Pixelbild hat nichts auszublenden - und darf daran auch
+        nicht scheitern."""
+        p = self.os.path.join(self.d, "flach.png")
+        Image.new("L", (10, 10), 128).save(p)
+        self.assertEqual(J.load_source(p, nur_bild=True).size, (10, 10))

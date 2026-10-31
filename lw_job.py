@@ -9,6 +9,7 @@ Grundregeln aus der Praxis:
 """
 import io, os, subprocess, tempfile
 import math
+import xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image, ImageFilter
 
@@ -57,22 +58,109 @@ def xlink_notdurft(path):
     return tmp.name
 
 
-def load_source(path, px_w=None):
+# Was in einer SVG gezeichnet wird, und was nur Vorlage fuer anderes ist.
+# Die zweite Gruppe bleibt immer stehen: ein Clip-Pfad oder Verlauf wird
+# gebraucht, auch wenn nur noch das Bild uebrig ist.
+VEKTORTAGS = ("path", "line", "polyline", "polygon", "rect", "circle",
+              "ellipse", "text")
+VORLAGETAGS = ("defs", "clipPath", "mask", "marker", "symbol", "pattern",
+               "linearGradient", "radialGradient", "filter", "style",
+               "title", "desc", "metadata")
+SVGNS = "http://www.w3.org/2000/svg"
+XLINKNS = "http://www.w3.org/1999/xlink"
+
+
+def _tagname(el):
+    return str(el.tag).split("}")[-1]
+
+
+def _svg_zaehlen(el, bilder, vektoren):
+    for k in el:
+        name = _tagname(k)
+        if name in VORLAGETAGS:
+            continue                     # wird nicht selbst gezeichnet
+        if name == "image":
+            bilder.append(k)
+        elif name in VEKTORTAGS:
+            vektoren.append(k)
+        else:
+            _svg_zaehlen(k, bilder, vektoren)   # g, a, switch ...
+
+
+def svg_anteile(path):
+    """(Bilder, Vektorelemente) in einer SVG - Vorlagen wie defs zaehlen nicht.
+
+    Beides in einer Datei ist der Normalfall bei Schnittvorlagen: das Motiv
+    als eingebettetes Bild, die Schnittlinien als Pfade drumherum. Wer so
+    eine Datei rastert, graviert sich die Schnittlinien ins Motiv - und die
+    Vorlage ist hin.
+    """
+    bilder, vektoren = [], []
+    _svg_zaehlen(ET.parse(path).getroot(), bilder, vektoren)
+    return len(bilder), len(vektoren)
+
+
+def _ast_behalten(el):
+    """Diesen Zweig aufraeumen. Rueckgabe: bleibt etwas uebrig?"""
+    name = _tagname(el)
+    if name == "image" or name in VORLAGETAGS:
+        return True                      # Bild selbst, Vorlagen unangetastet
+    drin = False
+    for k in list(el):
+        if _ast_behalten(k):
+            drin = True
+        else:
+            el.remove(k)
+    return drin
+
+
+def nur_bilder(path):
+    """Kopie der SVG, in der nur die eingebetteten Bilder gezeichnet werden -
+    oder None, wenn es nichts wegzulassen gibt.
+
+    Die Wurzel mit viewBox und Groesse bleibt, ebenso jede Gruppe, in der
+    noch ein Bild steckt: das Bild liegt danach an genau derselben Stelle
+    wie vorher, nur ohne die Striche drumherum.
+    """
+    ET.register_namespace("", SVGNS)
+    ET.register_namespace("xlink", XLINKNS)
+    baum = ET.parse(path)
+    wurzel = baum.getroot()
+    bilder, vektoren = [], []
+    _svg_zaehlen(wurzel, bilder, vektoren)
+    if not bilder or not vektoren:
+        return None
+    for k in list(wurzel):
+        if not _ast_behalten(k):
+            wurzel.remove(k)
+    tmp = tempfile.NamedTemporaryFile(suffix=".svg", delete=False)
+    tmp.close()
+    baum.write(tmp.name, encoding="utf-8", xml_declaration=True)
+    return tmp.name
+
+
+def load_source(path, px_w=None, nur_bild=False):
     """Bild oder SVG als Graustufenbild auf weissem Grund laden.
-    SVGs werden mit Inkscape gerendert (px_w = gewuenschte Breite)."""
+    SVGs werden mit Inkscape gerendert (px_w = gewuenschte Breite).
+
+    nur_bild: enthaelt die SVG ein eingebettetes Bild UND Vektorlinien, wird
+    nur das Bild gerendert - siehe svg_anteile().
+    """
     if path.lower().endswith(".svg"):
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False).name
         args = ["inkscape", "--export-type=png", f"--export-filename={tmp}",
                 "--export-background=white"]
         if px_w:
             args += ["-w", str(int(px_w))]
-        ersatz = xlink_notdurft(path)
+        gestrippt = nur_bilder(path) if nur_bild else None
+        ersatz = xlink_notdurft(gestrippt or path)
         try:
-            subprocess.run(args + [ersatz or path], check=True,
+            subprocess.run(args + [ersatz or gestrippt or path], check=True,
                            capture_output=True)
         finally:
-            if ersatz:
-                os.unlink(ersatz)
+            for weg in (ersatz, gestrippt):
+                if weg:
+                    os.unlink(weg)
         im = Image.open(tmp)
         im.load()
         os.unlink(tmp)

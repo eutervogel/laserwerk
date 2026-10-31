@@ -48,6 +48,10 @@ class Grbl:
         self.settings = {}           # $$-Werte, z.B. {"30": 1000.0}
         self.job_running = False
         self._stop = False
+        self._pause_ende = False     # Pause am naechsten Zeilenende gewuenscht
+        self.pausiert = False        # haelt gerade an einem Zeilenende
+        self.job_errors = 0          # Uebertragungsfehler im letzten Job
+        self.job_done = 0            # quittierte Befehle im letzten Job
         self.reset_seen = 0          # zaehlt Neustarts des Controllers
 
     # ---------- Verbindung ----------
@@ -264,15 +268,23 @@ class Grbl:
             pass
 
     # ---------- Job ----------
-    def run_job(self, lines, on_progress, max_errors=50):
+    def run_job(self, lines, on_progress, max_errors=50, marken=None):
         """G-Code streamen (Character Counting). Laeuft im eigenen Thread.
-        Rueckgabe: 'fertig', 'abgebrochen', 'alarm', 'verbindung', 'fehler'."""
+        Rueckgabe: 'fertig', 'abgebrochen', 'alarm', 'verbindung', 'fehler'.
+
+        marken: Zeilennummern, an denen eine neue Gravurzeile oder Kontur
+        anfaengt. Nur damit ist eine Pause am Zeilenende moeglich.
+        """
         self.job_running = True
         self._stop = False
+        self._pause_ende = False
+        self.pausiert = False
+        self.job_errors = self.job_done = 0
         self.alarm = None
         while not self.oks.empty():
             self.oks.get_nowait()
         pend, sent, done, errors = [], 0, 0, 0
+        grenze = None                 # bis hierhin senden, dann anhalten
         total = len(lines)
         t0 = time.time()
         try:
@@ -284,7 +296,15 @@ class Grbl:
                 if self.alarm:
                     self._halt()
                     return "alarm"
-                while sent < total and sum(pend) + len(lines[sent]) + 1 <= RX_BUF:
+                if self._pause_ende and grenze is None:
+                    grenze = self._naechste_marke(marken, sent)
+                if grenze is not None and done >= grenze:
+                    if not self._zeilenpause(lines, sent):
+                        return "abgebrochen" if self._stop else "verbindung"
+                    grenze = None
+                    continue
+                ziel = total if grenze is None else grenze
+                while sent < ziel and sum(pend) + len(lines[sent]) + 1 <= RX_BUF:
                     c = lines[sent] + "\n"
                     self.write(c.encode())
                     pend.append(len(c))
@@ -296,9 +316,11 @@ class Grbl:
                 if pend:
                     pend.pop(0)
                 done += 1
+                self.job_done = done
                 if r.startswith("error"):
                     # einzelner Uebertragungsfehler = ein fehlender 0,1-mm-Strich
                     errors += 1
+                    self.job_errors = errors
                     if errors > max_errors:
                         self._halt()
                         return "fehler"
@@ -310,11 +332,76 @@ class Grbl:
             return "verbindung"
         finally:
             self.job_running = False
+            self.pausiert = False
+            self._pause_ende = False
+
+    @staticmethod
+    def _naechste_marke(marken, sent):
+        """Wo faengt die naechste Zeile an? Ohne Marke davor: anhalten,
+        sobald der Puffer leer ist - auch das haelt kontrolliert an."""
+        for m in marken or ():
+            if m > sent:
+                return m
+        return sent
+
+    @staticmethod
+    def _laser_modus(lines, bis):
+        """M3 oder M4 - was zuletzt gesendet wurde. Nach dem M5 der Pause
+        muss genau das wieder gelten, sonst laeuft der Rest der Gravur im
+        falschen Modus weiter."""
+        for i in range(min(bis, len(lines)) - 1, -1, -1):
+            c = lines[i].split(";")[0]
+            if "M4" in c:
+                return "M4"
+            if "M3" in c:
+                return "M3"
+        return "M4"
+
+    def _zwischenbefehl(self, line):
+        """Ein einzelner Befehl mitten im Job. Nur erlaubt, wenn nichts mehr
+        unquittiert ist - sonst zaehlt die Zeichenzaehlung falsch. Die
+        Quittung wird hier abgeholt, nicht vom Jobzaehler."""
+        self.write((line + "\n").encode())
+        try:
+            self.oks.get(timeout=5.0)
+        except queue.Empty:
+            pass
+
+    def _zeilenpause(self, lines, sent):
+        """Anhalten, wenn alles Gesendete quittiert ist.
+
+        Die Maschine faehrt die gepufferten Bewegungen zu Ende und bleibt am
+        Zeilenende stehen - im Anlauf neben dem Motiv statt mitten im Bild,
+        wo ein Feed Hold eine Delle in die Zeile bremst.
+
+        Rueckgabe: False, wenn waehrend der Pause abgebrochen wurde.
+        """
+        self.wait_idle(timeout=300)
+        self._zwischenbefehl("M5")        # auch bei $32=0 sicher aus
+        self.pausiert = True
+        self.on_event("pausiert", "")
+        try:
+            while self._pause_ende:
+                if self._stop or not self.alive:
+                    return False
+                time.sleep(0.2)
+            self._zwischenbefehl(self._laser_modus(lines, sent))
+            self.on_event("weiter", "")
+            return True
+        finally:
+            self.pausiert = False
 
     def pause(self):
         self.realtime(b"!")
 
+    def pause_am_zeilenende(self):
+        """Nicht sofort, sondern am Ende der laufenden Zeile anhalten."""
+        self._pause_ende = True
+
     def resume(self):
+        if self._pause_ende or self.pausiert:
+            self._pause_ende = False      # der Job laeuft von selbst weiter
+            return
         self.realtime(b"~")
 
     def stop(self):

@@ -119,15 +119,23 @@ class Attrappe:
         if self.app is not None:
             self.app.q.put(("reset", "Grbl 1.1f ['$' for help]"))
 
-    def run_job(self, lines, on_progress, max_errors=50):
+    job_errors = 0
+    job_done = 0
+
+    def run_job(self, lines, on_progress, max_errors=50, marken=None):
         """Streamt nichts, meldet aber wie das Original."""
         self.protokoll.append("JOB %d Zeilen" % len(lines))
         self.gesendet = list(lines)
+        self.marken = marken
+        self.job_done = len(lines)
         on_progress(len(lines), len(lines), 0.1, 0)
         return "fertig"
 
     def pause(self):
         self.protokoll.append("Pause")
+
+    def pause_am_zeilenende(self):
+        self.protokoll.append("Pause am Zeilenende")
 
     def resume(self):
         self.protokoll.append("Weiter")

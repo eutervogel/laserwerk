@@ -37,7 +37,8 @@ class Rundlauf(unittest.TestCase):
 
     def test_vorlage_ueberlebt_das_loeschen_des_originals(self):
         PR.speichern(self.datei, self.werte, self.vorlage)
-        original = open(self.vorlage, "rb").read()
+        with open(self.vorlage, "rb") as f:
+            original = f.read()
         os.remove(self.vorlage)
         ziel, name = PR.vorlage_auspacken(PR.laden(self.datei),
                                           os.path.join(self.ordner, "aus"))

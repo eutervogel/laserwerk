@@ -196,11 +196,39 @@ Der Verfahrweg steht im Reiter *Maschine* und lässt sich aus `$130`/`$131`
 | `lw_dialog.py` | native Dialoge über zenity, mit Tk als Rückfall |
 | `lw_telegram.py` | Fernsteuerung |
 | `fortsetzen.py` | abgebrochenen Job an der Stoppstelle fortsetzen |
+| `waechter.py` | meldet per Telegram, bevor die Zeilen durch sind |
 | `bilder/mach_bilder.py` | erzeugt die Bildschirmfotos, auf unsichtbarem Schirm |
 
 Keine Fremdbibliotheken außer pyserial, Pillow und numpy. SVG, DXF und die
 Telegram-Anbindung sind selbst geschrieben, damit nichts nachinstalliert werden
 muss und nichts im Hintergrund Dialoge öffnet.
+
+## Wächter für lange Jobs
+
+Eine Fotogravur läuft gern zehn Stunden. Wer daneben sitzt, will nicht
+stundenlang auf das Geblinke schauen, aber mitbekommen, wann die Zeilen durch
+sind und das Schneiden anfängt — dafür gibt es `waechter.py`:
+
+```sh
+python3 waechter.py --vorlauf 10
+```
+
+Er läuft als **eigener Prozess neben** der Oberfläche, mitten im Job
+gestartet, ohne Neustart. Er meldet per Telegram, wenn die Zeilen in etwa
+`--vorlauf` Minuten durch sind (spätestens `--rest` Zeilen vorher), wenn das
+Schneiden anfängt, wenn der Job vorbei ist, und wenn er die Oberfläche nicht
+mehr sieht.
+
+Wie er an den Stand kommt: über `tk send` liest er die Texte der
+Anzeigefelder aus dem laufenden Tk-Interpreter — lesend, wie ein Blick auf
+den Bildschirm. Er schreibt nichts in das laufende Programm, nichts an den
+Controller, und die serielle Schnittstelle fasst er nicht an. Bei Telegram
+ruft er nur `sendMessage`, niemals `getUpdates` — das darf allein der Bot in
+der laufenden Oberfläche, zwei Abholer nehmen sich die Nachrichten weg
+(HTTP 409).
+
+`--lesen` sieht einmal hin und sendet nichts; gut zum Prüfen, ob er das
+richtige Fenster vor sich hat.
 
 ## Übersetzungen
 
@@ -214,7 +242,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-279 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+311 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

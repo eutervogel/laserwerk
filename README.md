@@ -191,11 +191,38 @@ Machine travel is set in the *Machine* tab and can be taken from `$130`/`$131`.
 | `lw_dialog.py` | native dialogs through zenity, falling back to Tk |
 | `lw_telegram.py` | remote control |
 | `fortsetzen.py` | resume an interrupted job at its stopping point |
+| `waechter.py` | tells you on Telegram before the rows are done |
 | `bilder/mach_bilder.py` | makes the screenshots above, on a hidden display |
 
 No third-party libraries beyond pyserial, Pillow and numpy. The SVG and DXF
 readers and the Telegram client are written from scratch, so nothing has to be
 installed afterwards and nothing opens dialogs behind your back.
+
+## A watchman for long jobs
+
+A photo engraving happily runs for ten hours. Sitting next to it, you do not
+want to stare at the flickering for hours, but you do want to know when the
+rows are done and the cutting starts. That is what `waechter.py` is for:
+
+```sh
+python3 waechter.py --vorlauf 10
+```
+
+It runs as **its own process beside** the interface and can be started in the
+middle of a job, with no restart. It sends a Telegram message when the rows
+are about `--vorlauf` minutes from done (at the latest `--rest` rows before),
+when the cutting starts, when the job is over, and when it can no longer see
+the interface.
+
+How it learns the state: through `tk send` it reads the texts of the display
+fields out of the running Tk interpreter — read-only, like a glance at the
+screen. It writes nothing into the running program, nothing to the controller,
+and it does not touch the serial port. On Telegram it only calls
+`sendMessage`, never `getUpdates` — that is for the bot inside the running
+interface alone, as two collectors take each other's messages away (HTTP 409).
+
+`--lesen` looks once and sends nothing; useful to check that it has the right
+window in front of it.
 
 ## Translations
 
@@ -209,7 +236,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-279 tests on stdlib only, nothing to install. The interface tests need a
+311 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

@@ -32,6 +32,7 @@ xvfb-run -a python3 -m unittest discover -s tests -t tests
 | `test_projekt.py` | Projektdateien hin und zurück, auch ohne Originalvorlage |
 | `test_oberflaeche.py` | Platzieren, Grenzen, Leistungsumrechnung, Nullpunkt nach STOPP, Schnitttiefe |
 | `test_fortsetzen.py` | Stopp-Stelle wiederfinden, mit Tiefe auch bei mehreren Zustellungen |
+| `test_waechter.py` | Anzeigetexte deuten, fremdes Fenster erkennen, niemals `getUpdates` |
 
 ## Regeln
 

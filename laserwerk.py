@@ -1891,6 +1891,10 @@ class App:
         self.v_line.set(d.get("line", 0.1)); self.v_notiz.set(d.get("notiz", ""))
         self.v_mode.set(d.get("mode", "schwelle")); self.v_schw.set(d.get("schwelle", 0.5))
         self.v_gamma.set(d.get("gamma", 1.0)); self._gamma_zeigen()
+        # Aeltere Presets haben keine Schnittwerte. 0 heisst "nimm die vom
+        # Material", 1 Durchgang - genau das Verhalten von vorher.
+        self.v_cs.set(d.get("schnitt_s", 0)); self.v_cf.set(d.get("schnitt_f", 0))
+        self.v_passes.set(d.get("durchgaenge", 1))
         self.v_pname.set(self.v_preset.get())
         self._save_cfg()           # Dicke und Korrektur ueberleben den Neustart
 
@@ -2005,6 +2009,11 @@ class App:
                                f=self.v_f.get(), line=self.v_line.get(),
                                mode=self.v_mode.get(), schwelle=round(self.v_schw.get(), 2),
                                gamma=round(self.v_gamma.get(), 2),
+                               # Die Schnittwerte gehoeren dazu. Sie kosten am
+                               # meisten Zeit zum Herausfinden - ein halber Tag
+                               # fuer drei Zahlen - und standen bisher nirgends.
+                               schnitt_s=self.v_cs.get(), schnitt_f=self.v_cf.get(),
+                               durchgaenge=self.v_passes.get(),
                                notiz=self.v_notiz.get())
         P.save_presets(self.presets)
         self.cb_preset.configure(values=sorted(self.presets))

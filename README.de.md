@@ -75,7 +75,8 @@ Material ausprobieren will.
 - **Material finden** — Fokustest über Z, Materialtest als Feldraster aus
   Leistungen und Vorschüben, Graustufentest mit einem Tonwertkeil je
   Leistung, Presets mit Materialdicke, Fokuskorrektur, Leistung, Vorschub,
-  Zeilenabstand und Tonwert. Materialdicke und Fokuskorrektur überstehen den
+  Zeilenabstand, Tonwert **und den Schnittwerten** — Durchgänge, Schnitt-S
+  und Schnitt-F sind die Zahlen, die am meisten Zeit zum Herausfinden kosten. Materialdicke und Fokuskorrektur überstehen den
   Neustart auch von allein: die Korrektur hat der Fokustest gemessen, und wer
   sie von Hand in ein Preset tippen soll, verliert sie.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
@@ -200,6 +201,15 @@ Holz bei S830/F1000 = 0,83 bewährt, Wildleder bei 0,25, das Sichtkreuz läuft b
 0,08. Über etwa 0,20 brennt der Strahl sichtbar ein — deshalb weigert sich das
 Programm, ein Sichtkreuz oberhalb davon zu fahren.
 
+Beim **Schneiden** rechnet man besser gleich in Joule je Millimeter:
+Leistung in Watt geteilt durch Vorschub in mm/s, mal Durchgänge. 3 mm Erle
+trennt auf der Referenzmaschine ab etwa 3,3 J/mm und sauber bei 4,0
+(5 × S725/F300 bei 5,5 W). Zwei Dinge folgen daraus. Erstens dauert ein
+Schnitt **Energie geteilt durch Leistung** — wie viele Durchgänge man daraus
+macht, ändert die Zeit nicht, nur die nötige Energie tut das. Zweitens liegt
+der Brennpunkt bei dünnem Material **auf der Oberfläche**; ihn ins Material zu
+legen klingt plausibel, kostete hier aber mehr als es brachte.
+
 Alle Leistungen in der Oberfläche beziehen sich auf die Skala **0…1000**. Beim
 Verbinden liest Laserwerk `$30` aus dem Controller und rechnet beim Senden um;
 steht dort 255, wird aus S830 eben S212 — derselbe Anteil. Es warnt außerdem,
@@ -299,7 +309,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-437 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+441 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

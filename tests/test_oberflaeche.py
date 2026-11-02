@@ -443,6 +443,61 @@ class NullpunktUeberDieSitzung(Nullpunkt):
 
 
 @ohne_bildschirm
+class PresetsMerkenDenSchnitt(Grundlage):
+    """Durchgaenge, Schnitt-S und Schnitt-F gehoeren ins Preset. Sie kosten
+    am meisten Zeit zum Herausfinden und standen bisher nirgends - ein halber
+    Tag Erle fuer drei Zahlen, und beim naechsten Start waren sie weg."""
+
+    def test_werte_gehen_hin_und_zurueck(self):
+        self.app.v_dicke.set(12.0)
+        self.app.v_passes.set(5)
+        self.app.v_cs.set(725)
+        self.app.v_cf.set(300)
+        self.app.v_pname.set("Erle 3")
+        self.app.save_preset()
+
+        self.app.v_passes.set(1)
+        self.app.v_cs.set(0)
+        self.app.v_cf.set(0)
+        self.app.v_preset.set("Erle 3")
+        self.app.load_preset()
+        self.assertEqual(self.app.v_passes.get(), 5)
+        self.assertEqual(self.app.v_cs.get(), 725)
+        self.assertEqual(self.app.v_cf.get(), 300)
+
+    def test_ueberlebt_ein_neues_fenster(self):
+        self.app.v_passes.set(5)
+        self.app.v_cs.set(725)
+        self.app.v_cf.set(300)
+        self.app.v_pname.set("Erle 3")
+        self.app.save_preset()
+        app_schliessen(self.wurzel, self.app)
+        self.wurzel, self.app, self.L = app_bauen()
+        self.app.v_preset.set("Erle 3")
+        self.app.load_preset()
+        self.assertEqual(self.app.v_passes.get(), 5)
+        self.assertEqual(self.app.v_cs.get(), 725)
+
+    def test_altes_preset_ohne_schnittwerte(self):
+        """Presets von vorher haben die Felder nicht. 0 heisst 'nimm die vom
+        Material', ein Durchgang - genau das Verhalten von frueher."""
+        self.app.presets["alt"] = dict(dicke=3.0, korrektur=0.0, s=830, f=1000,
+                                       line=0.1, mode="schwelle", schwelle=0.5)
+        self.app.v_passes.set(7)
+        self.app.v_cs.set(900)
+        self.app.v_preset.set("alt")
+        self.app.load_preset()
+        self.assertEqual(self.app.v_passes.get(), 1)
+        self.assertEqual(self.app.v_cs.get(), 0)
+        self.assertEqual(self.app.v_cf.get(), 0)
+
+    def test_mitgeliefertes_erle_preset_passt_zur_messung(self):
+        d = self.L.P.DEFAULTS["Erle 3 mm (Schnitt)"]
+        energie = 0.33 * d["schnitt_s"] / d["schnitt_f"] * d["durchgaenge"]
+        self.assertAlmostEqual(energie, 3.99, places=2)
+
+
+@ohne_bildschirm
 class Verwerfen(Grundlage):
     """Geladenen G-Code wieder loswerden. clear_motif konnte das immer, aber
     es gab keinen Knopf - eine geladene .nc blieb, bis man eine andere lud."""

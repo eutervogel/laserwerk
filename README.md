@@ -71,8 +71,9 @@ settings for a new material.
   sight cross at low power, unlock, send single G-code commands.
 - **Find material settings** — a focus test along Z, a material test as a grid
   of power and feed values, a greyscale test with one tonal wedge per power,
-  and presets holding thickness, focus correction, power, feed, row pitch and
-  midtones. Thickness and focus correction also survive a restart on their
+  and presets holding thickness, focus correction, power, feed, row pitch,
+  midtones **and the cutting values** — passes, cut power and cut feed are the
+  numbers that take the longest to find. Thickness and focus correction also survive a restart on their
   own: the correction is something the focus test measured, and asking you to
   copy it into a preset by hand is asking you to lose it.
 - **Engrave both sides** — mirror about a flip axis, with a check that the
@@ -193,6 +194,14 @@ energy per millimetre. On the reference machine wood works at S830/F1000 =
 beam burns in visibly — which is why the program refuses to trace a sight cross
 beyond that.
 
+For **cutting** it is easier to work in joules per millimetre: watts divided by
+feed in mm/s, times the number of passes. On the reference machine 3 mm alder
+starts to separate at about 3.3 J/mm and cuts cleanly at 4.0 (5 × S725/F300 at
+5.5 W). Two things follow. A cut takes **energy divided by power** — how many
+passes you split it into does not change the time, only the energy required
+does. And for thin material the focus belongs **on the surface**; putting it
+inside the material sounds plausible but cost more here than it gained.
+
 All power values in the interface refer to a **0…1000** scale. On connecting,
 Laserwerk reads `$30` from the controller and converts when sending; if yours
 says 255, S830 goes out as S212 — the same fraction. It also warns when
@@ -290,7 +299,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-437 tests on stdlib only, nothing to install. The interface tests need a
+441 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

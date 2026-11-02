@@ -31,6 +31,13 @@ DEFAULTS = {
     "Papier orange (Schnitt)": dict(dicke=0.1, korrektur=0.0, s=500, f=600,
         line=0.10, mode="schwelle", schwelle=0.5,
         notiz="Schnitt, nicht Gravur. Brandgefahr - daneben bleiben"),
+    "Erle 3 mm (Schnitt)": dict(dicke=12.0, korrektur=2.0, s=450, f=1000,
+        line=0.10, mode="raster", schwelle=0.5,
+        schnitt_s=725, schnitt_f=300, durchgaenge=5,
+        notiz="3 mm Erle auf 9 mm Unterlage, Fokus auf der Oberflaeche. "
+              "5 x S725/F300 = 3,99 J/mm. 4 x S750/F300 = 3,30 J/mm war "
+              "knapp zu wenig - die Schwelle liegt dazwischen. Fokus NICHT "
+              "ins Material legen, das kostet mehr als es bringt"),
     "Alu eloxiert": dict(dicke=1.0, korrektur=0.0, s=300, f=600, line=0.10,
         mode="schwelle", schwelle=0.5, notiz="ungetestet - erst Fokustest"),
 }

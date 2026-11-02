@@ -432,8 +432,8 @@ EN = {
         'Focus test, {n} lines',
     'Strich {i:>2}:  Z = {z:.2f} mm':
         'Line {i:>2}:  Z = {z:.2f} mm',
-    'Fokuskorrektur = {0:+.2f} mm - im Reiter Material speichern':
-        'Focus correction = {0:+.2f} mm - save it in the Material tab',
+    'Fokuskorrektur = {0:+.2f} mm - gesichert, gilt auch nach dem Neustart':
+        'Focus correction = {0:+.2f} mm - stored, it survives a restart',
     'Werte mit Komma trennen, z.B. 200,400,600':
         'Separate values with commas, e.g. 200,400,600',
     'Materialtest {a}x{b}':

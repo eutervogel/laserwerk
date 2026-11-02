@@ -75,7 +75,9 @@ Material ausprobieren will.
 - **Material finden** — Fokustest über Z, Materialtest als Feldraster aus
   Leistungen und Vorschüben, Graustufentest mit einem Tonwertkeil je
   Leistung, Presets mit Materialdicke, Fokuskorrektur, Leistung, Vorschub,
-  Zeilenabstand und Tonwert.
+  Zeilenabstand und Tonwert. Materialdicke und Fokuskorrektur überstehen den
+  Neustart auch von allein: die Korrektur hat der Fokustest gemessen, und wer
+  sie von Hand in ein Preset tippen soll, verliert sie.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man
@@ -297,7 +299,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-427 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+431 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

@@ -72,7 +72,9 @@ settings for a new material.
 - **Find material settings** — a focus test along Z, a material test as a grid
   of power and feed values, a greyscale test with one tonal wedge per power,
   and presets holding thickness, focus correction, power, feed, row pitch and
-  midtones.
+  midtones. Thickness and focus correction also survive a restart on their
+  own: the correction is something the focus test measured, and asking you to
+  copy it into a preset by hand is asking you to lose it.
 - **Engrave both sides** — mirror about a flip axis, with a check that the
   mirrored artwork still lands in positive coordinates.
 - **Remote control via Telegram** — jog the axes and trace the sight cross from
@@ -288,7 +290,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-427 tests on stdlib only, nothing to install. The interface tests need a
+431 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

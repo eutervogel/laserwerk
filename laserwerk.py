@@ -515,8 +515,8 @@ class App:
         self.cb_preset.grid(row=0, column=0, columnspan=3, sticky="ew")
         self.cb_preset.bind("<<ComboboxSelected>>", lambda e: self.load_preset())
 
-        self.v_dicke = tk.DoubleVar(value=12.0)
-        self.v_korr = tk.DoubleVar(value=0.0)
+        self.v_dicke = tk.DoubleVar(value=self.cfg.get("dicke", 12.0))
+        self.v_korr = tk.DoubleVar(value=self.cfg.get("korrektur", 0.0))
         self.v_s = tk.IntVar(value=830)
         self.v_f = tk.IntVar(value=1000)
         self.v_line = tk.DoubleVar(value=0.10)
@@ -1874,6 +1874,7 @@ class App:
         self.v_mode.set(d.get("mode", "schwelle")); self.v_schw.set(d.get("schwelle", 0.5))
         self.v_gamma.set(d.get("gamma", 1.0)); self._gamma_zeigen()
         self.v_pname.set(self.v_preset.get())
+        self._save_cfg()           # Dicke und Korrektur ueberleben den Neustart
 
     def _anlauf(self, feed=None):
         """Wirksamer Anlauf: eingestellt, oder 0 = aus der Maschine gerechnet."""
@@ -2306,7 +2307,22 @@ class App:
 
     def _save_cfg(self):
         self.cfg["z_invert"] = self.v_zinv.get()
+        self._fokus_sichern()
         P.save_config(self.cfg)
+
+    def _fokus_sichern(self):
+        """Materialdicke und Fokuskorrektur in die Konfiguration schreiben.
+
+        Beides stand bisher nur in der Oberflaeche und in Presets. Wer ein
+        Preset nicht von Hand speicherte, fing nach jedem Start wieder bei
+        0,0 an - und gravierte oder schnitt ausser Fokus weiter, ohne dass
+        sich sichtbar etwas geaendert haette.
+        """
+        for name, var in (("dicke", self.v_dicke), ("korrektur", self.v_korr)):
+            try:
+                self.cfg[name] = float(var.get())
+            except (tk.TclError, ValueError):
+                pass                      # halb getipptes Feld nicht sichern
 
     # ================================================================ Tests
     def fokustest(self):
@@ -2331,7 +2347,11 @@ class App:
             return
         z = self.fokus_zs[sel[0]]
         self.v_korr.set(round(z - self.v_dicke.get(), 2))
-        self._log(T('Fokuskorrektur = {0:+.2f} mm - im Reiter Material speichern').format(self.v_korr.get()))
+        # Sofort sichern. Der Wert ist gemessen, nicht geraten - ihn vom
+        # Benutzer in ein Preset tippen zu lassen heisst, ihn zu verlieren.
+        self._save_cfg()
+        self._log(T('Fokuskorrektur = {0:+.2f} mm - gesichert, gilt auch nach '
+                    'dem Neustart').format(self.v_korr.get()))
 
     def _gt_werte(self):
         ps = [int(x) for x in self.v_gt_s.get().replace(" ", "").split(",") if x]

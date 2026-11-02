@@ -443,6 +443,51 @@ class NullpunktUeberDieSitzung(Nullpunkt):
 
 
 @ohne_bildschirm
+class FokusUeberlebtDenNeustart(Grundlage):
+    """Materialdicke und Fokuskorrektur standen nur in der Oberflaeche und in
+    Presets. Wer kein Preset von Hand speicherte, fing nach jedem Start wieder
+    bei 0,0 an - und schnitt ausser Fokus weiter, ohne dass sich sichtbar
+    etwas geaendert haette. Genau so ist es passiert."""
+
+    def test_gemessene_korrektur_wird_sofort_gesichert(self):
+        self.app.v_dicke.set(12.0)
+        self.app.fokus_zs = [10.0, 11.0, 12.0, 13.0, 14.0]
+        self.app.lb_fz.delete(0, "end")
+        for z in self.app.fokus_zs:
+            self.app.lb_fz.insert("end", "Z %.2f" % z)
+        self.app.lb_fz.selection_set(4)          # 14.0 -> Korrektur +2,00
+        self.app.take_focus()
+        self.assertAlmostEqual(self.app.v_korr.get(), 2.0, places=3)
+        self.assertAlmostEqual(self.L.P.load_config()["korrektur"], 2.0, places=3)
+
+    def test_neues_fenster_bringt_sie_mit(self):
+        self.app.v_dicke.set(3.0)
+        self.app.v_korr.set(-1.75)
+        self.app._save_cfg()
+        app_schliessen(self.wurzel, self.app)
+        self.wurzel, self.app, self.L = app_bauen()
+        self.assertAlmostEqual(self.app.v_dicke.get(), 3.0, places=3)
+        self.assertAlmostEqual(self.app.v_korr.get(), -1.75, places=3)
+        self.assertAlmostEqual(self.app._z_target(), 1.25, places=3)
+
+    def test_preset_laden_sichert_mit(self):
+        self.app.presets["Erle 3"] = dict(dicke=3.0, korrektur=-2.5, s=740,
+                                          f=230, line=0.1, mode="schwelle")
+        self.app.v_preset.set("Erle 3")
+        self.app.load_preset()
+        cfg = self.L.P.load_config()
+        self.assertAlmostEqual(cfg["dicke"], 3.0, places=3)
+        self.assertAlmostEqual(cfg["korrektur"], -2.5, places=3)
+
+    def test_halb_getipptes_feld_zerschiesst_nichts(self):
+        self.app.v_korr.set(-1.0)
+        self.app._save_cfg()
+        self.app.v_korr.set("")                  # mitten im Tippen
+        self.app._save_cfg()
+        self.assertAlmostEqual(self.L.P.load_config()["korrektur"], -1.0, places=3)
+
+
+@ohne_bildschirm
 class FernPauseUndWeiter(Grundlage):
     def test_pause_haelt_am_zeilenende(self):
         self.app.grbl.job_running = True

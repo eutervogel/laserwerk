@@ -1661,10 +1661,6 @@ class App:
         self.preview_pil = J.preview_image(p)
         self.preview_img = None
         self.preview_pos = (xoff, yoff + self.info["hoehe"])
-        if self.v_job.get() == "beides":
-            if not self._schnitt_anhaengen(w, h):
-                return
-        self._gen_knopf()
         i = self.info
         warn = ""
         if i["xmax"] > self.cfg["x_max"] or h > self.cfg["y_max"]:
@@ -1681,9 +1677,13 @@ class App:
                 n=i["befehle"], m=i["cut_m"], min=i["sekunden"] / 60,
                 s=s, f=f, sf=s / f, warn=warn)))
         # Der Schnitt haengt sich erst hier an - vorher wuerde die Gravur
-        # seinen Text mit ihrem eigenen ueberschreiben.
+        # seinen Text mit ihrem eigenen ueberschreiben. Genau einmal: stand
+        # der Aufruf auch noch vor der Beschriftung, lag der Schnitt zweimal
+        # im Job und fuhr seine Durchgaenge ein zweites Mal ab - ueber Teile,
+        # die da schon lose im Brett lagen.
         if self.v_job.get() == "beides" and not self._schnitt_anhaengen(w, h):
             return
+        self._gen_knopf()
         self._draw()
 
     def _schnitt_polys(self, w, h, melden=True):
@@ -1731,12 +1731,20 @@ class App:
             self.lines = self.lines[:-1]
         self.lines = self.lines + g
         i = self.info
+        # Die Konturmarken zaehlen in ihrem eigenen G-Code ab Null und muessen
+        # hinter die Gravur geschoben werden. Ohne sie bleibt die Anzeige den
+        # ganzen Schnitt ueber auf der letzten Gravurzeile stehen, "Kontur n
+        # von m" kommt nie, und der Waechter sieht den Schnitt nicht anlaufen.
+        versatz = len(self.lines) - len(g)
+        marken = list(i.get("marken") or [])
+        marken += [(k + versatz, art, nr, ges) for k, art, nr, ges in ci["marken"]]
         self.info = dict(i)
         self.info.update(
             befehle=len(self.lines),
             cut_m=i["cut_m"] + ci["cut_m"],
             sekunden=i["sekunden"] + ci["sekunden"],
             xmax=max(i["xmax"], ci["xmax"]),
+            marken=marken,
             konturen=ci["konturen"], schnitt_m=ci["cut_m"],
             schnitt_sekunden=ci["sekunden"])
         self.cut_polys = polys
@@ -1745,6 +1753,12 @@ class App:
             "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min").format(
                 k=ci["konturen"], m=ci["cut_m"], p=passes, s=cs, f=cf,
                 sf=cs / cf if cf else 0, min=max(1, ci["sekunden"] / 60)))
+        # Frueher stand die Gravur schon mit dem Schnitt zusammen in info,
+        # als die Warnung geschrieben wurde. Jetzt kommt der Schnitt spaeter -
+        # also hier noch einmal nachsehen, ob er ueber den Verfahrweg laeuft.
+        if self.info["xmax"] > self.cfg["x_max"]:
+            self.lbl_info.configure(text=self.lbl_info.cget("text")
+                                    + T("\nACHTUNG: größer als der Verfahrweg!"))
         return True
 
     def _generate_cut(self, w, h, s, f):

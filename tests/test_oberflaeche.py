@@ -751,6 +751,56 @@ class GravierenUndSchneiden(Grundlage):
         self.app.v_over.set(4.0)
         self.assertEqual(self.app._xmin(), 4.0)
 
+    def test_schnitt_steht_genau_einmal_im_job(self):
+        """Er stand zweimal drin: einmal vor der Beschriftung des Infofelds
+        und einmal danach. Gemerkt haette man es erst am Werkstueck - der
+        zweite Satz Durchgaenge faehrt ueber Teile, die schon lose sind."""
+        self.svg_laden()
+        self.app.v_job.set("beides")
+        self.app.generate()
+        kopfe = [i for i, z in enumerate(self.app.lines)
+                 if z.startswith("; Laserwerk Schnitt")]
+        self.assertEqual(len(kopfe), 1, "Schnitt mehrfach im Job")
+
+    def test_schnittweg_wird_einfach_gezaehlt(self):
+        self.svg_laden()
+        self.app.v_job.set("schnitt")
+        self.app.generate()
+        allein = self.app.info["cut_m"]
+        self.app.v_job.set("gravur")
+        self.app.generate()
+        gravur = self.app.info["cut_m"]
+        self.app.v_job.set("beides")
+        self.app.generate()
+        self.assertAlmostEqual(self.app.info["cut_m"], gravur + allein, places=6)
+        self.assertAlmostEqual(self.app.info["schnitt_m"], allein, places=6)
+
+    def test_konturmarken_liegen_hinter_der_gravur(self):
+        """Ohne sie bliebe die Anzeige den ganzen Schnitt ueber auf der
+        letzten Gravurzeile stehen."""
+        self.svg_laden()
+        self.app.v_job.set("beides")
+        self.app.generate()
+        marken = self.app.info["marken"]
+        schnitt = next(i for i, z in enumerate(self.app.lines)
+                       if z.startswith("; Laserwerk Schnitt"))
+        konturen = [m for m in marken if m[1] == "kontur"]
+        self.assertTrue(konturen, "keine Konturmarken im gemischten Job")
+        self.assertTrue(all(m[0] >= schnitt for m in konturen))
+        self.assertTrue(all(m[0] < schnitt for m in marken if m[1] == "zeile"))
+        self.assertEqual([m[0] for m in marken], sorted(m[0] for m in marken))
+
+    def test_anzeige_zaehlt_im_schnitt_konturen(self):
+        self.svg_laden()
+        self.app.v_job.set("beides")
+        self.app.generate()
+        self.app.marken = self.app.info["marken"]
+        self.app._marken_idx = [m[0] for m in self.app.marken]
+        letzte = self.app.marken[-1]
+        self.assertIn("Kontur", self.app._marke_text(letzte[0]))
+        erste = next(m for m in self.app.marken if m[1] == "zeile")
+        self.assertIn("Zeile", self.app._marke_text(erste[0]))
+
     def test_job_laeuft_am_stueck(self):
         self.svg_laden()
         self.app.v_job.set("beides")

@@ -30,7 +30,7 @@ xvfb-run -a python3 -m unittest discover -s tests -t tests
 | `test_grbl.py` | Statusberichte (auch die, an denen der Lesethread einmal starb), Streamen, Pause am Zeilenende |
 | `test_text.py` | Vollständigkeit und Platzhalter beider Sprachen |
 | `test_projekt.py` | Projektdateien hin und zurück, auch ohne Originalvorlage |
-| `test_oberflaeche.py` | Platzieren, Grenzen, Leistungsumrechnung, Nullpunkt nach STOPP, Schnitttiefe, Jobleiste |
+| `test_oberflaeche.py` | Platzieren, Grenzen, Leistungsumrechnung, Nullpunkt nach STOPP, Schnitttiefe, Jobleiste, Gravieren und Schneiden in einem Lauf |
 | `test_fortsetzen.py` | Stopp-Stelle wiederfinden, mit Tiefe auch bei mehreren Zustellungen |
 | `test_waechter.py` | Anzeigetexte deuten, fremdes Fenster erkennen, niemals `getUpdates` |
 

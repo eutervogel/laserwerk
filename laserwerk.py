@@ -60,6 +60,11 @@ class App:
         self.fokus_zs = []
         self.fern = None               # Telegram-Fernsteuerung
         self._rettung = None           # Nullpunkt ueber einen Soft-Reset retten
+        # Der Versatz des Nullpunkts in Maschinenkoordinaten. Er gilt die ganze
+        # Sitzung: solange die Maschine ihre Position kennt, laesst sich der
+        # Nullpunkt daraus jederzeit wieder setzen. Nur ein USB-Abriss macht
+        # ihn wertlos - dann weiss niemand mehr, wo der Kopf steht.
+        self.null_wco = None
         self._still = False            # Felder werden gerade umgeschaltet
         self.elemente = []             # mehrere Motive auf einem Werkstueck
         self.aktiv = -1                # welches davon die Felder bearbeiten
@@ -598,8 +603,16 @@ class App:
                              "Warnung, wenn ein Job nicht hineinpasst."),
                   style="Muted.TLabel").grid(row=2, column=0, columnspan=5, sticky="w")
 
-        ttk.Button(f, text=T("Nullpunkt XY = hier"), command=self.set_zero
-                   ).grid(row=6, column=0, columnspan=3, sticky="ew", pady=2)
+        # Beide Nullpunktknoepfe nebeneinander in eine Zelle - eine neue
+        # Gitterzeile waere die Gelegenheit fuer genau die Ueberdeckung,
+        # die in der Jobleiste jahrelang den STOPP zugedeckt hat.
+        nb = ttk.Frame(f)
+        nb.grid(row=6, column=0, columnspan=3, sticky="ew", pady=2)
+        ttk.Button(nb, text=T("Nullpunkt XY = hier"), command=self.set_zero
+                   ).pack(side="left", fill="x", expand=True)
+        self.btn_null_zurueck = ttk.Button(
+            nb, text=T("Nullpunkt zurück"), command=self.null_zurueck_knopf)
+        self.btn_null_zurueck.pack(side="left", fill="x", expand=True, padx=(4, 0))
         zr = ttk.Frame(f)
         zr.grid(row=7, column=0, columnspan=3, sticky="ew", pady=2)
         ttk.Label(zr, text=T("Fokus sitzt auf Material")).pack(side="left")
@@ -1984,7 +1997,7 @@ class App:
 
     # ================================================================ Maschine
     def toggle_connect(self):
-        self._rettung = None
+        self._rettung = self.null_wco = None
         if self.grbl.connected:
             self.grbl.disconnect()
             self.btn_conn.configure(text=T("Verbinden"))
@@ -2022,9 +2035,47 @@ class App:
         """Nur der eigene Soft-Reset laesst sich ueberleben. Nach einem
         USB-Abriss oder einem Neuverbinden ist die Maschinenposition
         wirklich unbekannt - dann waere ein wiederhergestellter Versatz
-        schlimmer als keiner."""
-        return (self._rettung is not None and any(self._rettung[0])
-                and time.time() - self._rettung[3] < 120)
+        schlimmer als keiner.
+
+        Frueher galt das nur zwei Minuten lang. Wer nach einem STOPP erst
+        in Ruhe nachsah, warum er gestoppt hat, und dann entsperrte, stand
+        ohne Nullpunkt da - das Fenster war abgelaufen. Es gibt aber keinen
+        Grund dafuer: der Versatz bleibt richtig, solange die Maschine ihre
+        Position kennt, und genau das prueft das Abraeumen bei 'lost'.
+        """
+        return self._rettung is not None and any(self._rettung[0])
+
+    def null_zurueck_knopf(self):
+        self._log(self.nullpunkt_zurueck())
+
+    def _null_merken_xy(self):
+        """Den Versatz so mitschreiben, wie 'G92 X0 Y0' ihn gerade gesetzt
+        hat: X und Y aus der Maschinenposition, Z bleibt stehen.
+
+        Aus dem naechsten Statusbericht lesen ginge auch - GRBL schickt WCO
+        aber nur gelegentlich. Wer direkt nach dem Nullen STOPP drueckt,
+        haette dann nichts zum Wiederherstellen.
+        """
+        st = self.grbl.status
+        m = (list(st.get("mpos", ())) + [0, 0, 0])[:3]
+        alt = (list(self.null_wco or st.get("wco", ())) + [0, 0, 0])[:3]
+        self.null_wco = (m[0], m[1], alt[2])
+
+    def nullpunkt_zurueck(self):
+        """Den gemerkten Nullpunkt wieder setzen - jederzeit, nicht nur nach
+        einem STOPP. Das Netz unter allem anderen: solange die Maschine in
+        dieser Sitzung ihre Position nicht verloren hat, ist der Versatz noch
+        richtig, und es gibt keinen Grund, ihn von Hand neu anfahren zu
+        muessen."""
+        if not self.grbl.connected:
+            return T("Nicht verbunden.")
+        if not self.null_wco or not any(self.null_wco):
+            return T("Kein Nullpunkt gemerkt - in dieser Sitzung wurde noch "
+                     "keiner gesetzt.")
+        self._rettung = (self.null_wco, True, self.zref_ok, time.time())
+        self._bg(self._nullpunkt_retten, None)
+        return T("Nullpunkt wird wieder gesetzt (X {x:.2f} / Y {y:.2f}).").format(
+            x=self.null_wco[0], y=self.null_wco[1])
 
     def _nullpunkt_retten(self):
         """Den G92-Versatz nach einem Soft-Reset wiederherstellen.
@@ -2174,6 +2225,7 @@ class App:
             return
         self.grbl.set_zero_xy()
         self.zero_ok = True
+        self._null_merken_xy()
         self._log(T("Nullpunkt XY gesetzt"))
 
     def set_zref(self):
@@ -2182,6 +2234,11 @@ class App:
         z = self.v_zref.get()
         self.grbl.set_z_reference(self._zv(z))
         self.zref_ok = True
+        if self.null_wco:
+            # 'G92 Z{wert}' verschiebt nur die Z-Achse des Versatzes.
+            m = (list(self.grbl.status.get("mpos", ())) + [0, 0, 0])[:3]
+            self.null_wco = (self.null_wco[0], self.null_wco[1],
+                             m[2] - self._zv(z))
         self._log(T('Z-Referenz: aktuelle Höhe = Fokus für {0:.2f} mm').format(z))
 
     def goto_zero(self):
@@ -2474,8 +2531,10 @@ class App:
             return
         # Der Soft-Reset im Controller loescht den G92-Versatz. Vorher merken,
         # damit der Nullpunkt danach wiederhergestellt werden kann - sonst
-        # faehrt "Zum Nullpunkt" an den Maschinennullpunkt.
-        self._rettung = (tuple(self.grbl.status.get("wco", (0, 0, 0))),
+        # faehrt "Zum Nullpunkt" an den Maschinennullpunkt. Der mitgefuehrte
+        # Versatz ist die bessere Quelle: WCO kommt nur gelegentlich im
+        # Statusbericht, und nach einem Alarm steht da schon (0, 0, 0).
+        self._rettung = (self.null_wco or tuple(self.grbl.status.get("wco", (0, 0, 0))),
                          self.zero_ok, self.zref_ok, time.time())
         self._log(T("STOPP"))
         threading.Thread(target=self.grbl.stop, daemon=True).start()
@@ -2557,6 +2616,10 @@ class App:
                 v=d["fs"][0] if d["fs"] else 0,
                 s=d["fs"][1] if len(d["fs"]) > 1 else 0))
             self.head = (x, y)
+            # Den Versatz mitschreiben, solange der Nullpunkt steht. GRBL
+            # schickt WCO nur gelegentlich, deshalb nur bei echten Werten.
+            if self.zero_ok and any(d.get("wco", ())):
+                self.null_wco = tuple(d["wco"])
             self._draw_head()
             self.lbl_ref.configure(text=T("Nullpunkt: {null}   Z-Ref: {zref}").format(
                 null=T("gesetzt") if self.zero_ok else T("NICHT gesetzt"),
@@ -2621,7 +2684,9 @@ class App:
         elif k == "lost":
             self.btn_conn.configure(text=T("Verbinden"))
             self.zero_ok = self.zref_ok = False
-            self._rettung = None      # Position nach einem Abriss unbekannt
+            # Position nach einem Abriss unbekannt - ein wiederhergestellter
+            # Versatz waere dann schlimmer als gar keiner.
+            self._rettung = self.null_wco = None
             self._log(T('VERBINDUNG VERLOREN: {0}').format(d))
             self._melde(T("VERBINDUNG VERLOREN - im Zweifel Laserschalter "
                           "von Hand aus!"))
@@ -2685,19 +2750,49 @@ class App:
         if aktion == "aus":
             g.laser_off(); self._log(T("Laser aus (Telegram)"))
             return T("M5 gesendet - Laser aus.")
+        # Pause und Weiter gehoeren vor die Jobsperre weiter unten: sie
+        # ergeben ueberhaupt nur Sinn, waehrend ein Job laeuft.
+        if aktion == "pause":
+            if not g.connected:
+                return T("Nicht verbunden.")
+            if not g.job_running:
+                return T("Es läuft kein Job.")
+            if g.pausiert:
+                return T("Steht schon. /weiter macht weiter.")
+            self.pause()
+            return (T("Pause angemeldet - er hält am Ende der laufenden Zeile.")
+                    if self.v_pause_ende.get()
+                    else T("Feed Hold - Laser aus. /weiter macht weiter."))
+        if aktion == "weiter":
+            if not g.connected:
+                return T("Nicht verbunden.")
+            if not g.job_running:
+                return T("Es läuft kein Job.")
+            self.resume()
+            return T("Weiter.")
         if aktion == "stopp":
             if not g.connected:
                 return T("Nicht verbunden.")
-            g.stop(); self.zero_ok = self.zref_ok = False
+            # Ueber self.stop(), nicht ueber g.stop(): nur dort wird der
+            # Nullpunkt vor dem Soft-Reset gemerkt. Am Knopf ueberlebte er,
+            # vom Handy aus war er jedes Mal weg.
+            self.stop()
             self._log(T("STOPP (Telegram)"))
-            return T("STOPP: Halt und Soft-Reset. Nullpunkt danach neu setzen.")
+            return T("STOPP: Halt und Soft-Reset. Nullpunkt wird "
+                     "wiederhergestellt.")
         if not g.connected:
             return T("Nicht verbunden.")
         if g.job_running:
-            return T("Es laeuft ein Job - frei sind nur /status, /aus und /stopp.")
+            return T("Es läuft ein Job - frei sind nur /status, /pause, "
+                     "/weiter, /aus und /stopp.")
         if aktion == "frei":
             self._log(T("Entsperrt (Telegram)"))
-            return f"$X -> {g.unlock()}"
+            antwort = g.unlock()
+            # Nach einem STOPP wartet der Nullpunkt auf das Entsperren. Am
+            # Knopf wurde er danach gesetzt, vom Handy aus nicht.
+            if self._rettbar():
+                self._bg(self._nullpunkt_retten, None)
+            return f"$X -> {antwort}"
         if g.alarm:
             return g.alarm + T("\nErst entsperren: /frei")
         if aktion == "pos":
@@ -2721,8 +2816,12 @@ class App:
             return T("Kreuz {mm:.1f} mm bei S{s}").format(mm=2 * arm, s=sv)
         if aktion == "null":
             g.set_zero_xy(); self.zero_ok = True
+            self._null_merken_xy()
             self._log(T("Nullpunkt XY gesetzt (Telegram)"))
             return T("Nullpunkt XY = hier.")
+        if aktion == "nullzurueck":
+            self._log(T("Nullpunkt zurückholen (Telegram)"))
+            return self.nullpunkt_zurueck()
         if aktion == "heim":
             self._bg(lambda: g.goto(x=0, y=0), T("fahre zum Nullpunkt (Telegram)"))
             return T("fahre zum Nullpunkt")

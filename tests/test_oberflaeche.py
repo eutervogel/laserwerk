@@ -8,6 +8,7 @@ waeren; Beschriftungen, die sich gegenseitig verdeckten.
 
 Ohne Anzeige werden diese Tests uebersprungen.
 """
+import time
 import unittest
 
 import numpy as np
@@ -330,6 +331,153 @@ class Nullpunkt(Grundlage):
         self.pumpe(0.6)
         self.assertEqual(self.app.grbl.wco, (0.0, 0.0, 0.0))
         self.assertFalse(self.app.zero_ok)
+
+
+@ohne_bildschirm
+class NullpunktUeberDieSitzung(Nullpunkt):
+    """Der Nullpunkt soll waehrend einer Sitzung nie verschwinden. Er tat es
+    trotzdem: vom Handy aus jedes Mal, am Rechner ab und zu."""
+
+    def gesetzt(self, mpos=(120.0, 80.0, 0.0)):
+        self.app.grbl = Attrappe(mpos=mpos, app=self.app)
+        self.app.set_zero()
+        return self.app.grbl
+
+    def test_stopp_vom_handy_behaelt_ihn(self):
+        """fern_tun rief grbl.stop() statt app.stop() - und nur dort wird der
+        Versatz vor dem Soft-Reset gemerkt."""
+        g = self.gesetzt()
+        g.mpos = (150.0, 95.0, 0.0)
+        self.app.fern_tun("stopp")
+        self.pumpe()
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+        self.assertTrue(self.app.zero_ok)
+
+    def test_entsperren_vom_handy_holt_ihn_zurueck(self):
+        g = self.gesetzt()
+        echt = g.stop
+
+        def stop_mit_alarm():
+            echt()
+            g.alarm = "ALARM:2"
+        g.stop = stop_mit_alarm
+        g.mpos = (150.0, 95.0, 0.0)
+        self.app.fern_tun("stopp")
+        self.pumpe()
+        self.assertEqual(g.wco, (0.0, 0.0, 0.0))     # wartet noch
+        self.app.fern_tun("frei")
+        self.pumpe()
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+
+    def test_kein_zeitfenster_mehr(self):
+        """Frueher verfiel die Rettung nach zwei Minuten. Wer nach einem
+        STOPP erst nachsah, warum, stand danach ohne Nullpunkt da."""
+        g = self.gesetzt()
+        echt = g.stop
+
+        def stop_mit_alarm():
+            echt()
+            g.alarm = "ALARM:2"
+        g.stop = stop_mit_alarm
+        self.app.stop()
+        self.pumpe()
+        wco, n, z, _ = self.app._rettung
+        self.app._rettung = (wco, n, z, time.time() - 3600)   # eine Stunde her
+        self.assertTrue(self.app._rettbar())
+        self.app.unlock()
+        self.pumpe()
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+
+    def test_versatz_gilt_die_ganze_sitzung(self):
+        g = self.gesetzt()
+        self.assertEqual(self.app.null_wco, (120.0, 80.0, 0.0))
+        self.app.stop()
+        self.pumpe()
+        self.assertEqual(self.app.null_wco, (120.0, 80.0, 0.0))
+
+    def test_zurueckholen_auch_ohne_stopp(self):
+        """Das Netz unter allem anderen: ist er doch mal weg, holt man ihn."""
+        g = self.gesetzt()
+        g.wco = (0.0, 0.0, 0.0)
+        self.app.zero_ok = False
+        self.app.nullpunkt_zurueck()
+        self.pumpe()
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+        self.assertTrue(self.app.zero_ok)
+
+    def test_nach_abriss_wird_nichts_zurueckgeholt(self):
+        """Nach einem USB-Abriss weiss niemand mehr, wo der Kopf steht - ein
+        wiederhergestellter Versatz waere schlimmer als keiner."""
+        g = self.gesetzt()
+        self.app._event("lost", "Port weg")
+        self.assertIsNone(self.app.null_wco)
+        antwort = self.app.nullpunkt_zurueck()
+        self.pumpe(0.4)
+        self.assertIn("Kein Nullpunkt", antwort)
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))   # unveraendert, kein G92
+
+    def test_neu_verbinden_vergisst_ihn(self):
+        self.gesetzt()
+        self.app.toggle_connect()                     # trennt
+        self.assertIsNone(self.app.null_wco)
+
+    def test_knopf_holt_ihn_auch(self):
+        g = self.gesetzt()
+        g.wco = (0.0, 0.0, 0.0)
+        self.app.null_zurueck_knopf()
+        self.pumpe()
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+
+    def test_knopf_deckt_nichts_zu(self):
+        """Die Lehre aus der Jobleiste: zwei Widgets in derselben Zelle
+        decken sich lautlos."""
+        b = self.app.btn_null_zurueck
+        # Der Knopf sitzt auf dem Maschinenreiter: der muss gewaehlt und das
+        # Fenster sichtbar sein, sonst liegt gar nichts auf dem Schirm.
+        self.app.nb.select(2)
+        self.wurzel.deiconify()
+        self.wurzel.update()
+        x = b.winfo_rootx() + b.winfo_width() // 2
+        y = b.winfo_rooty() + b.winfo_height() // 2
+        self.assertIs(self.wurzel.winfo_containing(x, y), b)
+
+
+@ohne_bildschirm
+class FernPauseUndWeiter(Grundlage):
+    def test_pause_haelt_am_zeilenende(self):
+        self.app.grbl.job_running = True
+        self.app.v_pause_ende.set(True)
+        self.app.fern_tun("pause")
+        self.assertIn("Pause am Zeilenende", self.app.grbl.protokoll)
+
+    def test_pause_ohne_schalter_ist_feed_hold(self):
+        self.app.grbl.job_running = True
+        self.app.v_pause_ende.set(False)
+        self.app.fern_tun("pause")
+        self.assertIn("Pause", self.app.grbl.protokoll)
+
+    def test_weiter_setzt_fort(self):
+        self.app.grbl.job_running = True
+        self.app.fern_tun("weiter")
+        self.assertIn("Weiter", self.app.grbl.protokoll)
+
+    def test_ohne_job_passiert_nichts(self):
+        self.app.grbl.job_running = False
+        for a in ("pause", "weiter"):
+            self.assertIn("kein Job", self.app.fern_tun(a))
+        self.assertNotIn("Pause", self.app.grbl.protokoll)
+        self.assertNotIn("Weiter", self.app.grbl.protokoll)
+
+    def test_schon_pausiert(self):
+        self.app.grbl.job_running = True
+        self.app.grbl.pausiert = True
+        self.assertIn("Steht schon", self.app.fern_tun("pause"))
+
+    def test_jobsperre_nennt_die_beiden(self):
+        self.app.grbl.job_running = True
+        antwort = self.app.fern_tun("jog", ("x", 1.0))
+        self.assertIn("/pause", antwort)
+        self.assertIn("/weiter", antwort)
 
 
 class Projektrundlauf(Grundlage):

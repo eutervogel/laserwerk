@@ -75,8 +75,11 @@ settings for a new material.
 - **Engrave both sides** — mirror about a flip axis, with a check that the
   mirrored artwork still lands in positive coordinates.
 - **Remote control via Telegram** — jog the axes and trace the sight cross from
-  your phone while you stand at the workpiece. It reports back when a job
-  finishes or runs into an alarm.
+  your phone while you stand at the workpiece, pause a running job and resume
+  it, and fetch the origin back. It reports when a job finishes or hits an
+  alarm. The commands sit in the Telegram menu button, and the control pad
+  turns into Pause / Resume / STOP while a job runs — jogging is locked then
+  anyway.
 - **Pause at the row end** — a feed hold stops at once, in the middle of a
   row. The beam does go out, but the braking trace lies in the artwork, and
   on resuming the row starts from standstill. With the switch in the job bar
@@ -94,10 +97,14 @@ settings for a new material.
   position a given command number sits at. Nothing is sent to the machine.
 - **Resume** — `fortsetzen.py` finds the exact stopping point of a stalled job
   by matching the position, then streams the rest.
-- **The origin survives a STOP** — aborting soft-resets the controller, which
-  clears its G92 offset. Laserwerk remembers it beforehand and sets it again
-  afterwards, so "move to origin" still means the workpiece and not the
-  machine's own zero.
+- **The origin lasts the whole session** — aborting soft-resets the controller,
+  which clears its G92 offset. Laserwerk carries the offset along and sets it
+  again afterwards, so "move to origin" still means the workpiece and not the
+  machine's own zero. That holds however the stop was triggered, from the
+  button or from the phone, and however long you take to unlock afterwards.
+  Should it ever go missing anyway, `/nullzurueck` puts it back. Only a USB
+  dropout ends it: after that nobody knows where the head stands, and a
+  restored offset would be worse than none.
 
 ## How it looks
 
@@ -280,7 +287,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-392 tests on stdlib only, nothing to install. The interface tests need a
+426 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

@@ -504,9 +504,13 @@ EN = {
     "/schritt 1 - Schrittweite fuer das Pad\n"
     "/kreuz - Sichtkreuz an der Stelle fahren\n"
     "/null - Nullpunkt XY = hier\n"
+    "/nullzurueck - gemerkten Nullpunkt wieder setzen\n"
     "/heim - zum Nullpunkt fahren\n"
+    "/pause - am Ende der laufenden Zeile anhalten\n"
+    "/weiter - Job fortsetzen\n"
     "/aus - Laser aus (M5)\n"
     "/stopp - Halt und Soft-Reset\n"
+    "/frei - entsperren ($X)\n"
     "/status - Verbindung, Zustand, Job\n"
     "/zeiten - wo die Wartezeit herkommt\n\n"
     "Gravur und Schnitt werden absichtlich nur am Rechner gestartet.":
@@ -517,12 +521,49 @@ EN = {
         "/schritt 1 - step size for the pad\n"
         "/kreuz - trace the sight cross where it stands\n"
         "/null - set the XY origin here\n"
+        "/nullzurueck - set the remembered origin again\n"
         "/heim - move to the origin\n"
+        "/pause - stop at the end of the current row\n"
+        "/weiter - resume the job\n"
         "/aus - laser off (M5)\n"
         "/stopp - halt and soft reset\n"
+        "/frei - unlock ($X)\n"
         "/status - connection, state, job\n"
         "/zeiten - where the waiting time goes\n\n"
         "Engraving and cutting start at the computer on purpose.",
+    # Menuebutton der Telegram-App
+    "Steuerkreuz": "Control pad",
+    "Verbindung, Zustand, Job": "Connection, state, job",
+    "am Zeilenende anhalten": "stop at the row end",
+    "Job fortsetzen": "resume the job",
+    "Halt und Soft-Reset": "halt and soft reset",
+    "entsperren ($X)": "unlock ($X)",
+    "Nullpunkt wieder setzen": "set the origin again",
+    "zum Nullpunkt fahren": "move to the origin",
+    "Sichtkreuz fahren": "trace the sight cross",
+    "alle Befehle": "all commands",
+    # Knopfbeschriftungen und Antworten
+    "Entsperren": "Unlock",
+    "Nullpunkt zurück": "Origin back",
+    "Nullpunkt zurückholen (Telegram)": "Fetch the origin back (Telegram)",
+    "Es läuft kein Job.": "No job is running.",
+    "Steht schon. /weiter macht weiter.":
+        "Already standing. /weiter carries on.",
+    "Pause angemeldet - er hält am Ende der laufenden Zeile.":
+        "Pause requested - it stops at the end of the current row.",
+    "Feed Hold - Laser aus. /weiter macht weiter.":
+        "Feed hold - laser off. /weiter carries on.",
+    "Weiter.": "Carrying on.",
+    "Es läuft ein Job - frei sind nur /status, /pause, /weiter, /aus "
+    "und /stopp.":
+        "A job is running - only /status, /pause, /weiter, /aus and /stopp "
+        "are free.",
+    "STOPP: Halt und Soft-Reset. Nullpunkt wird wiederhergestellt.":
+        "STOP: halt and soft reset. The origin will be restored.",
+    "Kein Nullpunkt gemerkt - in dieser Sitzung wurde noch keiner gesetzt.":
+        "No origin remembered - none has been set this session.",
+    "Nullpunkt wird wieder gesetzt (X {x:.2f} / Y {y:.2f}).":
+        "Setting the origin again (X {x:.2f} / Y {y:.2f}).",
     "Verknuepft. ": "Linked. ",
     "Laserwerk ist da. /pad fuer das Steuerkreuz.":
         "Laserwerk is here. /pad for the control pad.",

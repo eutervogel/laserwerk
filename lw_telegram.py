@@ -43,12 +43,33 @@ def hilfe():
         "/schritt 1 - Schrittweite fuer das Pad\n"
         "/kreuz - Sichtkreuz an der Stelle fahren\n"
         "/null - Nullpunkt XY = hier\n"
+        "/nullzurueck - gemerkten Nullpunkt wieder setzen\n"
         "/heim - zum Nullpunkt fahren\n"
+        "/pause - am Ende der laufenden Zeile anhalten\n"
+        "/weiter - Job fortsetzen\n"
         "/aus - Laser aus (M5)\n"
         "/stopp - Halt und Soft-Reset\n"
+        "/frei - entsperren ($X)\n"
         "/status - Verbindung, Zustand, Job\n"
         "/zeiten - wo die Wartezeit herkommt\n\n"
         "Gravur und Schnitt werden absichtlich nur am Rechner gestartet.")
+
+
+# Was im Menuebutton der Telegram-App steht. Die Beschreibungen sind kurz
+# gehalten - Telegram schneidet sie in der Liste ohnehin ab.
+MENUE = [
+    ("pad", T("Steuerkreuz")),
+    ("status", T("Verbindung, Zustand, Job")),
+    ("pause", T("am Zeilenende anhalten")),
+    ("weiter", T("Job fortsetzen")),
+    ("aus", T("Laser aus (M5)")),
+    ("stopp", T("Halt und Soft-Reset")),
+    ("frei", T("entsperren ($X)")),
+    ("nullzurueck", T("Nullpunkt wieder setzen")),
+    ("heim", T("zum Nullpunkt fahren")),
+    ("kreuz", T("Sichtkreuz fahren")),
+    ("hilfe", T("alle Befehle")),
+]
 
 
 def lade():
@@ -151,9 +172,23 @@ class Fern:
         threading.Thread(target=self._lesen, daemon=True).start()
         threading.Thread(target=self._arbeiten, daemon=True).start()
         threading.Thread(target=self._senden, daemon=True).start()
+        threading.Thread(target=self._menue_setzen, daemon=True).start()
         if self.chat:
             self.melde(T("Laserwerk ist da. /pad fuer das Steuerkreuz."))
         return name
+
+    def _menue_setzen(self):
+        """Die Befehlsliste im Menuebutton der Telegram-App hinterlegen.
+
+        Im eigenen Thread und ohne Weiterwurf: scheitert es, fehlt nur das
+        Menue. Die Befehle selbst funktionieren auch getippt, und am
+        Werkstueck will niemand, dass der Bot deswegen gar nicht erst
+        startet."""
+        try:
+            self._api("setMyCommands", frist=20, commands=[
+                {"command": c, "description": b} for c, b in MENUE])
+        except Exception as e:
+            self._log(T('Telegram: {0}').format(e))
 
     def stop(self):
         self.aktiv = False
@@ -324,7 +359,9 @@ class Fern:
                           or T("noch nichts gemessen")))
             return
         bekannt = {"pos": "pos", "kreuz": "kreuz", "null": "null", "heim": "heim",
-                   "aus": "aus", "stopp": "stopp", "stop": "stopp", "status": "status"}
+                   "aus": "aus", "stopp": "stopp", "stop": "stopp", "status": "status",
+                   "pause": "pause", "weiter": "weiter", "frei": "frei",
+                   "nullzurueck": "nullzurueck"}
         if c in bekannt:
             self.raus.put(self._tun(bekannt[c])); return
         self.raus.put(T("Kenne ich nicht. /hilfe"))
@@ -336,7 +373,10 @@ class Fern:
             return f"{data[0].upper()} {mm:+g} mm"
         return {"kreuz": T("Kreuz"), "pos": T("Position"), "null": T("Nullpunkt"),
                 "heim": T("zum Nullpunkt"), "aus": T("Laser aus"),
-                "stopp": T("STOPP"), "schritt": T("Schrittweite")}.get(data, data)
+                "stopp": T("STOPP"), "schritt": T("Schrittweite"),
+                "pause": T("Pause"), "weiter": T("Weiter"),
+                "frei": T("Entsperren"),
+                "nullzurueck": T("Nullpunkt zurück")}.get(data, data)
 
     def _knopf(self, data):
         if data == "schritt":
@@ -408,12 +448,22 @@ class Fern:
     # ---------------------------------------------------------- Steuerkreuz
     def _tastatur(self):
         k = lambda t, d: {"text": t, "callback_data": d}
+        if self.app.grbl.job_running:
+            # Waehrend eines Jobs sind Fahrbefehle ohnehin gesperrt. Dann
+            # gehoeren die Jobknoepfe auf das Pad und nicht ein Steuerkreuz,
+            # das auf jeden Druck "Es laeuft ein Job" antwortet.
+            return {"inline_keyboard": [
+                [k(T("Pause"), "pause"), k(T("Weiter"), "weiter")],
+                [k(T("Position"), "pos"), k(T("Laser aus"), "aus")],
+                [k(T("STOPP"), "stopp")],
+            ]}
         return {"inline_keyboard": [
             [k("Z +", "z+"), k("Y +", "y+"), k(T("Position"), "pos")],
             [k("X -", "x-"), k(T("Kreuz"), "kreuz"), k("X +", "x+")],
             [k("Z -", "z-"), k("Y -", "y-"),
              k(T("Schritt {mm:g} mm").format(mm=self.schritt), "schritt")],
             [k(T("Nullpunkt = hier"), "null"), k(T("zum Nullpunkt"), "heim")],
+            [k(T("Nullpunkt zurück"), "nullzurueck"), k(T("Entsperren"), "frei")],
             [k(T("Laser aus"), "aus"), k(T("STOPP"), "stopp")],
         ]}
 

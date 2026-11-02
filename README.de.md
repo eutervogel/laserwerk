@@ -77,7 +77,11 @@ Material ausprobieren will.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man
-  am Werkstück steht. Meldet sich, wenn ein Job fertig ist oder in Alarm geht.
+  am Werkstück steht, einen laufenden Job anhalten und fortsetzen, den
+  Nullpunkt zurückholen. Meldet sich, wenn ein Job fertig ist oder in Alarm
+  geht. Die Befehle stehen im Menübutton von Telegram, und das Steuerkreuz
+  wird während eines Jobs zu Pause / Weiter / STOPP — Fahrbefehle sind dann
+  ohnehin gesperrt.
 - **Pause am Zeilenende** — ein Feed Hold hält sofort an, mitten in der Zeile.
   Der Strahl geht dabei zwar aus, aber die Bremsspur liegt im Motiv, und beim
   Weiterfahren fängt die Zeile aus dem Stand an. Mit dem Schalter in der
@@ -96,10 +100,14 @@ Material ausprobieren will.
   bestimmter Befehl steht. An die Maschine geht dabei nichts.
 - **Fortsetzen** — `fortsetzen.py` findet nach einem hängengebliebenen Job die
   genaue Stoppstelle über die Position und streamt den Rest.
-- **Nullpunkt übersteht STOPP** — der Abbruch setzt den Controller zurück und
-  löscht dabei dessen G92-Versatz. Laserwerk merkt ihn sich vorher und setzt
-  ihn danach neu, damit „Zum Nullpunkt fahren" weiter das Werkstück meint und
-  nicht den Nullpunkt der Maschine.
+- **Nullpunkt gilt die ganze Sitzung** — der Abbruch setzt den Controller
+  zurück und löscht dabei dessen G92-Versatz. Laserwerk führt den Versatz mit
+  und setzt ihn danach neu, damit „Zum Nullpunkt fahren" weiter das Werkstück
+  meint und nicht den Nullpunkt der Maschine. Das gilt egal, woher der STOPP
+  kam — Knopf oder Handy — und egal, wie lange man sich danach mit dem
+  Entsperren Zeit lässt. Ist er doch einmal weg, holt ihn `/nullzurueck`
+  zurück. Nur ein USB-Abriss beendet das: danach weiß niemand mehr, wo der
+  Kopf steht, und ein wiederhergestellter Versatz wäre schlimmer als keiner.
 
 ## So sieht das aus
 
@@ -287,7 +295,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-392 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+426 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

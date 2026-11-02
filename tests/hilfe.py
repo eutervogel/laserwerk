@@ -131,6 +131,8 @@ class Attrappe:
         on_progress(len(lines), len(lines), 0.1, 0)
         return "fertig"
 
+    pausiert = False
+
     def pause(self):
         self.protokoll.append("Pause")
 

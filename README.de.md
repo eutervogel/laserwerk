@@ -23,7 +23,9 @@ Material ausprobieren will.
   Leistung mit der Geschwindigkeit. Ist der Anlauf kürzer als der
   Beschleunigungsweg, brennt der Zeilenanfang zu schwach. Laserwerk rechnet
   ihn aus Vorschub und `$120` aus: bei F1000 und 30 mm/s² sind das 4,6 mm,
-  nicht die 1,5 mm, die man üblicherweise einstellt.
+  nicht die 1,5 mm, die man üblicherweise einstellt. Genau das tut das Feld
+  von Haus aus — es steht auf `0`, also „rechne ihn aus". Eine Zahl trägt man
+  nur ein, wenn man es anders will.
 - **Gravieren** — Bilder (PNG, JPG, WEBP, BMP) und SVG als Raster, zeilenweise:
   schwarzweiß mit Schwelle, Graustufen mit veränderlicher Leistung oder
   Rasterung nach Floyd-Steinberg, bei der alle Punkte gleich stark brennen und
@@ -295,7 +297,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-426 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+427 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

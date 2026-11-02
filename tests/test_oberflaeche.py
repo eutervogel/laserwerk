@@ -522,6 +522,17 @@ if __name__ == "__main__":
 
 @ohne_bildschirm
 class AnlaufAusDerMaschine(Grundlage):
+    def test_vorgabe_rechnet_selbst(self):
+        """Die Vorgabe war 1,5 mm - der Wert, den man ueberall abschreibt und
+        der bei F1000 nur ein Drittel des Anlaufwegs ist. Schlimmer: er stand
+        nach jedem Neustart wieder da, weil er nirgends gesichert wird. Wer
+        seinen Rechner neu startete, gravierte danach mit zu schwachen
+        Zeilenanfaengen weiter, ohne dass sich etwas sichtbar geaendert hat."""
+        self.assertEqual(self.app.v_over.get(), 0.0)
+        self.app.cfg["accel"] = 30.0
+        self.app.v_f.set(1000)
+        self.assertGreater(self.app._anlauf(), 4.63)
+
     def test_null_heisst_gerechnet(self):
         self.app.cfg["accel"] = 30.0
         self.app.v_f.set(1000)

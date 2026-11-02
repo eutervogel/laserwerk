@@ -77,7 +77,12 @@ class App:
         self.v_frame_laser = tk.BooleanVar(value=True)
         self.v_pause_ende = tk.BooleanVar(value=True)   # Pause am Zeilenende
         self.v_xoff = tk.DoubleVar(value=2.0)   # Platz links fuer den Anlauf
-        self.v_over = tk.DoubleVar(value=1.5)   # Anlauf je Zeilenende
+        # 0 heisst: aus Vorschub und $120 rechnen. Die frueheren 1,5 mm waren
+        # der Wert, den man ueberall abschreibt - bei F1000 und 30 mm/s^2
+        # braucht die Achse aber 4,6 mm, bis sie auf Tempo ist. Solange sie
+        # beschleunigt, faehrt unter M4 die Leistung mit, und der Anfang jeder
+        # Zeile brennt zu schwach. Wer es anders will, traegt es ein.
+        self.v_over = tk.DoubleVar(value=0.0)   # Anlauf je Zeilenende
         self.v_yoff = tk.DoubleVar(value=0.0)
         self.v_spiegel = tk.StringVar(value='nein')   # Rueckseite
         self.v_achse = tk.DoubleVar(value=50.0)       # Wendeachse in mm

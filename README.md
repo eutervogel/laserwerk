@@ -24,7 +24,8 @@ settings for a new material.
   under `M4`. If the overscan is shorter than the acceleration distance, the
   start of every row burns too weakly. Laserwerk computes it from the feed
   and `$120`: at F1000 and 30 mm/s² that is 4.6 mm, not the 1.5 mm people
-  usually set.
+  usually set. That is what the field does by default — it says `0`, meaning
+  "work it out". Type a number only if you want to override it.
 - **Engrave** — images (PNG, JPG, WEBP, BMP) and SVG as a raster, row by row:
   black and white with a threshold, greyscale with varying power, or
   Floyd-Steinberg dithering, where every dot burns at the same power and the
@@ -287,7 +288,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-426 tests on stdlib only, nothing to install. The interface tests need a
+427 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

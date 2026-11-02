@@ -87,6 +87,13 @@ Material ausprobieren will.
 - **Übertragungsfehler im Protokoll** — am Jobende, nicht nur währenddessen in
   der Fortschrittsanzeige. Fehlt hinterher eine Zeile im Werkstück, ist die
   Fehlerzahl die einzige Spur, die das noch erklären könnte.
+- **Trockenlauf** — `trockenlauf.py` liest einen fertigen G-Code so, wie GRBL
+  1.1 ihn lesen würde, und sagt, wohin der Kopf fährt, wo der Strahl brennt,
+  wie lange es dauert und was schiefginge: Befehle, die GRBL mit `error:20`
+  überspringt, ein `G1` ohne je gesetzten Vorschub, ein stehender brennender
+  Strahl, Koordinaten hinter dem Verfahrweg, `S` über `$30`. Auf Wunsch
+  zeichnet er das Ergebnis als Bild und sagt, an welcher Stelle ein
+  bestimmter Befehl steht. An die Maschine geht dabei nichts.
 - **Fortsetzen** — `fortsetzen.py` findet nach einem hängengebliebenen Job die
   genaue Stoppstelle über die Position und streamt den Rest.
 - **Nullpunkt übersteht STOPP** — der Abbruch setzt den Controller zurück und
@@ -211,6 +218,7 @@ Der Verfahrweg steht im Reiter *Maschine* und lässt sich aus `$130`/`$131`
 | `lw_dialog.py` | native Dialoge über zenity, mit Tk als Rückfall |
 | `lw_telegram.py` | Fernsteuerung |
 | `fortsetzen.py` | abgebrochenen Job an der Stoppstelle fortsetzen |
+| `trockenlauf.py` | G-Code durchrechnen, ohne dass sich etwas bewegt |
 | `waechter.py` | meldet per Telegram, bevor die Zeilen durch sind |
 | `bilder/mach_bilder.py` | erzeugt die Bildschirmfotos, auf unsichtbarem Schirm |
 
@@ -245,6 +253,28 @@ der laufenden Oberfläche, zwei Abholer nehmen sich die Nachrichten weg
 `--lesen` sieht einmal hin und sendet nichts; gut zum Prüfen, ob er das
 richtige Fenster vor sich hat.
 
+## Trockenlauf vor der langen Nacht
+
+Eine Gravur läuft zwölf Stunden. Hinterher zu merken, dass der Kopf auf X 310
+sollte oder dass jede Zeile zu brennen anfing, bevor die Achse auf Tempo war,
+ist ein teurer Weg, das herauszufinden:
+
+```sh
+python3 trockenlauf.py job.nc --bild vorschau.png
+```
+
+Er deutet die Datei wie der Controller — modaler Zustand, G90/G91, G20/G21,
+M3 gegen M4, `S` und `F` durchgeschleppt — und nennt die Spanne in X und Y
+gegen deinen Verfahrweg, den brennenden und den unbrennenden Weg, die Laufzeit
+nach demselben geeichten Modell wie die Vorschau, das größte `S/F` und wo der
+Kopf am Ende steht. Befunde werden gesammelt, nicht geworfen: ein Lauf zeigt
+alles auf einmal.
+
+`--bild` zeichnet, was auf dem Brett stehen würde. `--bei 1864777` sagt, in
+welcher Zeile ein bestimmter Befehl steht und wo der Kopf dabei war — brauchbar,
+wenn ein Job hängengeblieben ist und man wissen will, wo. Der Rückgabewert ist
+1, sobald etwas gefunden wurde.
+
 ## Übersetzungen
 
 `lw_text.py` ordnet jedem deutschen Text seine englische Entsprechung zu.
@@ -257,7 +287,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-356 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+392 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

@@ -86,6 +86,12 @@ settings for a new material.
 - **Transmission errors in the log** — at the end of the job, not only while
   it runs. If a row turns out missing in the workpiece afterwards, the error
   count is the only trace that could still explain it.
+- **Dry run** — `trockenlauf.py` reads a finished G-code the way GRBL 1.1
+  would and says where the head goes, where the beam burns, how long it takes
+  and what would go wrong: commands GRBL skips with `error:20`, a `G1` with no
+  feed ever set, a beam standing still and burning, coordinates past the
+  travel, `S` above `$30`. It can draw the result as a picture, and name the
+  position a given command number sits at. Nothing is sent to the machine.
 - **Resume** — `fortsetzen.py` finds the exact stopping point of a stalled job
   by matching the position, then streams the rest.
 - **The origin survives a STOP** — aborting soft-resets the controller, which
@@ -206,6 +212,7 @@ Machine travel is set in the *Machine* tab and can be taken from `$130`/`$131`.
 | `lw_dialog.py` | native dialogs through zenity, falling back to Tk |
 | `lw_telegram.py` | remote control |
 | `fortsetzen.py` | resume an interrupted job at its stopping point |
+| `trockenlauf.py` | work through a G-code without moving anything |
 | `waechter.py` | tells you on Telegram before the rows are done |
 | `bilder/mach_bilder.py` | makes the screenshots above, on a hidden display |
 
@@ -239,6 +246,28 @@ interface alone, as two collectors take each other's messages away (HTTP 409).
 `--lesen` looks once and sends nothing; useful to check that it has the right
 window in front of it.
 
+## A dry run before the long night
+
+An engraving runs for twelve hours. Finding out afterwards that the head was
+supposed to go to X 310, or that every row started burning before the axis was
+up to speed, is an expensive way to learn it:
+
+```sh
+python3 trockenlauf.py job.nc --bild vorschau.png
+```
+
+It interprets the file the way the controller would — modal state, G90/G91,
+G20/G21, M3 against M4, `S` and `F` carried forward — and prints the extent in
+X and Y against your travel, the burning and non-burning path, the runtime
+using the same calibrated model as the preview, the largest `S/F`, and where
+the head ends up. Findings are collected rather than thrown, so one run shows
+everything at once.
+
+`--bild` draws what would end up on the board. `--bei 1864777` says which line
+a given command number sits on and where the head stood — useful when a job
+stalled and you want to know where. The exit status is 1 when anything was
+found.
+
 ## Translations
 
 `lw_text.py` maps each German source string to its English counterpart. A
@@ -251,7 +280,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-356 tests on stdlib only, nothing to install. The interface tests need a
+392 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

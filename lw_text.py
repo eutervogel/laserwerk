@@ -796,4 +796,65 @@ EN = {
         "it was placed at the edge.",
     "OK": "OK",
     "Abbrechen": "Cancel",
+
+    # --- trockenlauf.py. Die Beschriftungen sind auf 16 Zeichen gepolstert,
+    # damit die Zahlenspalte auch auf Englisch untereinander steht.
+    "G-Code durchrechnen, ohne zu fahren":
+        "Work through a G-code without moving anything",
+    "Trockenlauf: {d}  ({kb:.1f} kB)": "Dry run: {d}  ({kb:.1f} kB)",
+    "Befehle:        {n}": "Commands:       {n}",
+    "X:              {a:.2f} .. {b:.2f} mm   (Verfahrweg {g:.1f})":
+        "X:              {a:.2f} .. {b:.2f} mm   (travel {g:.1f})",
+    "Y:              {a:.2f} .. {b:.2f} mm   (Verfahrweg {g:.1f})":
+        "Y:              {a:.2f} .. {b:.2f} mm   (travel {g:.1f})",
+    "Brennweg:       {m:.2f} m": "Burn path:      {m:.2f} m",
+    "ohne Strahl:    {m:.2f} m  (davon {e:.2f} m im Eilgang)":
+        "beam off:       {m:.2f} m  ({e:.2f} m of it at rapid)",
+    "Laufzeit:       ca. {min:.0f} min ({h:.1f} h)":
+        "Runtime:        approx. {min:.0f} min ({h:.1f} h)",
+    "größtes S/F:    {sf:.2f}{warn}": "largest S/F:    {sf:.2f}{warn}",
+    "  - über 0.20 brennt sichtbar ein":
+        "  - above 0.20 it burns in visibly",
+    "Kopf am Ende:   X {x:.2f}  Y {y:.2f}":
+        "Head at end:    X {x:.2f}  Y {y:.2f}",
+    "Spindel am Ende: {m}": "Spindle at end:  {m}",
+    "  ACHTUNG: der Job endet ohne M5.":
+        "  WARNING: the job ends without M5.",
+    "Längste brennende Striche (kein Fehler, nur zum Nachsehen):":
+        "Longest burning strokes (not a fault, just worth a look):",
+    "  {d:6.1f} mm  Zeile {nr:<8} ({x0:.1f}, {y0:.1f}) -> "
+    "({x1:.1f}, {y1:.1f})  S{s:.0f}":
+        "  {d:6.1f} mm  line {nr:<8} ({x0:.1f}, {y0:.1f}) -> "
+        "({x1:.1f}, {y1:.1f})  S{s:.0f}",
+    "Befehl {n} steht in Zeile {z}: X {x:.2f}  Y {y:.2f}  {m} "
+    "S{s:.0f} F{f:.0f}":
+        "Command {n} sits on line {z}: X {x:.2f}  Y {y:.2f}  {m} "
+        "S{s:.0f} F{f:.0f}",
+    "Bild: {p}": "Image: {p}",
+    "--- Befunde ---": "--- Findings ---",
+    "Keine Befunde.": "No findings.",
+    "  ... und {n} weitere": "  ... and {n} more",
+    "unverständlich: {z!r}": "not understood: {z!r}",
+    "{b} kennt GRBL nicht (error:20) - die Zeile wird übersprungen":
+        "GRBL does not know {b} (error:20) - the line is skipped",
+    "{b} hält den Job an, bis jemand am Rechner weiterdrückt":
+        "{b} halts the job until somebody hits resume at the computer",
+    "G1 ohne je gesetzten Vorschub - GRBL antwortet error:22 und fährt nicht":
+        "G1 without a feed ever set - GRBL answers error:22 and will not move",
+    "Strahl an (S{s:.0f}), aber keine Bewegung - er brennt auf der Stelle":
+        "Beam on (S{s:.0f}) but no motion - it burns on the spot",
+    "G4 wartet {p:.2f} s mit M3 S{s:.0f} - der Strahl steht und brennt":
+        "G4 waits {p:.2f} s under M3 S{s:.0f} - the beam stands still and burns",
+    "S{s:.0f} über $30={m:.0f} - der Controller kappt auf voll":
+        "S{s:.0f} above $30={m:.0f} - the controller clips it to full",
+    "{a} {w:.2f} mm - hinter dem Nullpunkt":
+        "{a} {w:.2f} mm - behind the origin",
+    "{a} {w:.2f} mm > Verfahrweg {g:.1f} mm":
+        "{a} {w:.2f} mm > travel {g:.1f} mm",
+    "G20 - ab hier rechnet der Controller in Zoll, alle Maße werden "
+    "25,4-mal so groß":
+        "G20 - from here the controller works in inches, every measurement "
+        "becomes 25.4 times as large",
+    "G92 setzt den Nullpunkt mitten im Job - ein Soft-Reset löscht ihn wieder":
+        "G92 sets the origin mid-job - a soft reset clears it again",
 }

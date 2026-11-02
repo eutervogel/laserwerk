@@ -33,6 +33,7 @@ xvfb-run -a python3 -m unittest discover -s tests -t tests
 | `test_oberflaeche.py` | Platzieren, Grenzen, Leistungsumrechnung, Nullpunkt nach STOPP, Schnitttiefe, Jobleiste, Gravieren und Schneiden in einem Lauf |
 | `test_fortsetzen.py` | Stopp-Stelle wiederfinden, mit Tiefe auch bei mehreren Zustellungen |
 | `test_waechter.py` | Anzeigetexte deuten, fremdes Fenster erkennen, niemals `getUpdates` |
+| `test_trockenlauf.py` | G-Code deuten: wann der Strahl brennt, Grenzen, was GRBL überspringt, Laufzeit wie die Vorschau |
 
 ## Regeln
 

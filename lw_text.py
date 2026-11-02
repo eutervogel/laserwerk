@@ -837,6 +837,10 @@ EN = {
         "it was placed at the edge.",
     "OK": "OK",
     "Abbrechen": "Cancel",
+    "Verwerfen": "Discard",
+    "verworfen": "discarded",
+    "{n} Element(e) und den erzeugten G-Code wegwerfen?":
+        "Discard {n} element(s) and the generated G-code?",
 
     # --- trockenlauf.py. Die Beschriftungen sind auf 16 Zeichen gepolstert,
     # damit die Zahlenspalte auch auf Englisch untereinander steht.

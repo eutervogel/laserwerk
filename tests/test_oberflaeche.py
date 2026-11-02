@@ -443,6 +443,78 @@ class NullpunktUeberDieSitzung(Nullpunkt):
 
 
 @ohne_bildschirm
+class Verwerfen(Grundlage):
+    """Geladenen G-Code wieder loswerden. clear_motif konnte das immer, aber
+    es gab keinen Knopf - eine geladene .nc blieb, bis man eine andere lud."""
+
+    def nc(self, text="G21\nG90\nM4 S0\nG0 X10 Y10\nG1 X40 Y10 S300 F600\n"
+                      "G1 S0\nM5\nG0 X0 Y0\n"):
+        import os
+        import tempfile
+        p = os.path.join(tempfile.mkdtemp(), "j.nc")
+        with open(p, "w") as f:
+            f.write(text)
+        self.L.filedialog.askopenfilename = lambda **k: p
+        self.app.load_gcode()
+        return p
+
+    def test_geladener_gcode_geht_wieder_weg(self):
+        self.nc()
+        self.assertIsNotNone(self.app.lines)
+        self.app.verwerfen()
+        self.assertIsNone(self.app.lines)
+        self.assertIsNone(self.app.info)
+        self.assertIsNone(self.app.src_path)
+        self.assertEqual(self.app.lbl_info.cget("text"), "")
+
+    def test_ohne_nachfrage_wenn_nur_gcode_geladen_ist(self):
+        gefragt = []
+        self.L.messagebox.askyesno = lambda t, m: (gefragt.append(m), True)[1]
+        self.nc()
+        self.app.verwerfen()
+        self.assertEqual(gefragt, [])
+
+    def test_bei_gesetzten_motiven_wird_gefragt(self):
+        """Ein geladener G-Code ist mit einem Griff wieder da. Gesetzte
+        Motive sind Arbeit."""
+        gefragt = []
+        self.L.messagebox.askyesno = lambda t, m: (gefragt.append(m), False)[1]
+        self.motiv()
+        self.app.verwerfen()
+        self.assertTrue(gefragt)
+        self.assertTrue(self.app.elemente)          # Nein heisst nein
+
+    def test_ja_wirft_die_motive_weg(self):
+        self.L.messagebox.askyesno = lambda t, m: True
+        self.motiv()
+        self.app.verwerfen()
+        self.assertEqual(self.app.elemente, [])
+        self.assertIsNone(self.app.src)
+
+    def test_leer_passiert_nichts(self):
+        self.L.messagebox.askyesno = lambda t, m: self.fail("nichts zu fragen")
+        self.app.verwerfen()
+        self.assertIsNone(self.app.lines)
+
+    def test_knopf_deckt_nichts_zu(self):
+        """Die Lehre aus der Jobleiste. Anklicken laesst sich der Knopf hier
+        nicht pruefen - die Reihe liegt im Rollbereich weit unten -, also
+        wird die Geometrie innerhalb der Reihe geprueft."""
+        self.wurzel.deiconify()
+        self.wurzel.update()
+        k = [(c.winfo_x(), c.winfo_y(), c.winfo_width(), c.winfo_height())
+             for c in self.app.btn_weg.master.winfo_children()]
+        self.assertEqual(len(k), 3)
+        for i in range(len(k)):
+            for j in range(i + 1, len(k)):
+                a, b = k[i], k[j]
+                quer = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+                hoch = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+                self.assertLessEqual(min(quer, hoch), 0,
+                                     "%r deckt %r zu" % (a, b))
+
+
+@ohne_bildschirm
 class FokusUeberlebtDenNeustart(Grundlage):
     """Materialdicke und Fokuskorrektur standen nur in der Oberflaeche und in
     Presets. Wer kein Preset von Hand speicherte, fing nach jedem Start wieder

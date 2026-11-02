@@ -499,6 +499,8 @@ class App:
         bb.grid(row=21, column=0, columnspan=3, sticky="ew", pady=6)
         ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
         ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
+        self.btn_weg = ttk.Button(bb, text=T("Verwerfen"), command=self.verwerfen)
+        self.btn_weg.pack(side="left")
         pb = ttk.Frame(f)
         pb.grid(row=22, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         ttk.Button(pb, text=T("Projekt speichern"), command=self.save_project
@@ -1303,6 +1305,22 @@ class App:
     def _projekt_titel(self, pfad):
         self.projekt_pfad = pfad
         self.root.title("Laserwerk" + (" – " + os.path.basename(pfad) if pfad else ""))
+
+    def verwerfen(self):
+        """Den Knopf dazu. clear_motif konnte das immer schon, aber aufgerufen
+        hat es nur das Laden selbst - eine geladene .nc wurde man dadurch gar
+        nicht mehr los, ausser indem man eine andere lud."""
+        if self.lines is None and self.src is None and not self.elemente:
+            return
+        # Ein geladener G-Code ist mit einem Griff wieder da. Gesetzte Motive
+        # sind Arbeit - danach wird gefragt.
+        if self.elemente and not messagebox.askyesno(
+                T("Verwerfen"),
+                T("{n} Element(e) und den erzeugten G-Code wegwerfen?").format(
+                    n=len(self.elemente))):
+            return
+        self.clear_motif()
+        self._log(T("verworfen"))
 
     def clear_motif(self):
         """Alle Elemente und den erzeugten G-Code verwerfen."""

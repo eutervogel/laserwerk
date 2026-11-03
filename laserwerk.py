@@ -831,6 +831,13 @@ class App:
                         "graviert wird nur das Bild.").format(n=nv))
         if ext == ".dxf":
             self.v_job.set("schnitt")       # DXF = nur Konturen
+        elif bildlinien:
+            # Eine Schnittvorlage sagt selbst, was mit ihr geschehen soll:
+            # das Bild gravieren, die Pfade drumherum schneiden. Die
+            # Betriebsart gilt je Element - wer mehrere Dateien laedt und
+            # danach einmal "beides" anklickt, stellt sonst nur die letzte
+            # um und wundert sich, dass nur ein Rahmen geschnitten wird.
+            self.v_job.set("beides")
         elif not vec and self.v_job.get() in ("schnitt", "beides"):
             self.v_job.set("gravur")
         self.v_rot.set(0)
@@ -1071,6 +1078,10 @@ class App:
             neu["src"] = V.render_preview(V.flatten(teil, 1.0), bezug=V.flatten(alle, 1.0))
             neu["anzeige"] = "%s  %s" % (vorlage["anzeige"], farbe)
             neu["ebene"] = farbe
+            # Die Ebene zeigt ihre eigene Strichzeichnung, nicht mehr das
+            # eingebettete Bild - der gemerkte Platz im Blatt gilt dafuer
+            # nicht und wuerde die Ebene gegen sich selbst ausrichten.
+            neu["bild_bb"] = None
             neu["v_job"] = "schnitt" if self._ist_rot(farbe) else "gravur"
             neu.pop("_lcache", None)
             neu.pop("ergebnis", None)
@@ -1401,6 +1412,11 @@ class App:
         # Mal auf das Maximum zurueckgesetzt. Die Masse bleiben jetzt stehen;
         # dass der Schnitt ein anderes Seitenverhaeltnis hat als das
         # gerenderte Bild, rechnet _box() beim Zeichnen heraus.
+        # Die Liste gleich mitschreiben: die Betriebsart gilt nur fuer das
+        # gewaehlte Element, und das sieht man sonst erst am fehlenden
+        # Schnitt im fertigen Job.
+        self._element_sichern()
+        self._liste_auffrischen()
         self._stale()
         self._raender_zeigen()
         self._draw()
@@ -2163,8 +2179,13 @@ class App:
         deshalb stimmt die Maschinenposition noch. Der Versatz wird also einfach
         neu gesetzt: G92 auf (MPos - altes WCO). Es bewegt sich dabei nichts.
         """
-        wco, war_null, war_zref, wann = self._rettung
-        self._rettung = None
+        # Zwei Wege koennen gleichzeitig retten wollen - das reset-Ereignis
+        # und das Jobende. Wer zuerst kommt, nimmt die Rettung an sich; der
+        # zweite findet nichts mehr vor und laesst es.
+        rettung, self._rettung = self._rettung, None
+        if rettung is None:
+            return
+        wco, war_null, war_zref, wann = rettung
         self.grbl.wait_idle(timeout=8)
         st = self.grbl.status
         if self.grbl.alarm or st["state"].startswith(("Alarm", "Door")):
@@ -2755,8 +2776,24 @@ class App:
             self._melde(f"{name}: {txt}"
                         + (T("\n{n} Übertragungsfehler").format(n=er) if er else ""))
             if res != "fertig":
-                # Soft-Reset/Abriss: Offsets sind nicht mehr verlaesslich
-                self.zero_ok = self.zref_ok = False
+                # Der Soft-Reset nach einem Abbruch loescht den Versatz im
+                # Controller - aber wir wissen, wo er lag. Frueher stand hier
+                # nur "weg damit", und das traf auch die Rettung, die nach
+                # dem Reset schon gelaufen war: der Nullpunkt kam zurueck und
+                # dieses Ereignis loeschte ihn eine Sekunde spaeter wieder.
+                # Genau das war das "ab und zu". Nur ein Abriss ist
+                # endgueltig - der raeumt in seinem eigenen Zweig auf.
+                if res == "verbindung" or not (self.null_wco
+                                               and any(self.null_wco)):
+                    self.zero_ok = self.zref_ok = False
+                else:
+                    if self._rettung is None:
+                        self._rettung = (self.null_wco, True, self.zref_ok,
+                                         time.time())
+                    if not self.zero_ok:
+                        # Der Reset ist schon durch und hat ihn gekostet -
+                        # sonst holt ihn das reset-Ereignis selbst zurueck.
+                        self._bg(self._nullpunkt_retten, None)
                 if res != "abgebrochen":
                     messagebox.showwarning(name, txt)
         elif k == "pausiert":

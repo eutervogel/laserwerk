@@ -406,6 +406,53 @@ class NullpunktUeberDieSitzung(Nullpunkt):
         self.assertEqual(g.wco, (120.0, 80.0, 0.0))
         self.assertTrue(self.app.zero_ok)
 
+    def test_stopp_mitten_im_job_behaelt_ihn(self):
+        """Der haeufigste Fall ueberhaupt - und der einzige, der hier
+        gefehlt hat: STOPP, waehrend ein Job laeuft."""
+        g = self.gesetzt()
+        g.job_running = True
+        g.mpos = (150.0, 95.0, 0.0)
+        self.app.stop()
+        self.app._event("jobend", ("Gravur", "abgebrochen"))
+        self.pumpe()
+        self.assertTrue(self.app.zero_ok)
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+
+    def test_spaetes_jobende_loescht_ihn_nicht(self):
+        """Das Jobende kommt nicht immer zuerst: haengt der Sendethread noch
+        in einer Quittung, trifft es erst nach der Rettung ein. Dann stand
+        der Nullpunkt wieder - und wurde hier geloescht."""
+        g = self.gesetzt()
+        g.mpos = (150.0, 95.0, 0.0)
+        self.app.stop()
+        self.pumpe(0.5)
+        self.assertTrue(self.app.zero_ok)          # Rettung ist durch
+        self.app._event("jobend", ("Gravur", "abgebrochen"))
+        self.pumpe(0.3)
+        self.assertTrue(self.app.zero_ok)
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+
+    def test_abbruch_ohne_stopp_rettet_auch(self):
+        """Zu viele Uebertragungsfehler halten den Job selbst an - dann hat
+        niemand vorher etwas gemerkt, der Versatz ist aber derselbe."""
+        g = self.gesetzt()
+        g.mpos = (150.0, 95.0, 0.0)
+        g.stop()                                   # wie _halt(): Reset
+        self.pumpe(0.3)
+        self.assertFalse(self.app.zero_ok)
+        self.app._event("jobend", ("Gravur", "fehler"))
+        self.pumpe()
+        self.assertTrue(self.app.zero_ok)
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
+
+    def test_abriss_bleibt_endgueltig(self):
+        """Nach einem Abriss weiss niemand, wo der Kopf steht - da darf auch
+        das Jobende nichts wiederherstellen."""
+        g = self.gesetzt()
+        self.app._event("jobend", ("Gravur", "verbindung"))
+        self.pumpe(0.3)
+        self.assertFalse(self.app.zero_ok)
+
     def test_nach_abriss_wird_nichts_zurueckgeholt(self):
         """Nach einem USB-Abriss weiss niemand mehr, wo der Kopf steht - ein
         wiederhergestellter Versatz waere schlimmer als keiner."""
@@ -2338,6 +2385,9 @@ class NurDasBild(Grundlage):
         """Das eingebettete Bild ist weiss, die Linie schwarz: taucht im
         Raster ueberhaupt Leistung auf, ist die Linie mitgraviert."""
         self.vorlage()
+        # Eine Schnittvorlage wird von sich aus graviert UND geschnitten -
+        # hier geht es nur um das Raster, der Schnitt haette eigene Werte.
+        self.app.v_job.set("gravur")
         self.app.v_w.set(40.0)
         self.app._keep_ratio("w")
         self.app.v_mode.set("schwelle")
@@ -2346,6 +2396,7 @@ class NurDasBild(Grundlage):
 
     def test_ausgeschaltet_brennt_die_linie_mit(self):
         self.vorlage()
+        self.app.v_job.set("gravur")       # nur das Raster zaehlt hier
         self.app.v_nurbild.set(False)
         self.app._nurbild_anwenden()
         self.app.v_w.set(40.0)
@@ -2375,7 +2426,7 @@ class SchnittvorlageInDeckung(Grundlage):
 
     LUFT = 10.0      # mm zwischen Zeichnung und Schnittlinie
 
-    def vorlage(self):
+    def vorlage(self, xoff=20.0, yoff=20.0, job="beides"):
         """Blatt 100 x 100: Zeichnung 20..80, Schnitt 10..90."""
         import base64, io, os, tempfile
         im = Image.new("L", (400, 400), 255)
@@ -2393,12 +2444,14 @@ class SchnittvorlageInDeckung(Grundlage):
                     '<path d="M10 10 H90 V90 H10 Z" stroke="#ff0000" '
                     'stroke-width="0.1" fill="none"/></svg>' % b64)
         self.app.lade_motiv(p, fragen=False)
-        self.app.v_job.set("beides")
+        if job:
+            self.app.v_job.set(job)
         self.app.v_lock.set(True)
         self.app.v_w.set(60.0)
         self.app.v_h.set(60.0)
-        self.app.v_xoff.set(20.0)
-        self.app.v_yoff.set(20.0)
+        self.app.v_xoff.set(xoff)
+        self.app.v_yoff.set(yoff)
+        self.app._element_sichern()
         return p
 
     def test_bild_merkt_sich_seinen_platz_im_blatt(self):
@@ -2450,6 +2503,39 @@ class SchnittvorlageInDeckung(Grundlage):
         x0, y0, x1, y1 = L_vector.bbox(polys)
         self.assertAlmostEqual(x1 - x0, 60.0, delta=0.2)
         self.assertAlmostEqual(y1 - y0, 60.0, delta=0.2)
+
+    def test_jede_vorlage_wird_von_sich_aus_graviert_und_geschnitten(self):
+        """Die Datei sagt selbst, was mit ihr geschehen soll."""
+        self.app.v_job.set("gravur")
+        self.vorlage(job=None)
+        self.assertEqual(self.app.elemente[0]["v_job"], "beides")
+
+    def test_mehrere_vorlagen_bekommen_jede_ihren_rahmen(self):
+        """Die Betriebsart gilt je Element: wer zwei Dateien laedt und
+        danach einmal 'beides' anklickt, stellte nur die letzte um - und
+        bekam genau einen Rahmen in den Job."""
+        self.vorlage(20.0, 20.0, job=None)
+        self.vorlage(120.0, 20.0, job=None)
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.assertEqual(self.gezeigt, [])
+        schnitte = [z for z in self.app.lines
+                    if z.startswith("; Laserwerk Schnitt")]
+        self.assertEqual(len(schnitte), 2)
+        for e in self.app.elemente:
+            self.assertTrue(e["ergebnis"]["cut_polys"])
+
+    def test_umschalten_schreibt_sich_in_die_liste(self):
+        """Sonst sieht man der Liste nicht an, dass nur ein Element
+        umgestellt wurde."""
+        self.vorlage(20.0, 20.0)
+        self.vorlage(120.0, 20.0)
+        self.app.v_job.set("gravur")
+        self.app._job_changed()
+        self.assertEqual(self.app.elemente[0]["v_job"], "beides")
+        self.assertEqual(self.app.elemente[1]["v_job"], "gravur")
+        self.assertIn("gravieren", self.app.lb_el.get(1))
+        self.assertIn("beides", self.app.lb_el.get(0))
 
     def test_platz_ueberlebt_den_elementwechsel(self):
         self.vorlage()

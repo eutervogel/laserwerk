@@ -58,7 +58,9 @@ Material ausprobieren will.
 - **Mehrere Elemente** — Motiv als PNG, Rahmen als SVG, beides auf demselben
   Werkstück: jedes Element mit eigener Datei, eigener Platzierung und eigenen
   Werten, gemeinsam in einer Vorschau, einem G-Code und einer Projektdatei.
-  Erst wird alles graviert, dann alles geschnitten.
+  Erst wird alles graviert, dann alles geschnitten — auch bei Elementen, die
+  selbst beides tun. Sonst läge das erste Teil schon lose im Brett, während
+  das zweite noch graviert wird.
 - **Formen zeichnen** — ein Rechteck mit Maßen und Eckradius, oder gleich ein
   Rahmen um das gewählte Motiv mit einem Abstand ringsum. Braucht keine
   Zeichensoftware für den einfachen Fall und steht danach als ganz normales

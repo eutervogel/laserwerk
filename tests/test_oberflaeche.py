@@ -2525,6 +2525,53 @@ class SchnittvorlageInDeckung(Grundlage):
         for e in self.app.elemente:
             self.assertTrue(e["ergebnis"]["cut_polys"])
 
+    def test_erst_alle_gravuren_dann_alle_schnitte(self):
+        """Zwei Vorlagen durften nicht Teil fuer Teil abgearbeitet werden:
+        das erste Teil lag dann schon lose im Brett, waehrend das zweite
+        noch graviert wurde - es kippt hoch, und der Kopf faehrt darueber."""
+        self.vorlage(20.0, 20.0, job=None)
+        self.vorlage(120.0, 20.0, job=None)
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.assertEqual(self.gezeigt, [])
+        arten = [art for _, art, _, _ in self.app.info["marken"]]
+        self.assertEqual(arten, sorted(arten, key="zeile kontur".split().index))
+        # Auch im G-Code selbst: beide Schnittbloecke liegen hinten.
+        schnitte = [k for k, z in enumerate(self.app.lines)
+                    if z.startswith("; Laserwerk Schnitt")]
+        self.assertEqual(len(schnitte), 2)
+        letzte_zeile = max(idx for idx, art, _, _ in self.app.info["marken"]
+                           if art == "zeile")
+        self.assertLess(letzte_zeile, min(schnitte))
+
+    def test_eine_vorlage_behaelt_ihre_reihenfolge(self):
+        """Ein einzelnes Teil wird nach wie vor graviert und dann
+        geschnitten - das Aufteilen darf daran nichts aendern."""
+        self.vorlage(20.0, 20.0)
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        eins = list(self.app.lines)
+        self.app.generate()
+        self.assertEqual(self.app.lines, eins)
+        arten = [art for _, art, _, _ in self.app.info["marken"]]
+        self.assertEqual(arten, sorted(arten, key="zeile kontur".split().index))
+
+    def test_marken_zeigen_auf_ihre_eigene_zeile(self):
+        """Werden die Stuecke umsortiert, muessen die Marken mitwandern -
+        sonst steht die Anzeige den halben Job auf der falschen Kontur."""
+        self.vorlage(20.0, 20.0, job=None)
+        self.vorlage(120.0, 20.0, job=None)
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        for idx, art, nr, _ in self.app.info["marken"]:
+            if art == "kontur":
+                # Die Marke steht auf der Anfahrt der Kontur, dahinter
+                # beginnt der Schnitt selbst.
+                self.assertTrue(self.app.lines[idx].startswith("G0 "),
+                                self.app.lines[idx])
+                self.assertTrue(self.app.lines[idx + 1].startswith("G1 "),
+                                self.app.lines[idx + 1])
+
     def test_umschalten_schreibt_sich_in_die_liste(self):
         """Sonst sieht man der Liste nicht an, dass nur ein Element
         umgestellt wurde."""

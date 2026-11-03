@@ -56,6 +56,7 @@ class App:
         self.bild_bb = None        # Platz des Bildes im selben Blatt
         self._vecdreh = None       # Ausdehnung der gedrehten Konturen
         self.cut_polys = None      # erzeugte Schnittkonturen
+        self.schnitt_ab = None     # ab welcher Zeile der Schnitt beginnt
         self.zero_ok = False       # Nullpunkt XY in dieser Sitzung gesetzt
         self.zref_ok = False       # Z-Referenz gueltig
         self.fokus_zs = []
@@ -1604,6 +1605,7 @@ class App:
                 self._element_laden(i, zeichnen=False)
                 self.lines = self.info = None
                 self.preview_pil = self.cut_polys = None
+                self.schnitt_ab = None
                 self._erzeuge_eines()
                 if self.lines is None:
                     return
@@ -1613,33 +1615,42 @@ class App:
                                      preview_pil=self.preview_pil,
                                      preview_pos=self.preview_pos,
                                      cut_polys=self.cut_polys,
+                                     schnitt_ab=self.schnitt_ab,
                                      text=self.lbl_info.cget("text"))
                 sekunden += self.info.get("sekunden", 0)
                 brennweg += self.info.get("cut_m", 0)
-                (schnitt if self.v_job.get() == "schnitt" else gravur).append(i)
+                # "beides" bringt Gravur und Schnitt in einem Stueck mit.
+                # Die beiden gehoeren in verschiedene Haelften des Jobs:
+                # sonst liegt das erste Teil schon lose im Brett, waehrend
+                # das zweite noch graviert wird - es kippt hoch, und der Kopf
+                # faehrt darueber.
+                ab = self.schnitt_ab
+                if ab is not None:
+                    gravur.append(self._stueck(i, 0, ab))
+                    schnitt.append(self._stueck(i, ab, None))
+                elif self.v_job.get() == "schnitt":
+                    schnitt.append(self._stueck(i, 0, None))
+                else:
+                    gravur.append(self._stueck(i, 0, None))
         finally:
             self._element_laden(merke, zeichnen=False)
         folge = gravur + schnitt
-        zeilen = []
-        for i in folge:
-            teil = self.elemente[i]["ergebnis"]["lines"]
+        zeilen, marken = [], []
+        for teil, teilmarken, _ in folge:
             if zeilen and zeilen[-1].startswith("G0 X0 Y0"):
                 zeilen = zeilen[:-1]        # Rueckfahrt zwischen Teilen sparen
+            marken += [(idx + len(zeilen), art, nr, gesamt)
+                       for idx, art, nr, gesamt in teilmarken]
             zeilen += teil
-        marken, versatz = [], 0
-        for i in folge:
-            teil = self.elemente[i]["ergebnis"]
-            for idx, art, nr, gesamt in teil["info"].get("marken", ()):
-                marken.append((idx + versatz, art, nr, gesamt))
-            versatz += len(teil["lines"])
-            if versatz and zeilen[versatz - 1:versatz] == ["G0 X0 Y0"]:
-                versatz -= 1          # dieselbe Kuerzung wie oben
         self.lines = zeilen
-        erste = self.elemente[folge[0]]["ergebnis"]["info"]
-        self.info = dict(erste)
+        self.info = dict(self.elemente[folge[0][2]]["ergebnis"]["info"])
         self.info.update(befehle=len(zeilen), sekunden=sekunden, cut_m=brennweg,
                          marken=marken)
         if len(self.elemente) > 1:
+            # Jedes Element einmal, in der Reihenfolge, in der es zuerst
+            # drankommt - ein Teil mit Gravur und Schnitt steckt in zwei
+            # Stuecken, soll aber nicht zweimal in der Liste stehen.
+            reihe = list(dict.fromkeys(i for _, _, i in folge))
             self.lbl_info.configure(text=T(
                 "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\n"
                 "Laufzeit ca. {min:.0f} min").format(
@@ -1647,9 +1658,20 @@ class App:
                     min=sekunden / 60) + "\n\n" + "\n\n".join(
                 "%d. %s\n%s" % (i + 1, self.elemente[i]["anzeige"],
                                  self.elemente[i]["ergebnis"]["text"])
-                for i in folge))
+                for i in reihe))
         self._gen_knopf()
         self._draw()
+
+    def _stueck(self, i, von, bis):
+        """Ein Teilstueck aus dem G-Code eines Elements: die Zeilen und die
+        Marken darin, wieder ab Null gezaehlt."""
+        r = self.elemente[i]["ergebnis"]
+        zeilen = r["lines"][von:] if bis is None else r["lines"][von:bis]
+        ende = len(r["lines"]) if bis is None else bis
+        marken = [(idx - von, art, nr, gesamt)
+                  for idx, art, nr, gesamt in r["info"].get("marken", ())
+                  if von <= idx < ende]
+        return zeilen, marken, i
 
     def _erzeuge_eines(self):
         if self.src is None:
@@ -1843,6 +1865,10 @@ class App:
             konturen=ci["konturen"], schnitt_m=ci["cut_m"],
             schnitt_sekunden=ci["sekunden"])
         self.cut_polys = polys
+        # Die Naht merken: bei mehreren Elementen muss der Job die Schnitte
+        # aller Teile hinter alle Gravuren ziehen, und dafuer muss er wissen,
+        # wo in diesen Zeilen die Gravur aufhoert.
+        self.schnitt_ab = versatz
         self.lbl_info.configure(text=self.lbl_info.cget("text") + T(
             "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
             "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min").format(

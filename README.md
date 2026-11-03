@@ -56,7 +56,9 @@ settings for a new material.
 - **Several elements** — artwork as a PNG, frame as an SVG, both on the same
   workpiece: each element with its own file, placement and settings, together
   in one preview, one G-code run and one project file. Everything is engraved
-  first, then everything is cut.
+  first, then everything is cut — including elements that do both themselves.
+  Otherwise the first part would already be loose in the board while the
+  second one is still being engraved.
 - **Draw shapes** — a rectangle with its measurements and corner radius, or a
   frame around the selected artwork with a margin all round. No drawing
   program needed for the simple case, and the result is an ordinary element

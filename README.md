@@ -49,7 +49,10 @@ settings for a new material.
   only the image were in it. Otherwise the jigsaw pattern burns straight
   across the artwork, and the template is of no use for the next run. The
   switch sits with the engraving settings and only appears when the file
-  really holds both.
+  really holds both. Width and height apply to the **engraving**; the cut
+  keeps its distance from it and therefore reaches beyond the artwork
+  rectangle. It needs room on every side — if it ends up before the origin,
+  Laserwerk says which offset will do.
 - **Several elements** — artwork as a PNG, frame as an SVG, both on the same
   workpiece: each element with its own file, placement and settings, together
   in one preview, one G-code run and one project file. Everything is engraved

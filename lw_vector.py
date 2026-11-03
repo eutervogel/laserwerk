@@ -236,6 +236,43 @@ def _farbe(el):
     return wert if re.fullmatch(r"#[0-9a-f]{6}", wert) else None
 
 
+def _blatt(root):
+    """(Grundmatrix, Blattbreite, Blatthoehe in mm) eines SVG-Wurzelelements.
+
+    Die Grundmatrix rechnet Nutzereinheiten in Millimeter um und schiebt
+    den viewBox-Ursprung auf (0, 0). Das Blattmass gehoert dazu: wer ein
+    gerendertes Bild in dieselben Koordinaten legen will, braucht beides
+    aus einer Hand, sonst liegen Pfade und Bild um den viewBox-Versatz
+    auseinander.
+    """
+    vb = root.get("viewBox")
+    w_mm = _units(root.get("width")); h_mm = _units(root.get("height"))
+    if vb:
+        vx, vy, vw, vh = [float(x) for x in re.findall(NUM, vb)]
+        sx = (w_mm / vw) if w_mm else 25.4/96
+        sy = (h_mm / vh) if h_mm else sx
+        return (sx, 0, 0, sy, -vx*sx, -vy*sy), vw * sx, vh * sy
+    return (25.4/96, 0, 0, 25.4/96, 0, 0), w_mm or 0.0, h_mm or 0.0
+
+
+def svg_blattmass(path):
+    """Blattgroesse in mm, gerechnet wie in load_svg. Y zaehlt nach unten."""
+    return _blatt(ET.parse(path).getroot())[1:]
+
+
+def bild_in_blatt(path, px, bb):
+    """Pixelkasten im gerenderten Blatt -> Kasten in mm wie bei load_svg.
+
+    Damit landet ein Bild, das aus einer SVG gerastert und auf seinen
+    Inhalt zugeschnitten wurde, in denselben Koordinaten wie die Pfade
+    derselben Datei - und beide bleiben zueinander in Deckung.
+    """
+    w_mm, h_mm = svg_blattmass(path)
+    sx = w_mm / px[0] if px[0] else 0.0
+    sy = h_mm / px[1] if px[1] else 0.0
+    return (bb[0] * sx, -bb[3] * sy, bb[2] * sx, -bb[1] * sy)
+
+
 def load_svg(path):
     """-> Liste Unterpfade in mm (Y nach oben), Segmente wie parse_path."""
     tmp = normalize(path)
@@ -243,15 +280,7 @@ def load_svg(path):
         root = ET.parse(tmp).getroot()
     finally:
         os.unlink(tmp)
-    vb = root.get("viewBox")
-    w_mm = _units(root.get("width")); h_mm = _units(root.get("height"))
-    if vb:
-        vx, vy, vw, vh = [float(x) for x in re.findall(NUM, vb)]
-        sx = (w_mm / vw) if w_mm else 25.4/96
-        sy = (h_mm / vh) if h_mm else sx
-        base = (sx, 0, 0, sy, -vx*sx, -vy*sy)
-    else:
-        base = (25.4/96, 0, 0, 25.4/96, 0, 0)
+    base = _blatt(root)[0]
     subs = []
 
     def walk(el, m, farbe):
@@ -731,6 +760,6 @@ def cut_gcode(polys, s, feed, passes=1, kommentar=""):
     x0, y0, x1, y1 = bbox(polys) if polys else (0, 0, 0, 0)
     info = dict(befehle=len(g), cut_m=cut/1000, trav_m=trav/1000,
                 konturen=len(polys), breite=x1 - x0, hoehe=y1 - y0,
-                xmin=x0, xmax=x1, marken=marken,
+                xmin=x0, xmax=x1, ymin=y0, ymax=y1, marken=marken,
                 sekunden=estimate(segs, feed, len(polys)*passes) + trav/(1000/60))
     return g, info

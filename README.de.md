@@ -51,7 +51,10 @@ Material ausprobieren will.
   gerastert, als stünde nur das Bild darin. Sonst brennt sich das
   Puzzlemuster quer durchs Motiv, und die Vorlage taugt für den nächsten
   Durchgang nichts mehr. Der Schalter steht bei den Gravureinstellungen und
-  taucht nur auf, wenn die Datei wirklich beides enthält.
+  taucht nur auf, wenn die Datei wirklich beides enthält. Breite und Höhe
+  gelten dabei für die **Gravur**; der Schnitt behält seinen Abstand zu ihr
+  und steht deshalb über das Motivrechteck hinaus. Er braucht ringsum Platz
+  — liegt er vor dem Nullpunkt, sagt Laserwerk, welcher Versatz reicht.
 - **Mehrere Elemente** — Motiv als PNG, Rahmen als SVG, beides auf demselben
   Werkstück: jedes Element mit eigener Datei, eigener Platzierung und eigenen
   Werten, gemeinsam in einer Vorschau, einem G-Code und einer Projektdatei.

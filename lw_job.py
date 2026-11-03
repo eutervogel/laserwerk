@@ -174,12 +174,19 @@ def load_source(path, px_w=None, nur_bild=False):
     return im.convert("L")
 
 
-def autocrop(im, schwelle=240):
+def inhalt_bb(im, schwelle=240):
+    """Umriss alles Nichtweissen in Pixeln, oder None. Wer das Bild
+    zuschneidet, muss wissen, wieviel vorne und oben wegfaellt - sonst
+    verliert alles, was sich auf das Blatt bezieht, seinen Bezug."""
     a = np.asarray(im) < schwelle
     if not a.any():
-        return im
-    bb = Image.fromarray(a.astype(np.uint8) * 255).getbbox()
-    return im.crop(bb)
+        return None
+    return Image.fromarray(a.astype(np.uint8) * 255).getbbox()
+
+
+def autocrop(im, schwelle=240):
+    bb = inhalt_bb(im, schwelle)
+    return im.crop(bb) if bb else im
 
 
 # ---------------------------------------------------------------- Raster

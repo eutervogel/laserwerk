@@ -53,6 +53,7 @@ class App:
         self.v_snap = tk.BooleanVar(value=self.cfg["einrasten"])
         self.vec = None            # Konturen (nur bei SVG/DXF)
         self.vec_bb = None         # deren exakte Ausdehnung in mm
+        self.bild_bb = None        # Platz des Bildes im selben Blatt
         self._vecdreh = None       # Ausdehnung der gedrehten Konturen
         self.cut_polys = None      # erzeugte Schnittkonturen
         self.zero_ok = False       # Nullpunkt XY in dieser Sitzung gesetzt
@@ -773,6 +774,7 @@ class App:
         # Eine Schnittvorlage traegt beides: das Motiv als eingebettetes Bild
         # und die Schnittlinien als Pfade. Gerastert wird dann nur das Bild.
         bildlinien = False
+        bild_bb = None
         if ext == ".svg":
             try:
                 nb, nv = J.svg_anteile(p)
@@ -793,8 +795,18 @@ class App:
                 # DXF hat keine Flaechen - Vorschau aus den Konturen zeichnen
                 im = V.render_preview(V.flatten(vec, 1.0))
             else:
-                im = J.autocrop(J.load_source(p, 3000 if ext == ".svg" else None,
-                                              nur_bild=bildlinien), 245)
+                roh = J.load_source(p, 3000 if ext == ".svg" else None,
+                                    nur_bild=bildlinien)
+                kasten = J.inhalt_bb(roh, 245)
+                im = roh.crop(kasten) if kasten else roh
+                # Der Zuschnitt wirft den weissen Rand weg - und damit die
+                # Lage des Motivs im Blatt. Bei einer Schnittvorlage liegen
+                # die Schnittlinien aber gerade NEBEN dem Motiv: ohne diesen
+                # Merker haette der Rahmen nachher nichts mehr, woran er
+                # sich ausrichten koennte, und wuerde auf das Motiv selbst
+                # eingepasst - also genau um die Luft dazwischen zu klein.
+                if bildlinien and kasten:
+                    bild_bb = V.bild_in_blatt(p, roh.size, kasten)
         except Exception as e:
             messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
             return False
@@ -806,6 +818,7 @@ class App:
         self.src, self.src_path, self.vec = im, p, vec
         self.quelle_pfad = p
         self.vec_bb = V.bbox(V.flatten(vec, 1.0)) if vec else None
+        self.bild_bb = bild_bb
         self.vec_voll = vec
         self.ebene = None
         self._vecdreh = self._live_cache = None
@@ -826,6 +839,7 @@ class App:
             name, im.width, im.height))
         self.elemente.append({"anzeige": name, "src": im, "vec": vec,
                               "vec_voll": vec, "vec_bb": self.vec_bb,
+                              "bild_bb": bild_bb,
                               "pfad": p, "quelle": p})
         self.aktiv = len(self.elemente) - 1
         self.fit()                       # setzt Groesse, sichert gleich mit
@@ -895,6 +909,7 @@ class App:
         self.src, self.src_path, self.vec = im, None, polys
         self.quelle_pfad = None
         self.vec_bb = V.bbox(polys)
+        self.bild_bb = None
         self.vec_voll = polys
         self.ebene = None
         self._vecdreh = self._live_cache = None
@@ -1096,6 +1111,7 @@ class App:
             except tk.TclError:
                 pass
         e.update(src=self.src, vec=self.vec, vec_bb=self.vec_bb,
+                 bild_bb=getattr(self, "bild_bb", None),
                  vec_voll=getattr(self, "vec_voll", None) or self.vec,
                  ebene=getattr(self, "ebene", None),
                  bildlinien=getattr(self, "bildlinien", False),
@@ -1110,6 +1126,7 @@ class App:
         self.aktiv = i
         self.src, self.vec = e["src"], e["vec"]
         self.vec_bb, self.src_path = e["vec_bb"], e["pfad"]
+        self.bild_bb = e.get("bild_bb")
         self.vec_voll = e.get("vec_voll") or e["vec"]
         self.ebene = e.get("ebene")
         self.bildlinien = e.get("bildlinien", False)
@@ -1162,7 +1179,7 @@ class App:
         else:
             self.aktiv = -1
             self.src = self.src_path = self.vec = self.vec_bb = None
-            self.vec_voll = None
+            self.vec_voll = self.bild_bb = None
             self.lbl_src.configure(text="-")
             self._liste_auffrischen()
             self._gen_knopf()
@@ -1331,7 +1348,7 @@ class App:
         self.aktiv = -1
         self.src = self.src_path = None
         self.vec = self.vec_bb = self.vec_voll = self._vecdreh = None
-        self._live_cache = None
+        self._live_cache = self.bild_bb = None
         self.bildlinien = self.src_nurbild = False
         self._nurbild_zeigen()
         self.drag = None
@@ -1734,9 +1751,21 @@ class App:
         sc = min(w / bw if bw else 1e9, h / bh if bh else 1e9)
         bezug = getattr(self, "vec_voll", None) or self.vec
         polys = V.rotate(V.flatten(self.vec, sc), self.v_rot.get())
-        ganz = V.rotate(V.flatten(bezug, sc), self.v_rot.get())
-        polys, _ = V.fit(polys, w, h, max(0.0, float(self.v_xoff.get())),
-                         max(0.0, float(self.v_yoff.get())), bezug=ganz,
+        bb = getattr(self, "bild_bb", None)
+        if bb and self.v_job.get() != "schnitt":
+            # Schnittvorlage: Breite und Hoehe gelten fuer die Gravur, also
+            # richtet sich der Schnitt an ihr aus und nicht an sich selbst.
+            # Sonst zieht V.fit seinen Kasten auf den der Gravur zusammen -
+            # und genau die Luft zwischen Zeichnung und Schnittlinie, wegen
+            # der man beides in eine Datei legt, verschwindet dabei.
+            ganz = V.rotate([{"pts": [(bb[0], bb[1]), (bb[2], bb[1]),
+                                      (bb[2], bb[3]), (bb[0], bb[3])],
+                              "closed": True}], self.v_rot.get())
+        else:
+            ganz = V.rotate(V.flatten(bezug, sc), self.v_rot.get())
+        xoff = max(0.0, float(self.v_xoff.get()))
+        yoff = max(0.0, float(self.v_yoff.get()))
+        polys, _ = V.fit(polys, w, h, xoff, yoff, bezug=ganz,
                          verzerren=not self.v_lock.get())
         sp, achse = self.v_spiegel.get(), float(self.v_achse.get())
         if sp != "nein":
@@ -1748,6 +1777,20 @@ class App:
                         T("Gespiegelt beginnt der Schnitt bei X {x:.1f} / Y {y:.1f} mm.\n"
                           "Wendeachse groesser waehlen.").format(x=x0, y=y0))
                 return None
+        # Der Schnitt laeuft um die Gravur herum und braucht deshalb vor ihr
+        # Platz. Ohne Versatz liegt er im Negativen - der Kopf faehrt dann
+        # gegen den Anschlag, statt zu schneiden.
+        x0, y0, _, _ = V.bbox(polys)
+        if x0 < -0.001 or y0 < -0.001:
+            if melden:
+                messagebox.showerror(T("Schneiden"), T(
+                    "Der Schnitt beginnt bei X {x:.1f} / Y {y:.1f} mm und "
+                    "liegt damit vor dem Nullpunkt.\n\n"
+                    "Er umschliesst die Gravur und braucht ringsum Platz: "
+                    "Versatz X mindestens {nx:.1f} mm, Versatz Y mindestens "
+                    "{ny:.1f} mm.").format(x=x0, y=y0, nx=xoff - min(0.0, x0),
+                                           ny=yoff - min(0.0, y0)))
+            return None
         return V.order(polys)
 
     def _schnitt_anhaengen(self, w, h):
@@ -1792,7 +1835,10 @@ class App:
         # Frueher stand die Gravur schon mit dem Schnitt zusammen in info,
         # als die Warnung geschrieben wurde. Jetzt kommt der Schnitt spaeter -
         # also hier noch einmal nachsehen, ob er ueber den Verfahrweg laeuft.
-        if self.info["xmax"] > self.cfg["x_max"]:
+        # Auch nach oben: der Schnitt umschliesst die Gravur und steht
+        # deshalb ueber sie hinaus.
+        if (self.info["xmax"] > self.cfg["x_max"]
+                or ci["ymax"] > self.cfg["y_max"]):
             self.lbl_info.configure(text=self.lbl_info.cget("text")
                                     + T("\nACHTUNG: größer als der Verfahrweg!"))
         return True

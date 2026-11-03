@@ -295,3 +295,41 @@ class Verzerren(unittest.TestCase):
         p, _ = V.fit([{"pts": [(3, 3)], "closed": False}], 50.0, 50.0,
                      1.0, 2.0, verzerren=True)
         self.assertEqual([round(v, 3) for v in p[0]["pts"][0]], [1.0, 2.0])
+
+
+VERSETZT = """<svg xmlns="http://www.w3.org/2000/svg" width="202mm"
+ height="284.903mm" viewBox="-1 -1 202 284.903">
+ <path d="M 9 9 L 149 9 L 149 189 L 9 189 Z" fill="none" stroke="#ff0000"/>
+</svg>"""
+
+
+class BlattUndBild(unittest.TestCase):
+    """Ein gerastertes Bild in dieselben Koordinaten legen wie die Pfade.
+
+    Der viewBox-Versatz ist die Falle: load_svg schiebt den Ursprung auf
+    (0, 0), das gerenderte Bild faengt aber am Blattrand an. Wer das
+    uebersieht, legt Bild und Schnitt um den Versatz auseinander.
+    """
+
+    def test_blattmass_in_mm(self):
+        w, h = V.svg_blattmass(schreib(VERSETZT))
+        self.assertAlmostEqual(w, 202.0, places=3)
+        self.assertAlmostEqual(h, 284.903, places=3)
+
+    def test_pixelkasten_landet_bei_den_pfaden(self):
+        p = schreib(VERSETZT)
+        # Bild 2020 x 2849 px ueber das ganze Blatt: 10 px = 1 mm
+        bb = V.bild_in_blatt(p, (2020, 2849), (100, 100, 1500, 1900))
+        self.assertAlmostEqual(bb[0], 10.0, places=2)
+        self.assertAlmostEqual(bb[2], 150.0, places=2)
+        self.assertAlmostEqual(bb[1], -190.0, delta=0.02)
+        self.assertAlmostEqual(bb[3], -10.0, places=2)
+
+    def test_pfad_liegt_im_selben_kasten(self):
+        """Gegenprobe am echten Pfad: beide Wege muessen sich treffen."""
+        p = schreib(VERSETZT)
+        x0, y0, x1, y1 = V.bbox(V.flatten(V.load_svg(p), 1.0))
+        self.assertAlmostEqual(x0, 10.0, places=2)
+        self.assertAlmostEqual(x1, 150.0, places=2)
+        self.assertAlmostEqual(y0, -190.0, places=2)
+        self.assertAlmostEqual(y1, -10.0, places=2)

@@ -281,6 +281,10 @@ EN = {
         'Mirrored, the artwork lands at X {x:.1f} / Y {y:.1f} mm,\nleft of or below the origin.\n\nChoose a larger flip axis or set the origin further left.',
     'Gespiegelt beginnt der Schnitt bei X {x:.1f} / Y {y:.1f} mm.\nWendeachse groesser waehlen.':
         'Mirrored, the cut starts at X {x:.1f} / Y {y:.1f} mm.\nChoose a larger flip axis.',
+    'Der Schnitt beginnt bei X {x:.1f} / Y {y:.1f} mm und liegt damit vor dem Nullpunkt.\n\nEr umschliesst die Gravur und braucht ringsum Platz: Versatz X mindestens {nx:.1f} mm, Versatz Y mindestens {ny:.1f} mm.':
+        'The cut starts at X {x:.1f} / Y {y:.1f} mm, which is before the origin.\n\n'
+        'It runs around the engraving and needs room on every side: offset X at least '
+        '{nx:.1f} mm, offset Y at least {ny:.1f} mm.',
     'Hinweis: Anlauf {a:g} mm > Versatz {x:g} mm - der Kopf faehrt bis X {bis:.1f}, also links am Nullpunkt vorbei.':
         'Note: overscan {a:g} mm > offset {x:g} mm - the head runs to X {bis:.1f}, past the origin on the left.',
     'S/F = {0:.2f}   (Holz bewährt: 0,83)':

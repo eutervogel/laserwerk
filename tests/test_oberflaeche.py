@@ -17,6 +17,7 @@ from PIL import Image
 from hilfe import (ohne_bildschirm, app_bauen, app_schliessen,
                    Attrappe)                                  # noqa: F401
 import lw_job as J
+import lw_vector as L_vector
 
 
 @ohne_bildschirm
@@ -2360,6 +2361,103 @@ class NurDasBild(Grundlage):
         self.app._nurbild_anwenden()
         self.assertIsNot(self.app.src, vorher)
         self.assertFalse(self.app.src_nurbild)
+
+
+@ohne_bildschirm
+class SchnittvorlageInDeckung(Grundlage):
+    """Bei einer Schnittvorlage liegen die Schnittlinien NEBEN dem Motiv.
+
+    Das Bild wird beim Laden auf seinen Inhalt zugeschnitten, die Pfade
+    nicht - wer danach beide Kaesten aufeinander einpasst, verliert genau
+    die Luft dazwischen. Der Rahmen landete dann auf der Zeichnung statt
+    darum herum.
+    """
+
+    LUFT = 10.0      # mm zwischen Zeichnung und Schnittlinie
+
+    def vorlage(self):
+        """Blatt 100 x 100: Zeichnung 20..80, Schnitt 10..90."""
+        import base64, io, os, tempfile
+        im = Image.new("L", (400, 400), 255)
+        im.paste(0, (80, 80, 320, 320))          # 20..80 mm schwarz
+        roh = io.BytesIO()
+        im.save(roh, format="PNG")
+        b64 = base64.b64encode(roh.getvalue()).decode()
+        p = os.path.join(tempfile.mkdtemp(), "vorlage.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" '
+                    'xmlns:xlink="http://www.w3.org/1999/xlink" width="100mm" '
+                    'height="100mm" viewBox="0 0 100 100">'
+                    '<image xlink:href="data:image/png;base64,%s" x="0" y="0" '
+                    'width="100" height="100"/>'
+                    '<path d="M10 10 H90 V90 H10 Z" stroke="#ff0000" '
+                    'stroke-width="0.1" fill="none"/></svg>' % b64)
+        self.app.lade_motiv(p, fragen=False)
+        self.app.v_job.set("beides")
+        self.app.v_lock.set(True)
+        self.app.v_w.set(60.0)
+        self.app.v_h.set(60.0)
+        self.app.v_xoff.set(20.0)
+        self.app.v_yoff.set(20.0)
+        return p
+
+    def test_bild_merkt_sich_seinen_platz_im_blatt(self):
+        self.vorlage()
+        x0, y0, x1, y1 = self.app.bild_bb
+        self.assertAlmostEqual(x0, 20.0, delta=0.5)
+        self.assertAlmostEqual(x1, 80.0, delta=0.5)
+        self.assertAlmostEqual(y0, -80.0, delta=0.5)
+        self.assertAlmostEqual(y1, -20.0, delta=0.5)
+
+    def test_schnitt_behaelt_den_abstand_zur_gravur(self):
+        """Gegenprobe ohne die Korrektur: 20..80 statt 10..90."""
+        self.vorlage()
+        polys = self.app._schnitt_polys(60.0, 60.0)
+        self.assertEqual(self.gezeigt, [])
+        x0, y0, x1, y1 = L_vector.bbox(polys)
+        self.assertAlmostEqual(x0, 20.0 - self.LUFT, delta=0.6)
+        self.assertAlmostEqual(y0, 20.0 - self.LUFT, delta=0.6)
+        self.assertAlmostEqual(x1, 80.0 + self.LUFT, delta=0.6)
+        self.assertAlmostEqual(y1, 80.0 + self.LUFT, delta=0.6)
+
+    def test_gravur_bleibt_wo_sie_hingehoert(self):
+        """Der Schnitt darf sich verschieben, die Gravur nicht."""
+        self.vorlage()
+        self.app.v_mode.set("schwelle")
+        self.app.v_job.set("gravur")
+        self.app.generate()
+        allein = (self.app.info["xmin"], self.app.info["breite"],
+                  self.app.info["hoehe"])
+        self.app.v_job.set("beides")
+        self.app.generate()
+        i = self.app.info
+        self.assertEqual((i["xmin"], i["breite"], i["hoehe"]), allein)
+
+    def test_ohne_platz_davor_wird_nicht_erzeugt(self):
+        """Der Schnitt laege vor dem Nullpunkt - da faehrt nichts hin."""
+        self.vorlage()
+        self.app.v_xoff.set(0.0)
+        self.app.v_yoff.set(0.0)
+        self.assertIsNone(self.app._schnitt_polys(60.0, 60.0))
+        self.assertTrue(any("Versatz" in m for _, m in self.gezeigt))
+
+    def test_nur_schneiden_fuellt_die_groesse_weiter_aus(self):
+        """Ohne Gravur gibt es nichts, woran sich der Schnitt ausrichten
+        koennte - dann gilt wieder das eingetippte Mass."""
+        self.vorlage()
+        self.app.v_job.set("schnitt")
+        polys = self.app._schnitt_polys(60.0, 60.0)
+        x0, y0, x1, y1 = L_vector.bbox(polys)
+        self.assertAlmostEqual(x1 - x0, 60.0, delta=0.2)
+        self.assertAlmostEqual(y1 - y0, 60.0, delta=0.2)
+
+    def test_platz_ueberlebt_den_elementwechsel(self):
+        self.vorlage()
+        bb = self.app.bild_bb
+        self.app._element_sichern()
+        self.app.bild_bb = None
+        self.app._element_laden(0)
+        self.assertEqual(self.app.bild_bb, bb)
 
 
 def s_werte(zeilen):

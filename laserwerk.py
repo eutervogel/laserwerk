@@ -89,9 +89,18 @@ class App:
         self.v_spiegel = tk.StringVar(value='nein')   # Rueckseite
         self.v_achse = tk.DoubleVar(value=50.0)       # Wendeachse in mm
         self.job_t0 = None
+        self._fokus_job = None      # verzoegertes Sichern von Dicke/Korrektur
         self._build()
         self._poll_id = self.root.after(100, self._poll)
         self.root.protocol("WM_DELETE_WINDOW", self.beenden)
+        # Eine gemerkte Korrektur wirkt still weiter. Beim Start einmal
+        # sagen, dass sie da ist - sonst sucht man den schiefen Fokus bei
+        # der Maschine und nicht in einer Zahl von letzter Woche.
+        if self.cfg.get("korrektur"):
+            self._log(T("Fokuskorrektur {k:+.2f} mm von zuletzt, Dicke "
+                        "{d:.2f} mm -> Z {z:.2f} mm").format(
+                            k=self.v_korr.get(), d=self.v_dicke.get(),
+                            z=self._z_target()))
         self._draw()
 
     # ================================================================ Aufbau
@@ -554,8 +563,8 @@ class App:
         bb.grid(row=14, column=0, columnspan=3, sticky="ew", pady=4)
         ttk.Button(bb, text=T("Speichern"), command=self.save_preset).pack(side="left")
         ttk.Button(bb, text=T("Löschen"), command=self.delete_preset).pack(side="left", padx=4)
-        ttk.Label(f, text=T("Z fährt auf Materialdicke + Korrektur.\n"
-                            "Dafuer muss unter 'Maschine' eine\nZ-Referenz gesetzt sein."), style="Muted.TLabel").grid(row=15, column=0, columnspan=3, sticky="w", pady=8)
+        self.lbl_zhoehe = ttk.Label(f, text="", style="Muted.TLabel")
+        self.lbl_zhoehe.grid(row=15, column=0, columnspan=3, sticky="w", pady=8)
         self._show_sf()
 
     # ---------------------------------------------------------------- Maschine
@@ -710,15 +719,31 @@ class App:
         self._row(fb, 1, "Schritt", self.v_ft_step, unit="mm")
         self._row(fb, 2, "Leistung S", self.v_ft_s)
         self._row(fb, 3, "Vorschub F", self.v_ft_f)
-        ttk.Label(fb, text=T("Mitte = Materialdicke + Korrektur\n"
-                             "(Reiter Material). Striche von links\n"
-                             "nach rechts = Z aufsteigend."), style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+        ttk.Label(fb, text=T("Striche von links nach rechts\n"
+                             "= Z aufsteigend."), style="Muted.TLabel").grid(
+                                 row=4, column=0, columnspan=3, sticky="w")
+        # Die gemessene Korrektur ueberlebt den Neustart, stand aber nur als
+        # nackte Zahl im Reiter Material. Hier, wo sie herkommt, gehoert sie
+        # hin - samt der Hoehe, die daraus wird, und von Hand nachstellbar.
+        # Sonst bleibt als einziger Weg zu einem anderen Wert ein neuer Test.
+        kr = ttk.Frame(fb)
+        kr.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Label(kr, text=T("Fokuskorrektur")).pack(side="left")
+        ttk.Spinbox(kr, from_=-50.0, to=50.0, increment=0.05, width=7,
+                    textvariable=self.v_korr).pack(side="left", padx=4)
+        ttk.Label(kr, text="mm").pack(side="left")
+        self.lbl_fokus = ttk.Label(fb, text="", style="Muted.TLabel")
+        self.lbl_fokus.grid(row=6, column=0, columnspan=3, sticky="w")
         ttk.Button(fb, text=T("Fokustest starten"), command=self.fokustest
-                   ).grid(row=5, column=0, columnspan=3, sticky="ew", pady=4)
+                   ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=4)
         self.lb_fz = tk.Listbox(fb, height=6, width=28)
-        self.lb_fz.grid(row=6, column=0, columnspan=3, sticky="ew")
+        self.lb_fz.grid(row=8, column=0, columnspan=3, sticky="ew")
         ttk.Button(fb, text=T("Gewählten Strich ins Material übernehmen"),
-                   command=self.take_focus).grid(row=7, column=0, columnspan=3, sticky="ew", pady=4)
+                   command=self.take_focus).grid(row=9, column=0, columnspan=3,
+                                                 sticky="ew", pady=4)
+        for v in (self.v_dicke, self.v_korr):
+            v.trace_add("write", self._fokus_geaendert)
+        self._fokus_zeigen()
 
         mb = ttk.LabelFrame(f, text=T("Materialtest"), padding=6)
         mb.grid(row=1, column=0, sticky="ew", pady=8)
@@ -1973,7 +1998,12 @@ class App:
         d = self.presets.get(self.v_preset.get())
         if not d:
             return
-        self.v_dicke.set(d.get("dicke", 0)); self.v_korr.set(d.get("korrektur", 0))
+        # Was das Preset nicht kennt, bleibt stehen. Aeltere Presets haben
+        # keine Korrektur - mit 0 als Ersatzwert loeschte das Laden eines
+        # solchen Presets die gemessene Korrektur, schrieb die 0 gleich in
+        # die Konfiguration und gravierte ab da ausser Fokus weiter.
+        self.v_dicke.set(d.get("dicke", self.v_dicke.get()))
+        self.v_korr.set(d.get("korrektur", self.v_korr.get()))
         self.v_s.set(d.get("s", 830)); self.v_f.set(d.get("f", 1000))
         self.v_smin.set(d.get("smin", 0))
         self.v_line.set(d.get("line", 0.1)); self.v_notiz.set(d.get("notiz", ""))
@@ -2429,6 +2459,37 @@ class App:
         self.cfg["z_invert"] = self.v_zinv.get()
         self._fokus_sichern()
         P.save_config(self.cfg)
+
+    def _fokus_geaendert(self, *_):
+        """Beschriftung sofort, Datei etwas spaeter.
+
+        Jeder Tastendruck in einem der beiden Felder loest ein Schreiben
+        aus - die Konfiguration bei jedem einzelnen neu zu schreiben hiesse
+        auch, halb getippte Zahlen zu sichern.
+        """
+        self._fokus_zeigen()
+        if self._fokus_job is not None:
+            self.root.after_cancel(self._fokus_job)
+        self._fokus_job = self.root.after(1500, self._fokus_spaet)
+
+    def _fokus_spaet(self):
+        self._fokus_job = None
+        self._save_cfg()
+
+    def _fokus_zeigen(self):
+        """Dicke, Korrektur und die Hoehe, die daraus wird - an beiden
+        Stellen, an denen man sie braucht."""
+        try:
+            d, k = float(self.v_dicke.get()), float(self.v_korr.get())
+        except (tk.TclError, ValueError):
+            return                      # halb getippt, gleich kommt mehr
+        self.lbl_fokus.configure(text=T(
+            "Mitte des Tests: Z {z:.2f} mm\n"
+            "= Dicke {d:.2f} mm, Korrektur {k:+.2f} mm").format(z=d + k, d=d, k=k))
+        self.lbl_zhoehe.configure(text=T(
+            "Z fährt auf {z:.2f} mm = Dicke {d:.2f} mm,\n"
+            "Korrektur {k:+.2f} mm. Dafür muss unter\n"
+            "'Maschine' eine Z-Referenz gesetzt sein.").format(z=d + k, d=d, k=k))
 
     def _fokus_sichern(self):
         """Materialdicke und Fokuskorrektur in die Konfiguration schreiben.

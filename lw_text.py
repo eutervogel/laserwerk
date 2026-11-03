@@ -131,7 +131,6 @@ EN = {
     "Zeilenabstand": "Row pitch",
     "Notiz": "Note",
     "Werte übernehmen und Z anfahren": "Apply values and move Z",
-    "Z fährt auf Materialdicke + Korrektur.": "Z moves to thickness + correction.",
 
     # ---- Reiter Maschine
     "neu suchen": "rescan",
@@ -169,10 +168,10 @@ EN = {
     "Fokustest über Z": "Focus test along Z",
     "Spanne": "Span",
     "Schritt": "Step",
-    "Mitte = Materialdicke + Korrektur\n(Reiter Material). Striche von links\n"
-    "nach rechts = Z aufsteigend.":
-        "Centre = thickness + correction (Material\ntab). Lines from left to right\n"
-        "mean increasing Z.",
+    "Striche von links nach rechts\n= Z aufsteigend.":
+        "Lines from left to right\nmean increasing Z.",
+    "Mitte des Tests: Z {z:.2f} mm\n= Dicke {d:.2f} mm, Korrektur {k:+.2f} mm":
+        "Centre of the test: Z {z:.2f} mm\n= thickness {d:.2f} mm, correction {k:+.2f} mm",
     "Fokustest starten": "Run focus test",
     "Gewählten Strich ins Material übernehmen": "Take selected line into Material",
     "Materialtest": "Material test",
@@ -299,8 +298,8 @@ EN = {
         "Cannot move Z yet.\n\nUnder 'Machine': focus on material of known\nthickness and set the Z reference.",
     'Z auf {z:.2f} mm fahren?\n(Kopf muss frei über dem Material stehen)':
         'Move Z to {z:.2f} mm?\n(the head must stand clear above the material)',
-    "Z fährt auf Materialdicke + Korrektur.\nDafuer muss unter 'Maschine' eine\nZ-Referenz gesetzt sein.":
-        "Z moves to thickness + correction.\nThis needs a Z reference set\nunder 'Machine'.",
+    "Z fährt auf {z:.2f} mm = Dicke {d:.2f} mm,\nKorrektur {k:+.2f} mm. Dafür muss unter\n'Maschine' eine Z-Referenz gesetzt sein.":
+        "Z moves to {z:.2f} mm = thickness {d:.2f} mm,\ncorrection {k:+.2f} mm. This needs a Z\nreference set under 'Machine'.",
     'Z -> {z:.2f}':
         'Z -> {z:.2f}',
     'Z-Referenz: aktuelle Höhe = Fokus für {0:.2f} mm':
@@ -438,6 +437,9 @@ EN = {
         'Line {i:>2}:  Z = {z:.2f} mm',
     'Fokuskorrektur = {0:+.2f} mm - gesichert, gilt auch nach dem Neustart':
         'Focus correction = {0:+.2f} mm - stored, it survives a restart',
+    'Fokuskorrektur {k:+.2f} mm von zuletzt, Dicke {d:.2f} mm -> Z {z:.2f} mm':
+        'Focus correction {k:+.2f} mm from last time, thickness {d:.2f} mm '
+        '-> Z {z:.2f} mm',
     'Werte mit Komma trennen, z.B. 200,400,600':
         'Separate values with commas, e.g. 200,400,600',
     'Materialtest {a}x{b}':

@@ -80,7 +80,9 @@ settings for a new material.
   midtones **and the cutting values** — passes, cut power and cut feed are the
   numbers that take the longest to find. Thickness and focus correction also survive a restart on their
   own: the correction is something the focus test measured, and asking you to
-  copy it into a preset by hand is asking you to lose it.
+  copy it into a preset by hand is asking you to lose it. That it is in effect
+  shows in the log at startup and as a Z height under Material **and** next to
+  the focus test — there also as a field you can adjust without a new test.
 - **Engrave both sides** — mirror about a flip axis, with a check that the
   mirrored artwork still lands in positive coordinates.
 - **Remote control via Telegram** — jog the axes and trace the sight cross from

@@ -83,7 +83,9 @@ Material ausprobieren will.
   Zeilenabstand, Tonwert **und den Schnittwerten** — Durchgänge, Schnitt-S
   und Schnitt-F sind die Zahlen, die am meisten Zeit zum Herausfinden kosten. Materialdicke und Fokuskorrektur überstehen den
   Neustart auch von allein: die Korrektur hat der Fokustest gemessen, und wer
-  sie von Hand in ein Preset tippen soll, verliert sie.
+  sie von Hand in ein Preset tippen soll, verliert sie. Dass sie gilt, steht
+  im Protokoll beim Start und als Z-Höhe unter Material **und** beim
+  Fokustest — dort auch als Feld, das sich ohne neuen Test nachstellen lässt.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man

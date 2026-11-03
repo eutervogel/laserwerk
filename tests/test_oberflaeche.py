@@ -661,6 +661,61 @@ class FokusUeberlebtDenNeustart(Grundlage):
         self.app._save_cfg()
         self.assertAlmostEqual(self.L.P.load_config()["korrektur"], -1.0, places=3)
 
+    def test_altes_preset_loescht_die_korrektur_nicht(self):
+        """Presets von vor der Korrektur kennen das Feld nicht. Mit 0 als
+        Ersatzwert nahm ihr Laden die gemessene Korrektur mit - und schrieb
+        die 0 gleich in die Konfiguration."""
+        self.app.v_dicke.set(12.0)
+        self.app.v_korr.set(-2.5)
+        self.app._save_cfg()
+        self.app.presets["alt"] = dict(dicke=3.0, s=740, f=230, line=0.1,
+                                        mode="schwelle")
+        self.app.v_preset.set("alt")
+        self.app.load_preset()
+        self.assertAlmostEqual(self.app.v_dicke.get(), 3.0, places=3)
+        self.assertAlmostEqual(self.app.v_korr.get(), -2.5, places=3)
+        self.assertAlmostEqual(self.L.P.load_config()["korrektur"], -2.5,
+                               places=3)
+
+    def test_preset_mit_eigener_null_gilt_weiter(self):
+        """Eine ausdrueckliche 0 im Preset ist ein Wert, kein fehlendes Feld."""
+        self.app.v_korr.set(-2.5)
+        self.app.presets["null"] = dict(dicke=3.0, korrektur=0.0, s=740,
+                                         f=230, line=0.1, mode="schwelle")
+        self.app.v_preset.set("null")
+        self.app.load_preset()
+        self.assertAlmostEqual(self.app.v_korr.get(), 0.0, places=3)
+
+    def test_beide_beschriftungen_zeigen_die_hoehe(self):
+        """Der Wert wirkt still weiter - man muss sehen, welche Z-Hoehe
+        daraus wird, ohne einen neuen Test zu fahren."""
+        self.app.v_dicke.set(12.0)
+        self.app.v_korr.set(-0.3)
+        for lbl in (self.app.lbl_fokus, self.app.lbl_zhoehe):
+            self.assertIn("11.70", lbl.cget("text"))
+            self.assertIn("-0.30", lbl.cget("text"))
+
+    def test_von_hand_gesetzt_wird_auch_gesichert(self):
+        """Ohne das bliebe ein neuer Fokustest der einzige Weg zu einem
+        anderen Wert."""
+        self.app.v_korr.set(-0.8)
+        self.assertIsNotNone(self.app._fokus_job)
+        self.app.root.after_cancel(self.app._fokus_job)
+        self.app._fokus_spaet()                  # statt der Wartezeit
+        self.assertAlmostEqual(self.L.P.load_config()["korrektur"], -0.8,
+                               places=3)
+        self.assertIsNone(self.app._fokus_job)
+
+    def test_start_sagt_was_noch_gilt(self):
+        self.app.v_dicke.set(3.0)
+        self.app.v_korr.set(-1.25)
+        self.app._save_cfg()
+        app_schliessen(self.wurzel, self.app)
+        self.wurzel, self.app, self.L = app_bauen()
+        t = self.app.log.get("1.0", "end")
+        self.assertIn("-1.25", t)
+        self.assertIn("1.75", t)                 # 3,00 - 1,25
+
 
 @ohne_bildschirm
 class FernPauseUndWeiter(Grundlage):

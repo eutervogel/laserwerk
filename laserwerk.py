@@ -89,6 +89,7 @@ class App:
         self.v_spiegel = tk.StringVar(value='nein')   # Rueckseite
         self.v_achse = tk.DoubleVar(value=50.0)       # Wendeachse in mm
         self.job_t0 = None
+        self.job_schaetzung = None  # Modellzeit des laufenden Jobs
         self._fokus_job = None      # verzoegertes Sichern von Dicke/Korrektur
         self._build()
         self._poll_id = self.root.after(100, self._poll)
@@ -1692,7 +1693,7 @@ class App:
                 "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\n"
                 "Laufzeit ca. {min:.0f} min").format(
                     n=len(self.elemente), b=len(zeilen), m=brennweg,
-                    min=sekunden / 60) + "\n\n" + "\n\n".join(
+                    min=self._min(sekunden)) + "\n\n" + "\n\n".join(
                 "%d. %s\n%s" % (i + 1, self.elemente[i]["anzeige"],
                                  self.elemente[i]["ergebnis"]["text"])
                 for i in reihe))
@@ -1802,7 +1803,7 @@ class App:
                 "Laufzeit ca. {min:.0f} min\n"
                 "S{s}/F{f} = S/F {sf:.2f}{warn}").format(
                 b=i["breite"], h=i["hoehe"], x0=i["xmin"], x1=i["xmax"],
-                n=i["befehle"], m=i["cut_m"], min=i["sekunden"] / 60,
+                n=i["befehle"], m=i["cut_m"], min=self._min(i["sekunden"]),
                 s=s, f=f, sf=s / f, warn=warn)))
         # Der Schnitt haengt sich erst hier an - vorher wuerde die Gravur
         # seinen Text mit ihrem eigenen ueberschreiben. Genau einmal: stand
@@ -1910,7 +1911,7 @@ class App:
             "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
             "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min").format(
                 k=ci["konturen"], m=ci["cut_m"], p=passes, s=cs, f=cf,
-                sf=cs / cf if cf else 0, min=max(1, ci["sekunden"] / 60)))
+                sf=cs / cf if cf else 0, min=max(1, self._min(ci["sekunden"]))))
         # Frueher stand die Gravur schon mit dem Schnitt zusammen in info,
         # als die Warnung geschrieben wurde. Jetzt kommt der Schnitt spaeter -
         # also hier noch einmal nachsehen, ob er ueber den Verfahrweg laeuft.
@@ -1944,7 +1945,7 @@ class App:
                 "Laufzeit ca. {min:.0f} min\n"
                 "S{s}/F{f} = S/F {sf:.2f}{warn}").format(
                 b=i["breite"], h=i["hoehe"], k=i["konturen"], m=i["cut_m"],
-                p=passes, min=max(1, i["sekunden"] / 60),
+                p=passes, min=max(1, self._min(i["sekunden"])),
                 s=s, f=f, sf=s / f, warn=warn)))
         self._draw()
 
@@ -1994,7 +1995,7 @@ class App:
               "Laufzeit ca. {min:.0f} min").format(
                 datei=os.path.basename(p), x0=x0, x1=x1, y0=y0, y1=y1,
                 n=info["befehle"], m=info["cut_m"],
-                min=max(1, info["sekunden"] / 60))
+                min=max(1, self._min(info["sekunden"])))
             + (T("\nHinweis: nutzt M3 - bei Pause brennt der\nLaser weiter!")
                if m3 else "")
             + (T("\nHinweis: negative Koordinaten - Nullpunkt\n"
@@ -2105,6 +2106,47 @@ class App:
                 sf=s / self.v_f.get(), u=self._s_unten(s), o=s))
         except (tk.TclError, ZeroDivisionError):
             pass
+
+    # --------------------------------------------------- Laufzeit
+    def _zeitfaktor(self):
+        """Was die letzten Laeufe zum Modell gesagt haben, als Median.
+
+        Eins, solange es nichts zu sagen gibt. Ein einzelner Lauf aendert
+        nichts - genau so ist der alte Faktor 0,80 entstanden, aus einem
+        Graustufenlauf im September, und hat danach jede Strichgrafik um
+        ein Viertel zu kurz geschaetzt.
+        """
+        werte = sorted(self.cfg.get("zeitmessungen") or ())
+        if len(werte) < 3:
+            return 1.0
+        return float(werte[len(werte) // 2])
+
+    def _min(self, sekunden):
+        """Angesagte Minuten: Modell mal gemessener Faktor."""
+        return (sekunden or 0.0) * self._zeitfaktor() / 60.0
+
+    def _zeit_merken(self, echt, roh):
+        """Was angesagt war gegen das, was es gedauert hat.
+
+        Ohne diesen Vergleich steht die Schaetzung nur da und niemand
+        erfaehrt, ob sie stimmt - bis einem ein Job eine Viertelstunde
+        davonlaeuft.
+        """
+        if roh < 120 or echt < 120:
+            return                      # zu kurz, um daraus etwas zu lernen
+        gesagt = max(1.0, self._min(roh) * 60.0)   # mit dem bisherigen Faktor
+        self._log(T("Laufzeit: {g:.0f} min angesagt, {e:.0f} min gebraucht "
+                    "({a:+.0f} %)").format(g=gesagt / 60, e=echt / 60,
+                                           a=(echt / gesagt - 1) * 100))
+        # Gemerkt wird immer das Verhaeltnis zum rohen Modell, nie zur schon
+        # korrigierten Ansage - sonst korrigiert sich der Faktor selbst weg.
+        werte = list(self.cfg.get("zeitmessungen") or ())[-9:]
+        werte.append(round(echt / roh, 4))
+        self.cfg["zeitmessungen"] = werte
+        P.save_config(self.cfg)
+        if len(werte) >= 3:
+            self._log(T("Aus {n} Läufen: Modell x {f:.2f}").format(
+                n=len(werte), f=self._zeitfaktor()))
 
     def _z_target(self):
         return self.v_dicke.get() + self.v_korr.get()
@@ -2567,7 +2609,7 @@ class App:
         _, i = J.graustufentest(ps, fv, n, feld, line=self.v_line.get())
         self.lbl_gt.configure(text=T("{b:.0f} x {h:.0f} mm, Laufzeit ca. "
                                      "{min:.0f} min").format(
-            b=i["breite"], h=i["hoehe"], min=i["sekunden"] / 60))
+            b=i["breite"], h=i["hoehe"], min=self._min(i["sekunden"])))
 
     def graustufentest(self):
         if not self._need(zero=True):
@@ -2649,13 +2691,13 @@ class App:
         g, i = V.cut_gcode(polys, self._s(sv), J.POINTER_FEED, 1)
         self._log(T("Kontur fahren: {k} Konturen, {m:.2f} m, ca. {min:.0f} min, "
                     "S{s}/F{f}").format(k=i["konturen"], m=i["cut_m"],
-                                        min=max(1, i["sekunden"] / 60),
+                                        min=max(1, self._min(i["sekunden"])),
                                         s=sv, f=J.POINTER_FEED))
-        if i["sekunden"] > 120 and not messagebox.askokcancel(
+        if self._min(i["sekunden"]) > 2 and not messagebox.askokcancel(
                 T("Kontur fahren"),
                 T("{k} Konturen, {m:.2f} m Weg, ca. {min:.0f} min.\n\n"
                   "Fortfahren?").format(k=i["konturen"], m=i["cut_m"],
-                                        min=max(1, i["sekunden"] / 60))):
+                                        min=max(1, self._min(i["sekunden"])))):
             return
         self._run(g, T("Kontur fahren"), rahmen=True)
 
@@ -2702,7 +2744,7 @@ class App:
             t = ""
             if self.info and lines is self.lines and self.info.get("sekunden"):
                 t = T("\nLaufzeit ca. {min:.0f} min").format(
-                    min=self.info["sekunden"] / 60)
+                    min=self._min(self.info["sekunden"]))
             if not messagebox.askokcancel(name,
                     T("{name} starten?\nBereich X {x0:.1f}..{x1:.1f}, "
                       "Y {y0:.1f}..{y1:.1f} mm{zeit}\n\n"
@@ -2713,6 +2755,10 @@ class App:
                        if self._schneidet() and lines is self.lines else "")):
                 return
         self.job_t0 = time.time()
+        # Die Schaetzung jetzt festhalten: bis der Job zu Ende ist, kann
+        # self.info laengst zu einem anderen Motiv gehoeren.
+        self.job_schaetzung = ((self.info or {}).get("sekunden")
+                               if lines is self.lines else None)
         self.marken = (self.info or {}).get("marken") if lines is self.lines else None
         self._marken_idx = [m[0] for m in self.marken] if self.marken else None
         self.prog["value"] = 0
@@ -2857,7 +2903,8 @@ class App:
             rest = el / done * (tot - done) if done else 0
             if self.info and self.info.get("sekunden") and done > 0:
                 # Modellschaetzung zaehlt mehr als lineare Hochrechnung
-                rest = max(0, self.info["sekunden"] - el) * 0.6 + rest * 0.4
+                rest = (max(0.0, self._min(self.info["sekunden"]) * 60 - el)
+                        * 0.6 + rest * 0.4)
             self.lbl_prog.configure(
                 text=T("{p} %   noch ~{min:.0f} min").format(p=done * 100 // tot,
                                                              min=rest / 60)
@@ -2883,6 +2930,9 @@ class App:
                 n=er, g=gesendet))
             self._melde(f"{name}: {txt}"
                         + (T("\n{n} Übertragungsfehler").format(n=er) if er else ""))
+            if res == "fertig" and self.job_t0 and self.job_schaetzung:
+                self._zeit_merken(time.time() - self.job_t0,
+                                  self.job_schaetzung)
             if res != "fertig":
                 # Der Soft-Reset nach einem Abbruch loescht den Versatz im
                 # Controller - aber wir wissen, wo er lag. Frueher stand hier

@@ -440,6 +440,10 @@ EN = {
     'Diese Vorlage enthält eine ältere als Bild: deren {n} Schnittlinie(n) werden weder graviert noch geschnitten.':
         'This template holds an older one as an image: its {n} cut line(s) '
         'are neither engraved nor cut.',
+    'Laufzeit: {g:.0f} min angesagt, {e:.0f} min gebraucht ({a:+.0f} %)':
+        'Runtime: {g:.0f} min announced, {e:.0f} min taken ({a:+.0f} %)',
+    'Aus {n} Läufen: Modell x {f:.2f}':
+        'From {n} runs: model x {f:.2f}',
     'Fokuskorrektur {k:+.2f} mm von zuletzt, Dicke {d:.2f} mm -> Z {z:.2f} mm':
         'Focus correction {k:+.2f} mm from last time, thickness {d:.2f} mm '
         '-> Z {z:.2f} mm',

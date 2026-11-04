@@ -734,6 +734,73 @@ class FokusUeberlebtDenNeustart(Grundlage):
 
 
 @ohne_bildschirm
+class LaufzeitLerntDazu(Grundlage):
+    """Die Schaetzung stand bisher nur da; ob sie stimmt, erfuhr niemand -
+    bis ein Job eine Viertelstunde laenger lief als angesagt. Jetzt wird
+    nach jedem fertigen Job verglichen und gemerkt."""
+
+    def setUp(self):
+        super().setUp()
+        # Die Wegwerf-Konfiguration haelt die ganze Klasse durch - jeder
+        # Test faengt hier aber bei null Messungen an.
+        self.app.cfg["zeitmessungen"] = []
+        self.L.P.save_config(self.app.cfg)
+
+    def test_ohne_messungen_bleibt_das_modell_stehen(self):
+        self.assertEqual(self.app._zeitfaktor(), 1.0)
+        self.assertAlmostEqual(self.app._min(600.0), 10.0, places=6)
+
+    def test_ein_lauf_aendert_noch_nichts(self):
+        """So ist der alte Faktor 0,80 entstanden: aus einem einzigen Lauf."""
+        self.app._zeit_merken(1800.0, 1200.0)
+        self.assertEqual(self.app.cfg["zeitmessungen"], [1.5])
+        self.assertEqual(self.app._zeitfaktor(), 1.0)
+
+    def test_ab_drei_laeufen_zaehlt_der_median(self):
+        for echt in (1500.0, 1800.0, 1560.0):
+            self.app._zeit_merken(echt, 1200.0)
+        self.assertEqual(self.app._zeitfaktor(), 1.3)
+        self.assertAlmostEqual(self.app._min(1200.0), 26.0, places=6)
+
+    def test_ein_ausreisser_zieht_nicht_alles_mit(self):
+        for echt in (1200.0, 1260.0, 1200.0, 6000.0, 1230.0):
+            self.app._zeit_merken(echt, 1200.0)
+        self.assertLess(self.app._zeitfaktor(), 1.1)
+
+    def test_gemerkt_wird_gegen_das_rohe_modell(self):
+        """Sonst rechnet der Faktor gegen die schon korrigierte Ansage und
+        wandert mit jedem Lauf zurueck auf eins."""
+        for _ in range(3):
+            self.app._zeit_merken(2400.0, 1200.0)
+        self.assertEqual(self.app._zeitfaktor(), 2.0)
+        self.app._zeit_merken(2400.0, 1200.0)
+        self.assertEqual(self.app.cfg["zeitmessungen"][-1], 2.0)
+
+    def test_kurze_laeufe_lehren_nichts(self):
+        self.app._zeit_merken(100.0, 90.0)
+        self.assertEqual(self.app.cfg.get("zeitmessungen"), [])
+
+    def test_mehr_als_zehn_werden_nicht_gesammelt(self):
+        for k in range(14):
+            self.app._zeit_merken(1200.0 + k, 1200.0)
+        self.assertEqual(len(self.app.cfg["zeitmessungen"]), 10)
+
+    def test_ueberlebt_das_fenster(self):
+        for echt in (1500.0, 1800.0, 1560.0):
+            self.app._zeit_merken(echt, 1200.0)
+        app_schliessen(self.wurzel, self.app)
+        self.wurzel, self.app, self.L = app_bauen()
+        self.assertEqual(self.app._zeitfaktor(), 1.3)
+
+    def test_das_protokoll_sagt_beide_zahlen(self):
+        self.app._zeit_merken(1800.0, 1200.0)
+        t = self.app.log.get("1.0", "end")
+        self.assertIn("20 min angesagt", t)
+        self.assertIn("30 min gebraucht", t)
+        self.assertIn("+50 %", t)
+
+
+@ohne_bildschirm
 class FernPauseUndWeiter(Grundlage):
     def test_pause_haelt_am_zeilenende(self):
         self.app.grbl.job_running = True

@@ -89,6 +89,12 @@ Material ausprobieren will.
   in ein Preset tippen soll, verliert sie. Zu sehen beim Start im Protokoll,
   als Z-Höhe unter Material und beim Fokustest — dort auch als Feld, das sich
   ohne neuen Test nachstellen lässt.
+- **Laufzeit, die dazulernt** — die Schätzung rechnet je Bahn ein Trapez
+  aus Vorschub und Beschleunigung; für einen Leistungswechsel hält die Achse
+  nicht an, also bremst eine feinere Zerlegung sie auch nicht. Nach jedem
+  fertigen Job steht im Protokoll, was angesagt war und was es gedauert hat,
+  und ab dem dritten Lauf korrigiert der Median der Messungen das Modell.
+  Gemessen statt geglaubt — ein einzelner Lauf ändert nichts.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man

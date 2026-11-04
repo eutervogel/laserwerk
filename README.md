@@ -86,6 +86,12 @@ settings for a new material.
   asking you to copy it into a preset by hand is asking you to lose it. You
   see it in the log at startup, as a Z height under Material and next to the
   focus test — there also as a field you can adjust without a new test.
+- **A runtime estimate that learns** — the estimate computes one
+  trapezoid per path from feed rate and acceleration; the axis does not stop
+  for a power change, so a finer subdivision does not slow it down either.
+  After every finished job the log says what was announced and what it took,
+  and from the third run on the median of those measurements corrects the
+  model. Measured rather than believed — a single run changes nothing.
 - **Engrave both sides** — mirror about a flip axis, with a check that the
   mirrored artwork still lands in positive coordinates.
 - **Remote control via Telegram** — jog the axes and trace the sight cross from

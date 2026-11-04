@@ -55,7 +55,11 @@ CONFIG_DEFAULTS = {"z_invert": False, "jog_feed": 1000, "port": "",
                    # Maschine - sie nur in einem Preset abzulegen, das man
                    # von Hand speichern muss, heisst sie verlieren. Hier ist
                    # ihr einziger Platz; Presets fassen sie nicht mehr an.
-                   "dicke": 12.0, "korrektur": 0.0}
+                   "dicke": 12.0, "korrektur": 0.0,
+                   # Angesagte gegen gebrauchte Laufzeit der letzten Jobs.
+                   # Ihr Median korrigiert das Modell - gemessen statt
+                   # geglaubt, und nicht aus einem einzigen Lauf.
+                   "zeitmessungen": []}
 
 
 def _load(path, default):

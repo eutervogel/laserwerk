@@ -41,7 +41,6 @@ M_BEKANNT = {"M0", "M1", "M2", "M3", "M4", "M5", "M7", "M8", "M9", "M30"}
 WORT = re.compile(r"([A-Za-z])\s*(-?\d*\.?\d+)")
 KLAMMER = re.compile(r"\([^)]*\)")
 
-EILGANG = 3000.0        # mm/min, $110 der Referenzmaschine
 JE_ART = 12             # so viele Fundstellen je Art, dann nur noch zaehlen
 
 
@@ -82,12 +81,22 @@ class Lauf:
         self.segmente = []                        # (x0, y0, x1, y1, s)
         self.lange = []
         self.xs, self.ys = [0.0], [0.0]
-        # Strecken nach Vorschub getrennt, damit estimate sie mit seinem
-        # Lookahead-Modell rechnen kann - dasselbe wie in der Vorschau.
+        # Bahnen nach Vorschub getrennt, damit estimate sie rechnen kann -
+        # dasselbe Modell wie in der Vorschau.
         self.nach_f = {}
+        self.eilwege = []
         self.stopps = 0
+        self._bahn = 0.0              # laufende Bahn
+        self._bahn_f = None
 
     # ------------------------------------------------------------- Hilfen
+    def _bahn_zu(self):
+        """Die laufende Bahn abschliessen - hier haelt die Achse an."""
+        if self._bahn > 0 and self._bahn_f:
+            self.nach_f.setdefault(self._bahn_f, []).append(self._bahn)
+        self._bahn = 0.0
+        self._bahn_f = self.f
+
     def merke(self, art, nr, text):
         self.zahl[art] = self.zahl.get(art, 0) + 1
         if self.zahl[art] <= JE_ART:
@@ -237,10 +246,17 @@ class Lauf:
         if self.bewegung == "G0":
             self.eilweg += d
             self.stopps += 1
+            self._bahn_zu()
             if d > 0:
-                self.sekunden += d / (EILGANG / 60.0)
+                self.eilwege.append(d)
         elif d > 0:
-            self.nach_f.setdefault(self.f, []).append(d)
+            # Was mit Vorschub und ohne G0 dazwischen weiterlaeuft, ist eine
+            # Bahn - die Achse haelt dafuer nicht an. Nur ein Vorschubwechsel
+            # trennt sie, weil die Zeit sonst mit zwei Tempi zu rechnen waere.
+            if self.f != self._bahn_f:
+                self._bahn_zu()
+                self._bahn_f = self.f
+            self._bahn += d
 
         self.x, self.y, self.z = nx, ny, nz
         self.xs.append(nx)
@@ -248,12 +264,13 @@ class Lauf:
 
     # ------------------------------------------------------------ Ausgabe
     def laufzeit(self):
-        """Mit demselben Modell wie die Vorschau in Laserwerk. Das ist an
-        echten Laeufen geeicht - eine eigene Rechnung waere es nicht."""
-        t = self.sekunden
-        for f, segs in self.nach_f.items():
-            if f > 0 and segs:
-                t += estimate(segs, f, self.stopps)
+        """Mit demselben Modell wie die Vorschau in Laserwerk - sonst sagen
+        zwei Anzeigen desselben Jobs zwei verschiedene Zeiten."""
+        self._bahn_zu()
+        t = self.sekunden + estimate((), 0, self.eilwege, accel=self.accel)
+        for f, bahnen in self.nach_f.items():
+            if f > 0 and bahnen:
+                t += estimate(bahnen, f, accel=self.accel)
         return t
 
     def bericht(self):
@@ -330,6 +347,7 @@ def lies(pfad, lauf, bei=None):
             lauf.zeile(nr, roh)
             if bei and vorher < bei <= lauf.befehle:
                 halt = (nr, lauf.x, lauf.y, lauf.spindel, lauf.s, lauf.f)
+    lauf._bahn_zu()          # am Dateiende haelt die Achse auch
     return halt
 
 

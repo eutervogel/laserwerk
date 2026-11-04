@@ -177,6 +177,8 @@ class Laufzeit(unittest.TestCase):
         self.assertEqual(l.nach_f, {})
 
     def test_wie_die_vorschau(self):
+        """500 Befehle ohne G0 dazwischen sind eine Bahn - die Achse haelt
+        fuer einen Leistungswechsel nicht an."""
         import lw_job as J
         strecken = [1.0] * 500
         g = ["G90", "M4 S450 F1000"]
@@ -185,7 +187,17 @@ class Laufzeit(unittest.TestCase):
             at += d
             g.append("G1 X%.3f S450" % at)
         l = lauf("\n".join(g) + "\n", x_max=600.0)
-        self.assertAlmostEqual(l.laufzeit(), J.estimate(strecken, 1000, 0),
+        self.assertAlmostEqual(l.laufzeit(), J.estimate([sum(strecken)], 1000),
+                               places=6)
+
+    def test_g0_trennt_die_bahnen(self):
+        """Zwei Haelften mit einem Halt dazwischen dauern laenger als
+        dieselbe Strecke am Stueck."""
+        import lw_job as J
+        a = lauf("G90\nM4 S450 F1000\nG1 X100\n", x_max=600.0)
+        b = lauf("G90\nM4 S450 F1000\nG1 X50\nG0 X50\nG1 X100\n", x_max=600.0)
+        self.assertGreater(b.laufzeit(), a.laufzeit())
+        self.assertAlmostEqual(a.laufzeit(), J.estimate([100.0], 1000),
                                places=6)
 
 

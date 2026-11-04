@@ -437,6 +437,9 @@ EN = {
         'Line {i:>2}:  Z = {z:.2f} mm',
     'Fokuskorrektur = {0:+.2f} mm - gesichert, gilt auch nach dem Neustart':
         'Focus correction = {0:+.2f} mm - stored, it survives a restart',
+    'Diese Vorlage enthält eine ältere als Bild: deren {n} Schnittlinie(n) werden weder graviert noch geschnitten.':
+        'This template holds an older one as an image: its {n} cut line(s) '
+        'are neither engraved nor cut.',
     'Fokuskorrektur {k:+.2f} mm von zuletzt, Dicke {d:.2f} mm -> Z {z:.2f} mm':
         'Focus correction {k:+.2f} mm from last time, thickness {d:.2f} mm '
         '-> Z {z:.2f} mm',

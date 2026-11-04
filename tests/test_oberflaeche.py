@@ -710,6 +710,18 @@ class FokusUeberlebtDenNeustart(Grundlage):
                                places=3)
         self.assertIsNone(self.app._fokus_job)
 
+    def test_beenden_sichert_den_offenen_wert(self):
+        """Der Wert wird verzoegert geschrieben. Wer das Fenster vorher
+        zumacht, haette ihn sonst verloren - oder der Zeitgeber liefe in ein
+        zerstoertes Fenster."""
+        self.app.v_korr.set(3.5)
+        self.assertIsNotNone(self.app._fokus_job)
+        self.app.beenden(fragen=False)
+        self.assertIsNone(self.app._fokus_job)
+        self.assertAlmostEqual(self.L.P.load_config()["korrektur"], 3.5,
+                               places=3)
+        self.wurzel, self.app, self.L = app_bauen()
+
     def test_start_sagt_was_noch_gilt(self):
         self.app.v_dicke.set(3.0)
         self.app.v_korr.set(-1.25)

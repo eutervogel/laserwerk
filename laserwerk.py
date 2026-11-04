@@ -808,6 +808,15 @@ class App:
             try:
                 nb, nv = J.svg_anteile(p)
                 bildlinien = bool(nb and nv)
+                # Eine Vorlage, die noch einmal eingerahmt wurde, traegt die
+                # alte komplett als Bild in sich. Deren Rahmen liegt damit
+                # ausserhalb jeder Reichweite - weder zu gravieren noch zu
+                # schneiden. Besser gesagt als stillschweigend verloren.
+                alt = J.svg_innenlinien(p)
+                if alt:
+                    self._log(T("Diese Vorlage enthält eine ältere als Bild: "
+                                "deren {n} Schnittlinie(n) werden weder "
+                                "graviert noch geschnitten.").format(n=alt))
             except Exception:
                 pass
         try:
@@ -2804,6 +2813,12 @@ class App:
             if getattr(self, "_poll_id", None):
                 self.root.after_cancel(self._poll_id)
                 self._poll_id = None
+            # Ein noch offenes Sichern von Dicke/Korrektur jetzt erledigen,
+            # statt es in ein zerstoertes Fenster laufen zu lassen.
+            if getattr(self, "_fokus_job", None):
+                self.root.after_cancel(self._fokus_job)
+                self._fokus_job = None
+                self._save_cfg()
         except Exception:
             pass
         if self.fern is not None:

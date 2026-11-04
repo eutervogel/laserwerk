@@ -152,20 +152,49 @@ class Tonwerte(unittest.TestCase):
 
 class Laufzeit(unittest.TestCase):
     def test_laenger_bei_mehr_strecke(self):
-        kurz = J.estimate([5.0] * 100, 1000, 100)
-        lang = J.estimate([10.0] * 100, 1000, 100)
+        kurz = J.estimate([5.0] * 100, 1000)
+        lang = J.estimate([10.0] * 100, 1000)
         self.assertGreater(lang, kurz)
 
     def test_schneller_bei_mehr_vorschub(self):
-        langsam = J.estimate([5.0] * 100, 500, 100)
-        schnell = J.estimate([5.0] * 100, 1000, 100)
+        langsam = J.estimate([5.0] * 100, 500)
+        schnell = J.estimate([5.0] * 100, 1000)
         self.assertLess(schnell, langsam)
 
-    def test_kurze_segmente_bremsen(self):
-        """100 mm am Stueck sind schneller als 1000 Haeppchen davon."""
-        am_stueck = J.estimate([100.0], 1000, 1)
-        gestueckelt = J.estimate([0.1] * 1000, 1000, 1000)
-        self.assertGreater(gestueckelt, am_stueck)
+    def test_haltestellen_kosten_zeit(self):
+        """Nicht die Zerlegung bremst, sondern der Halt: 100 mm am Stueck
+        gegen hundert Stuecke, zwischen denen die Achse steht."""
+        am_stueck = J.estimate([100.0], 1000)
+        mit_halt = J.estimate([1.0] * 100, 1000)
+        self.assertGreater(mit_halt, am_stueck)
+
+    def test_feine_zerlegung_bremst_nicht(self):
+        """Fuer einen Leistungswechsel haelt die Achse nicht an. Das alte
+        Modell rechnete das anders und lag bei Strichgrafik ein Viertel zu
+        niedrig, weil ein an Graustufen geeichter Faktor es ausglich."""
+        zeile = 100.0
+        self.assertAlmostEqual(J.estimate([zeile], 1000),
+                               J.estimate([zeile], 1000), places=9)
+        # Dieselbe Zeile, egal wie der G-Code sie beschreibt
+        g_fein, i_fein = J.raster_gcode(
+            np.tile(np.linspace(0.1, 1.0, 200), (40, 1)), 0.1, 830, 1000)
+        g_grob, i_grob = J.raster_gcode(
+            np.ones((40, 200)), 0.1, 830, 1000)
+        self.assertGreater(len(g_fein), len(g_grob) * 3)
+        self.assertAlmostEqual(i_fein["sekunden"], i_grob["sekunden"],
+                               places=6)
+
+    def test_trapez_erreicht_die_reisegeschwindigkeit_nicht(self):
+        """Kurze Bahn: die Achse beschleunigt und bremst sofort wieder."""
+        lang = J.fahrzeit(100.0, 1000 / 60.0, 30.0)
+        kurz = J.fahrzeit(0.5, 1000 / 60.0, 30.0)
+        self.assertAlmostEqual(kurz, 2 * (0.5 / 30.0) ** 0.5, places=9)
+        self.assertGreater(lang, kurz)
+
+    def test_eilgang_ist_schneller_als_vorschub(self):
+        mit = J.estimate([], 1000, [100.0])
+        ohne = J.estimate([100.0], 1000, [])
+        self.assertLess(mit, ohne)
 
 
 class Testmuster(unittest.TestCase):
@@ -462,3 +491,83 @@ class Schnittvorlage(unittest.TestCase):
         p = self.os.path.join(self.d, "flach.png")
         Image.new("L", (10, 10), 128).save(p)
         self.assertEqual(J.load_source(p, nur_bild=True).size, (10, 10))
+
+
+class VorlageInVorlage(unittest.TestCase):
+    """Wer eine Schnittvorlage noch einmal einrahmt, bekommt die ganze alte
+    Vorlage als data:image/svg+xml in die neue gelegt. Inkscape zeichnet
+    diese innere SVG - und laesst darin wieder genau das Bild weg, weil es
+    am schlichten href haengt. Herausgekommen sind zwei Rahmen und kein
+    Motiv."""
+
+    def setUp(self):
+        import base64, io, os, tempfile
+        self.b64, self.os = base64, os
+        self.d = tempfile.mkdtemp(prefix="laserwerk-innen-")
+        roh = io.BytesIO()
+        Image.new("L", (40, 20), 0).save(roh, format="PNG")   # schwarz
+        self.png = base64.b64encode(roh.getvalue()).decode()
+
+    def blatt(self, inhalt):
+        """Motiv in der Mitte, Rahmen am Blattrand - sonst liegt der Rahmen
+        auf dem Motiv und sein Wegfallen waere nicht zu sehen."""
+        return ('<svg xmlns="http://www.w3.org/2000/svg" width="40mm" '
+                'height="20mm" viewBox="0 0 40 20">%s'
+                '<g id="rahmen" fill="none" stroke="#ff0000" '
+                'stroke-width="0.6"><path d="M0.5 0.5 H39.5 V19.5 H0.5 Z"/>'
+                '</g></svg>') % inhalt
+
+    def vorlage(self, tiefe=1):
+        """Eine Schnittvorlage, tiefe-mal in sich selbst eingerahmt."""
+        t = self.blatt('<image href="data:image/png;base64,%s" x="10" y="6" '
+                       'width="20" height="8"/>' % self.png)
+        for _ in range(tiefe):
+            b = self.b64.b64encode(t.encode()).decode()
+            t = self.blatt('<image href="data:image/svg+xml;base64,%s" '
+                           'x="4" y="2" width="32" height="16"/>' % b)
+        p = self.os.path.join(self.d, "tief%d.svg" % tiefe)
+        with open(p, "w") as f:
+            f.write(t)
+        return p
+
+    def test_das_motiv_kommt_an(self):
+        im = J.load_source(self.vorlage(), 200)
+        self.assertEqual(im.getextrema()[0], 0, "das innere Motiv fehlt")
+
+    def test_auch_zweimal_eingerahmt(self):
+        im = J.load_source(self.vorlage(2), 200)
+        self.assertEqual(im.getextrema()[0], 0, "das innere Motiv fehlt")
+
+    def test_xlink_wandert_mit_nach_innen(self):
+        neu = J.xlink_notdurft(self.vorlage())
+        with open(neu) as f:
+            t = f.read()
+        innen = J._eingebettete_svg(
+            re.search(r'xlink:href="(data:image/svg[^"]*)"', t).group(1))
+        self.assertIn("xlink:href=", innen)
+
+    def test_der_innere_rahmen_wird_nicht_mitgraviert(self):
+        """Er liegt nicht im Dokument, sondern in dem Bild, als das die alte
+        Vorlage darin steckt - von aussen gar nicht zu sehen."""
+        p = self.vorlage()
+        voll = J.load_source(p, 200)
+        nur = J.load_source(p, 200, nur_bild=True)
+        self.assertEqual(voll.size, nur.size)
+        rot = np.asarray(voll.convert("L"))
+        ohne = np.asarray(nur.convert("L"))
+        self.assertLess((ohne < 200).sum(), (rot < 200).sum(),
+                        "es ist nichts weggefallen")
+        # Am Blattrand liegt nur noch Weiss: beide Rahmen sind draussen.
+        self.assertEqual(int(ohne[:2, :].max()), 255)
+        self.assertEqual(int(ohne[-2:, :].max()), 255)
+        self.assertLess(int(rot[:2, :].min()), 200)
+        self.assertEqual(ohne.min(), 0, "das Motiv fehlt jetzt auch")
+
+    def test_ohne_eingebettete_vorlage_keine_kopie(self):
+        p = self.os.path.join(self.d, "schlicht.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="10mm" '
+                    'height="10mm" viewBox="0 0 10 10">'
+                    '<path d="M1 1 L9 9" stroke="black"/></svg>')
+        self.assertIsNone(J.nur_bilder(p))
+        self.assertIsNone(J.xlink_notdurft(p))

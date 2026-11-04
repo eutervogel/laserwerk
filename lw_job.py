@@ -7,7 +7,7 @@ Grundregeln aus der Praxis:
   - Bidirektional mit Overscan, Leerstellen mit S0 statt G0 (kein Stottern).
   - Nullpunkt = linke untere Ecke des Motivs, alle Koordinaten positiv.
 """
-import io, os, subprocess, tempfile
+import base64, binascii, io, os, re, subprocess, tempfile
 import math
 import xml.etree.ElementTree as ET
 import numpy as np
@@ -15,22 +15,30 @@ from PIL import Image, ImageFilter
 
 S_MAX = 1000          # $30
 ACCEL = 30.0          # $120 mm/s^2
-LOOKAHEAD = 15        # Planner-Bloecke
+EILGANG = 3000.0      # $110/$111 mm/min
 POINTER_FEED = 600    # Vorschub fuer Sichtkreuz und sichtbaren Rahmen
 
 
 # ---------------------------------------------------------------- Laden
-def xlink_notdurft(path):
-    """Kopie der SVG, in der eingebettete Bilder auch ankommen - oder None.
+SVG_DATEN = re.compile(r'^data:image/svg\+xml;base64,(.*)$', re.S)
+TIEFE = 6                 # so viele Ebenen Bild-in-Bild, dann ist Schluss
 
-    Inkscape 1.2 zeichnet <image href="..."> nicht, es will das alte
-    xlink:href. Neuere Zeichenprogramme schreiben aber das schlichte href
-    (SVG 2). Beim Rendern fehlt dann genau das eingebettete Motiv, und
-    uebrig bleibt nur die Strichzeichnung drumherum.
+
+def _eingebettete_svg(href):
+    """Steckt in diesem href eine SVG? Dann ihr Text, sonst None."""
+    m = SVG_DATEN.match((href or "").strip())
+    if not m:
+        return None
+    try:
+        return base64.b64decode(m.group(1)).decode("utf-8", "replace")
+    except (ValueError, binascii.Error):
+        return None
+
+
+def _xlink_text(t, tiefe=TIEFE):
+    """Den href jedes <image> auf xlink:href umschreiben, auch in SVGs, die
+    als Bild in diesem Bild stecken. Rueckgabe (Text, wurde etwas geaendert).
     """
-    import re
-    with open(path, encoding="utf-8", errors="replace") as f:
-        t = f.read()
     aus, i, getan = [], 0, False
     while True:
         j = t.find("<image", i)
@@ -41,14 +49,46 @@ def xlink_notdurft(path):
         if k < 0:
             aus.append(t[i:])
             break
-        tag, n = re.subn(r'(?<!xlink:)\bhref\s*=', "xlink:href=", t[j:k], count=1)
+        tag = t[j:k]
+        # Eine Ebene tiefer: steckt im href selbst eine SVG, hat die
+        # dasselbe Problem - und Inkscape zeichnet sie, waehrend ihr
+        # eigenes Bild darin fehlt.
+        if tiefe > 0:
+            m = re.search(r'(?:xlink:)?href\s*=\s*"([^"]*)"', tag)
+            innen = _eingebettete_svg(m.group(1)) if m else None
+            if innen:
+                neu, drin = _xlink_text(innen, tiefe - 1)
+                if drin:
+                    tag = tag.replace(m.group(1), "data:image/svg+xml;base64,"
+                                      + base64.b64encode(neu.encode()).decode())
+                    getan = True
+        tag, n = re.subn(r'(?<!xlink:)\bhref\s*=', "xlink:href=", tag, count=1)
         getan = getan or bool(n)
         aus.append(t[i:j])
         aus.append(tag)
         i = k
+    return "".join(aus), getan
+
+
+def xlink_notdurft(path):
+    """Kopie der SVG, in der eingebettete Bilder auch ankommen - oder None.
+
+    Inkscape 1.2 zeichnet <image href="..."> nicht, es will das alte
+    xlink:href. Neuere Zeichenprogramme schreiben aber das schlichte href
+    (SVG 2). Beim Rendern fehlt dann genau das eingebettete Motiv, und
+    uebrig bleibt nur die Strichzeichnung drumherum.
+
+    Dasselbe gilt eine Ebene tiefer: wer eine Schnittvorlage noch einmal
+    einrahmt, bekommt die ganze alte Vorlage als data:image/svg+xml in die
+    neue gelegt. Inkscape zeichnet diese innere SVG - und laesst darin
+    wieder genau das Motiv weg. Herausgekommen ist zweimal ein Rahmen und
+    kein Bild.
+    """
+    with open(path, encoding="utf-8", errors="replace") as f:
+        t = f.read()
+    t, getan = _xlink_text(t)
     if not getan:
         return None
-    t = "".join(aus)
     if "xmlns:xlink" not in t:
         t = t.replace("<svg", '<svg xmlns:xlink="http://www.w3.org/1999/xlink"', 1)
     tmp = tempfile.NamedTemporaryFile("w", suffix=".svg", delete=False,
@@ -100,6 +140,30 @@ def svg_anteile(path):
     return len(bilder), len(vektoren)
 
 
+def svg_innenlinien(path, tiefe=TIEFE):
+    """Wie viele Vektorelemente in SVGs stecken, die selbst nur als Bild in
+    dieser SVG liegen. Die werden weder graviert noch geschnitten - ihr
+    Rahmen ist der einer aelteren Vorlage, und das sollte man erfahren."""
+    def zaehle(wurzel, t):
+        bilder, vektoren = [], []
+        _svg_zaehlen(wurzel, bilder, vektoren)
+        n = 0
+        if t > 0:
+            for b in bilder:
+                innen = (_eingebettete_svg(b.get("href"))
+                         or _eingebettete_svg(b.get("{%s}href" % XLINKNS)))
+                if innen:
+                    r = ET.fromstring(innen)
+                    eigene, tiefer = [], []
+                    _svg_zaehlen(r, tiefer, eigene)
+                    n += len(eigene) + zaehle(r, t - 1)
+        return n
+    try:
+        return zaehle(ET.parse(path).getroot(), tiefe)
+    except (ET.ParseError, OSError):
+        return 0
+
+
 def _ast_behalten(el):
     """Diesen Zweig aufraeumen. Rueckgabe: bleibt etwas uebrig?"""
     name = _tagname(el)
@@ -114,6 +178,35 @@ def _ast_behalten(el):
     return drin
 
 
+def _nur_bilder_baum(wurzel, tiefe=TIEFE):
+    """Alles wegnehmen, was kein Bild ist - auch in SVGs, die als Bild in
+    diesem Bild stecken. Rueckgabe: ist etwas weggefallen?"""
+    bilder, vektoren = [], []
+    _svg_zaehlen(wurzel, bilder, vektoren)
+    getan = False
+    if bilder and vektoren:
+        for k in list(wurzel):
+            if not _ast_behalten(k):
+                wurzel.remove(k)
+        getan = True
+    if tiefe <= 0:
+        return getan
+    # Der Rahmen einer eingerahmten Schnittvorlage liegt nicht im Dokument,
+    # sondern in dem Bild, als das die alte Vorlage darin steckt. Von aussen
+    # ist er nicht zu erreichen - und wuerde mitgraviert.
+    for bild in bilder:
+        for attr in ("href", "{%s}href" % XLINKNS):
+            innen = _eingebettete_svg(bild.get(attr))
+            if not innen:
+                continue
+            r = ET.fromstring(innen)
+            if _nur_bilder_baum(r, tiefe - 1):
+                bild.set(attr, "data:image/svg+xml;base64," + base64.b64encode(
+                    ET.tostring(r, encoding="utf-8")).decode())
+                getan = True
+    return getan
+
+
 def nur_bilder(path):
     """Kopie der SVG, in der nur die eingebetteten Bilder gezeichnet werden -
     oder None, wenn es nichts wegzulassen gibt.
@@ -125,14 +218,8 @@ def nur_bilder(path):
     ET.register_namespace("", SVGNS)
     ET.register_namespace("xlink", XLINKNS)
     baum = ET.parse(path)
-    wurzel = baum.getroot()
-    bilder, vektoren = [], []
-    _svg_zaehlen(wurzel, bilder, vektoren)
-    if not bilder or not vektoren:
+    if not _nur_bilder_baum(baum.getroot()):
         return None
-    for k in list(wurzel):
-        if not _ast_behalten(k):
-            wurzel.remove(k)
     tmp = tempfile.NamedTemporaryFile(suffix=".svg", delete=False)
     tmp.close()
     baum.write(tmp.name, encoding="utf-8", xml_declaration=True)
@@ -294,10 +381,13 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
     xm = lambda i: x_off + i * line
     marken = []                      # (Befehlsnummer, Art, Nummer, gesamt)
     cut = trav = 0.0
-    xprev = 0.0
+    xprev = yprev = 0.0
     rows = 0
     xmin, xmax = 1e9, -1e9
-    segs_len = []
+    # Je Zeile eine Bahn - die Achse faehrt sie in einem Zug durch, auch wenn
+    # der Leistungsverlauf sie in viele Befehle zerlegt. Dazwischen der
+    # Sprung in die naechste Zeile im Eilgang.
+    bahnen, eilwege = [], []
     for r in range(ny):
         vals = p[ny - 1 - r]
         if not vals.any():
@@ -321,7 +411,9 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
         start = xm(seg[0][1] if rev else seg[0][0])
         entry = start + (overscan if rev else -overscan)
         g.append(f"G0 X{entry:.3f} Y{y:.3f}")
-        trav += abs(entry - xprev)
+        sprung = math.hypot(entry - xprev, y - yprev)
+        eilwege.append(sprung)
+        trav += sprung
         g.append(f"G1 X{start:.3f} S0 F{feed}")
         xmin, xmax = min(xmin, entry), max(xmax, entry)
         at = start
@@ -334,38 +426,58 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
             g.append(f"G1 X{xe:.3f} S{sv}")
             if sv:
                 cut += abs(xe - at)
-            segs_len.append(abs(xe - at))
             at = xe
         ex = at + (-overscan if rev else overscan)
         g.append(f"G1 X{ex:.3f} S0")
-        segs_len.append(overscan)
+        bahnen.append(abs(ex - entry))
         xmin, xmax = min(xmin, ex), max(xmax, ex)
-        xprev = ex
+        xprev, yprev = ex, y
     g += ["M5", "G0 X0 Y0"]
+    heim = math.hypot(xprev, yprev)
+    eilwege.append(heim)
+    trav += heim
     info = dict(rows=rows, cut_m=cut / 1000, trav_m=trav / 1000,
                 befehle=len(g), xmin=xmin, xmax=xmax,
                 breite=nx * line, hoehe=ny * line,
                 marken=[(idx, "zeile", k + 1, rows)
                         for k, idx in enumerate(marken)],
-                sekunden=estimate(segs_len, feed, rows))
+                sekunden=estimate(bahnen, feed, eilwege))
     return g, info
 
 
-def estimate(segs, feed, stops):
-    """Lookahead-Modell: GRBL sieht 15 Bloecke voraus. Kurze Segmente
-    bremsen die Achse. Geeicht am Wildschwein-Lauf vom 19.9.:
-    30.000 Befehle in 29 min, Modell ergab 36 min -> Faktor 0,80,
-    kein zusaetzlicher Aufwand je Befehl messbar."""
+def fahrzeit(weg, v, accel=ACCEL):
+    """Zeit fuer eine Strecke aus dem Stand bis zum Stillstand. v in mm/s.
+
+    Trapez, solange die Strecke reicht, um v zu erreichen; sonst ein
+    Dreieck, bei dem die Spitze unter v bleibt.
+    """
+    if weg <= 0 or v <= 0:
+        return 0.0
+    a = max(1e-6, float(accel))
+    if weg >= v * v / a:
+        return 2 * v / a + (weg - v * v / a) / v
+    return 2 * (weg / a) ** 0.5
+
+
+def estimate(bahnen, feed, eilwege=(), accel=ACCEL, eil=EILGANG):
+    """Laufzeit aus den Bahnen, die die Maschine faehrt.
+
+    Eine Bahn ist, was ohne Halt durchlaeuft: eine ganze Gravurzeile, eine
+    ganze Kontur. In wie viele Befehle der G-Code sie zerlegt, ist der Achse
+    egal - fuer einen Leistungswechsel bremst sie nicht ab. Genau da lag das
+    alte Modell daneben: es rechnete in Bloecken zu 15 Befehlen und bremste
+    um so staerker, je feiner die Zerlegung war. Bei einer Graustufengravur
+    kam dabei ungefaehr das Richtige heraus, bei Strichgrafik lag es rund ein
+    Viertel zu niedrig - der Faktor 0,80, der das Modell an genau einem
+    Graustufenlauf geeicht hat, zog alles andere mit nach unten.
+
+    Was wirklich Zeit kostet, ist jeder Halt: am Zeilenende und an jeder
+    Kontur beschleunigt die Achse aus dem Stand und bremst wieder ab.
+    """
     v = feed / 60.0
-    d = np.asarray(segs, dtype=float)
-    t = 0.0
-    for i in range(0, len(d), LOOKAHEAD):
-        w = d[i:i + LOOKAHEAD].sum()
-        if w <= 0:
-            continue
-        vp = min(v, (ACCEL * w) ** 0.5)
-        t += w / max(vp * 0.75, 0.5)
-    return t * 0.80
+    ve = eil / 60.0
+    return (sum(fahrzeit(w, v, accel) for w in bahnen)
+            + sum(fahrzeit(w, ve, accel) for w in eilwege))
 
 
 def preview_image(p):
@@ -429,6 +541,8 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
     g = ["; greyscale test", "; rows = power, columns = tone, light to dark",
          "G21", "G90", "G94", "M4 S0"]
     segs = []
+    eilwege = []
+    at = (0.0, 0.0)
     rows = 0
     for r, s_max in enumerate(powers):
         yb = 3.0 + r * (feld + gap)
@@ -443,7 +557,9 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
                 yy = y + j * line
                 g += [f"G0 X0.6 Y{yy:.2f}",
                       f"G1 X2.4 S{s_max} F{feed}", "G1 S0"]
+                eilwege.append(math.dist(at, (0.6, yy)))
                 segs.append(1.8)
+                at = (2.4, yy)
                 rows += 1
         for c in range(stufen):
             ton = (c + 1) / stufen                     # hellstes Feld nicht leer
@@ -455,14 +571,17 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
                 a_, b_ = (xb, xb + feld) if i % 2 == 0 else (xb + feld, xb)
                 g += [f"G0 X{a_:.2f} Y{y:.2f}",
                       f"G1 X{b_:.2f} S{sv} F{feed}", "G1 S0"]
+                eilwege.append(math.dist(at, (a_, y)))
                 segs.append(feld)
+                at = (b_, y)
                 rows += 1
     g += ["M5", "G0 X0 Y0"]
     breite = stufen * feld + (stufen - 1) * gap * 0.2
     hoehe = len(powers) * feld + (len(powers) - 1) * gap
-    info = dict(rows=rows, cut_m=sum(segs) / 1000, trav_m=0.0, befehle=len(g),
+    info = dict(rows=rows, cut_m=sum(segs) / 1000,
+                trav_m=sum(eilwege) / 1000, befehle=len(g),
                 xmin=0.6, xmax=3.0 + breite, breite=breite + 2.4, hoehe=hoehe,
-                sekunden=estimate(segs, feed, rows))
+                sekunden=estimate(segs, feed, eilwege))
     return g, info
 
 
@@ -513,13 +632,30 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     im = Image.new("L", (W, H), 255)
     dr = ImageDraw.Draw(im)
     cut = trav = 0.0
-    segs = []
+    # Fremder G-Code sagt nicht, wo eine Bahn aufhoert. Aufeinander folgende
+    # Arbeitsfahrten laufen durch, solange die Richtung ungefaehr stimmt; ein
+    # G0 und ein scharfer Knick beenden die Bahn. Genau trifft das nur die
+    # Richtungswechsel nicht, an denen GRBL je nach Toleranz doch noch Tempo
+    # mitnimmt - fuer eine Vorschau reicht es.
+    bahnen, eilwege = [], []
+    lauf = 0.0
+    richtung = None
     for a, b, c, e, p in moves:
         L = ((c - a) ** 2 + (e - b) ** 2) ** 0.5
-        segs.append(L)
         if p is None:
+            if lauf:
+                bahnen.append(lauf)
+            lauf, richtung = 0.0, None
+            eilwege.append(L)
             trav += L
             continue
+        neu = ((c - a) / L, (e - b) / L) if L > 1e-9 else richtung
+        if (richtung and neu
+                and richtung[0] * neu[0] + richtung[1] * neu[1] < 0.5):
+            bahnen.append(lauf)         # Knick ueber 60 Grad: Halt
+            lauf = 0.0
+        lauf += L
+        richtung = neu or richtung
         cut += L
         dr.line([((a - x0) * sc, H - 1 - (b - y0) * sc),
                  ((c - x0) * sc, H - 1 - (e - y0) * sc)],
@@ -527,9 +663,11 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     im = im.resize((max(1, W // super_), max(1, H // super_)), Image.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, format="PNG")
+    if lauf:
+        bahnen.append(lauf)
     info = dict(breite=x1 - x0, hoehe=y1 - y0, xmin=x0, xmax=x1, ymin=y0, ymax=y1,
                 befehle=len(lines), cut_m=cut / 1000, trav_m=trav / 1000,
-                sekunden=estimate(segs, feed, 0))
+                sekunden=estimate(bahnen, feed, eilwege))
     return buf.getvalue(), (x0, y0, x1, y1), info
 
 

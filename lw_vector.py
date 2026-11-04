@@ -735,7 +735,9 @@ def cut_gcode(polys, s, feed, passes=1, kommentar=""):
          f"; S{s}/F{feed} = S/F {s/feed:.2f}, {passes} Durchgang/Durchgaenge",
          "; origin = bottom left corner", "G21", "G90", "G94", "M4 S0"]
     cut = trav = 0.0
-    segs = []
+    # Eine Kontur ist eine Bahn: die Achse faehrt sie durch, ohne fuer die
+    # Punkte dazwischen anzuhalten. Angefahren wird sie im Eilgang.
+    bahnen, eilwege = [], []
     marken = []
     pos = (0.0, 0.0)
     gesamt = len(polys) * max(1, passes)
@@ -743,23 +745,30 @@ def cut_gcode(polys, s, feed, passes=1, kommentar=""):
         for pl in polys:
             marken.append((len(g), "kontur", len(marken) + 1, gesamt))
             p = pl["pts"]
-            trav += math.dist(pos, p[0])
+            anfahrt = math.dist(pos, p[0])
+            trav += anfahrt
+            eilwege.append(anfahrt)
             g.append(f"G0 X{p[0][0]:.3f} Y{p[0][1]:.3f}")
+            bahn = 0.0
             for q_prev, q in zip(p, p[1:]):
                 g.append(f"G1 X{q[0]:.3f} Y{q[1]:.3f} S{s} F{feed}")
                 d = math.dist(q_prev, q)
                 cut += d
-                segs.append(d)
+                bahn += d
             if pl["closed"] and math.dist(p[-1], p[0]) > 1e-6:
                 g.append(f"G1 X{p[0][0]:.3f} Y{p[0][1]:.3f} S{s} F{feed}")
-                d = math.dist(p[-1], p[0]); cut += d; segs.append(d)
+                d = math.dist(p[-1], p[0]); cut += d; bahn += d
+            bahnen.append(bahn)
             g.append("G1 S0")
             pos = p[0] if pl["closed"] else p[-1]
     g += ["M5", "G0 X0 Y0"]
+    heim = math.dist(pos, (0.0, 0.0))
+    trav += heim
+    eilwege.append(heim)
     from lw_job import estimate
     x0, y0, x1, y1 = bbox(polys) if polys else (0, 0, 0, 0)
     info = dict(befehle=len(g), cut_m=cut/1000, trav_m=trav/1000,
                 konturen=len(polys), breite=x1 - x0, hoehe=y1 - y0,
                 xmin=x0, xmax=x1, ymin=y0, ymax=y1, marken=marken,
-                sekunden=estimate(segs, feed, len(polys)*passes) + trav/(1000/60))
+                sekunden=estimate(bahnen, feed, eilwege))
     return g, info

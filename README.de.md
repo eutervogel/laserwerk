@@ -79,13 +79,16 @@ Material ausprobieren will.
   gerade?"), Entsperren, einzelne G-Code-Befehle.
 - **Material finden** — Fokustest über Z, Materialtest als Feldraster aus
   Leistungen und Vorschüben, Graustufentest mit einem Tonwertkeil je
-  Leistung, Presets mit Materialdicke, Fokuskorrektur, Leistung, Vorschub,
+  Leistung, Presets mit Materialdicke, Leistung, Vorschub,
   Zeilenabstand, Tonwert **und den Schnittwerten** — Durchgänge, Schnitt-S
-  und Schnitt-F sind die Zahlen, die am meisten Zeit zum Herausfinden kosten. Materialdicke und Fokuskorrektur überstehen den
-  Neustart auch von allein: die Korrektur hat der Fokustest gemessen, und wer
-  sie von Hand in ein Preset tippen soll, verliert sie. Dass sie gilt, steht
-  im Protokoll beim Start und als Z-Höhe unter Material **und** beim
-  Fokustest — dort auch als Feld, das sich ohne neuen Test nachstellen lässt.
+  und Schnitt-F sind die Zahlen, die am meisten Zeit zum Herausfinden kosten.
+- **Fokuskorrektur gehört der Maschine** — sie sagt, wo die Brennebene
+  wirklich zur Z-Referenz liegt, und das hängt an Linse und Aufbau, nicht am
+  Material. Sie steht deshalb einmal zentral, nicht in jedem Preset, und
+  übersteht den Neustart: der Fokustest hat sie gemessen, und wer sie von Hand
+  in ein Preset tippen soll, verliert sie. Zu sehen beim Start im Protokoll,
+  als Z-Höhe unter Material und beim Fokustest — dort auch als Feld, das sich
+  ohne neuen Test nachstellen lässt.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man

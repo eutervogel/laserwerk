@@ -76,13 +76,16 @@ settings for a new material.
   sight cross at low power, unlock, send single G-code commands.
 - **Find material settings** — a focus test along Z, a material test as a grid
   of power and feed values, a greyscale test with one tonal wedge per power,
-  and presets holding thickness, focus correction, power, feed, row pitch,
+  and presets holding thickness, power, feed, row pitch,
   midtones **and the cutting values** — passes, cut power and cut feed are the
-  numbers that take the longest to find. Thickness and focus correction also survive a restart on their
-  own: the correction is something the focus test measured, and asking you to
-  copy it into a preset by hand is asking you to lose it. That it is in effect
-  shows in the log at startup and as a Z height under Material **and** next to
-  the focus test — there also as a field you can adjust without a new test.
+  numbers that take the longest to find.
+- **The focus correction belongs to the machine** — it says where the focal
+  plane really sits relative to the Z reference, which depends on your lens
+  and setup, not on the material. So it is kept in one place rather than in
+  every preset, and it survives a restart: the focus test measured it, and
+  asking you to copy it into a preset by hand is asking you to lose it. You
+  see it in the log at startup, as a Z height under Material and next to the
+  focus test — there also as a field you can adjust without a new test.
 - **Engrave both sides** — mirror about a flip axis, with a check that the
   mirrored artwork still lands in positive coordinates.
 - **Remote control via Telegram** — jog the axes and trace the sight cross from

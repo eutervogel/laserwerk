@@ -645,14 +645,12 @@ class FokusUeberlebtDenNeustart(Grundlage):
         self.assertAlmostEqual(self.app.v_korr.get(), -1.75, places=3)
         self.assertAlmostEqual(self.app._z_target(), 1.25, places=3)
 
-    def test_preset_laden_sichert_mit(self):
-        self.app.presets["Erle 3"] = dict(dicke=3.0, korrektur=-2.5, s=740,
-                                          f=230, line=0.1, mode="schwelle")
+    def test_preset_laden_sichert_die_dicke(self):
+        self.app.presets["Erle 3"] = dict(dicke=3.0, s=740, f=230, line=0.1,
+                                          mode="schwelle")
         self.app.v_preset.set("Erle 3")
         self.app.load_preset()
-        cfg = self.L.P.load_config()
-        self.assertAlmostEqual(cfg["dicke"], 3.0, places=3)
-        self.assertAlmostEqual(cfg["korrektur"], -2.5, places=3)
+        self.assertAlmostEqual(self.L.P.load_config()["dicke"], 3.0, places=3)
 
     def test_halb_getipptes_feld_zerschiesst_nichts(self):
         self.app.v_korr.set(-1.0)
@@ -661,30 +659,36 @@ class FokusUeberlebtDenNeustart(Grundlage):
         self.app._save_cfg()
         self.assertAlmostEqual(self.L.P.load_config()["korrektur"], -1.0, places=3)
 
-    def test_altes_preset_loescht_die_korrektur_nicht(self):
-        """Presets von vor der Korrektur kennen das Feld nicht. Mit 0 als
-        Ersatzwert nahm ihr Laden die gemessene Korrektur mit - und schrieb
-        die 0 gleich in die Konfiguration."""
+    def test_kein_preset_fasst_die_korrektur_an(self):
+        """Die Korrektur sagt, wo die Brennebene zur Z-Referenz liegt - das
+        haengt an der Maschine, nicht am Material. Lief sie in jedem Preset
+        mit, nahm ein Preset mit alter oder nie gemessener Zahl die frische
+        Messung mit, ohne dass sich sichtbar etwas aenderte."""
         self.app.v_dicke.set(12.0)
-        self.app.v_korr.set(-2.5)
+        self.app.v_korr.set(4.0)
         self.app._save_cfg()
-        self.app.presets["alt"] = dict(dicke=3.0, s=740, f=230, line=0.1,
-                                        mode="schwelle")
-        self.app.v_preset.set("alt")
-        self.app.load_preset()
-        self.assertAlmostEqual(self.app.v_dicke.get(), 3.0, places=3)
-        self.assertAlmostEqual(self.app.v_korr.get(), -2.5, places=3)
-        self.assertAlmostEqual(self.L.P.load_config()["korrektur"], -2.5,
-                               places=3)
+        for d in (dict(dicke=3.0, s=740, f=230, line=0.1, mode="schwelle"),
+                  dict(dicke=3.0, korrektur=0.0, s=740, f=230, line=0.1,
+                       mode="schwelle")):
+            with self.subTest(korrektur=d.get("korrektur")):
+                self.app.presets["alt"] = d
+                self.app.v_preset.set("alt")
+                self.app.load_preset()
+                self.assertAlmostEqual(self.app.v_dicke.get(), 3.0, places=3)
+                self.assertAlmostEqual(self.app.v_korr.get(), 4.0, places=3)
+                self.assertAlmostEqual(self.L.P.load_config()["korrektur"],
+                                       4.0, places=3)
 
-    def test_preset_mit_eigener_null_gilt_weiter(self):
-        """Eine ausdrueckliche 0 im Preset ist ein Wert, kein fehlendes Feld."""
-        self.app.v_korr.set(-2.5)
-        self.app.presets["null"] = dict(dicke=3.0, korrektur=0.0, s=740,
-                                         f=230, line=0.1, mode="schwelle")
-        self.app.v_preset.set("null")
-        self.app.load_preset()
-        self.assertAlmostEqual(self.app.v_korr.get(), 0.0, places=3)
+    def test_gespeichertes_preset_traegt_sie_nicht_mehr(self):
+        self.app.v_korr.set(4.0)
+        self.app.v_pname.set("Linde 3")
+        self.app.save_preset()
+        self.assertNotIn("korrektur", self.app.presets["Linde 3"])
+        self.assertNotIn("korrektur", self.L.P.load_presets()["Linde 3"])
+
+    def test_mitgelieferte_presets_sind_frei_davon(self):
+        for name, d in self.L.P.DEFAULTS.items():
+            self.assertNotIn("korrektur", d, name)
 
     def test_beide_beschriftungen_zeigen_die_hoehe(self):
         """Der Wert wirkt still weiter - man muss sehen, welche Z-Hoehe

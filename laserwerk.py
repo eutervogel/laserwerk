@@ -534,37 +534,40 @@ class App:
         self.v_f = tk.IntVar(value=1000)
         self.v_line = tk.DoubleVar(value=0.10)
         self._row(f, 1, "Materialdicke", self.v_dicke, unit="mm")
-        self._row(f, 2, "Fokuskorrektur", self.v_korr, unit="mm")
+        # Die Fokuskorrektur stand bis hierher mitten zwischen den Werten,
+        # die 'Speichern' ins Preset schreibt - sie gehoert aber zur Maschine
+        # und nicht zum Material. Sie steht jetzt beim Fokustest, der sie
+        # misst; hier erscheint nur noch die Z-Hoehe, die daraus wird.
         self.v_smin = tk.IntVar(value=0)
-        self._row(f, 3, "Leistung S", self.v_s, unit="von 1000")
-        self._row(f, 4, "Leistung ab", self.v_smin, unit="0 = automatisch")
-        self._row(f, 5, "Vorschub F", self.v_f, unit="mm/min")
-        self._row(f, 6, "Zeilenabstand", self.v_line, unit="mm")
+        self._row(f, 2, "Leistung S", self.v_s, unit="von 1000")
+        self._row(f, 3, "Leistung ab", self.v_smin, unit="0 = automatisch")
+        self._row(f, 4, "Vorschub F", self.v_f, unit="mm/min")
+        self._row(f, 5, "Zeilenabstand", self.v_line, unit="mm")
         ttk.Label(f, text=T("'Leistung ab' ist die kleinste Leistung, bei der das\n"
                             "Material überhaupt zeichnet. Graustufen werden dann\n"
                             "zwischen diesen beiden Werten verteilt statt zwischen\n"
                             "30 % und S. Für Strichgrafik ohne Bedeutung."),
-                  style="Muted.TLabel").grid(row=7, column=0, columnspan=3, sticky="w")
+                  style="Muted.TLabel").grid(row=6, column=0, columnspan=3, sticky="w")
         self.lbl_sf = ttk.Label(f, text="")
-        self.lbl_sf.grid(row=8, column=0, columnspan=3, sticky="w", pady=4)
+        self.lbl_sf.grid(row=7, column=0, columnspan=3, sticky="w", pady=4)
         for v in (self.v_s, self.v_f, self.v_smin):
             v.trace_add("write", lambda *a: self._show_sf())
         self.v_notiz = tk.StringVar()
-        ttk.Label(f, text=T("Notiz")).grid(row=9, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=10, column=0, columnspan=3, sticky="ew")
+        ttk.Label(f, text=T("Notiz")).grid(row=8, column=0, sticky="w")
+        ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=9, column=0, columnspan=3, sticky="ew")
 
         ttk.Button(f, text=T("Übernehmen + Z-Höhe anfahren"), command=self.apply_preset, style="Accent.TButton"
-                   ).grid(row=11, column=0, columnspan=3, sticky="ew", pady=(10, 2))
-        ttk.Separator(f).grid(row=12, column=0, columnspan=3, sticky="ew", pady=8)
+                   ).grid(row=10, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+        ttk.Separator(f).grid(row=11, column=0, columnspan=3, sticky="ew", pady=8)
         self.v_pname = tk.StringVar()
-        ttk.Label(f, text=T("Speichern als")).grid(row=13, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.v_pname, width=20).grid(row=13, column=1, columnspan=2, sticky="w")
+        ttk.Label(f, text=T("Speichern als")).grid(row=12, column=0, sticky="w")
+        ttk.Entry(f, textvariable=self.v_pname, width=20).grid(row=12, column=1, columnspan=2, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=14, column=0, columnspan=3, sticky="ew", pady=4)
+        bb.grid(row=13, column=0, columnspan=3, sticky="ew", pady=4)
         ttk.Button(bb, text=T("Speichern"), command=self.save_preset).pack(side="left")
         ttk.Button(bb, text=T("Löschen"), command=self.delete_preset).pack(side="left", padx=4)
         self.lbl_zhoehe = ttk.Label(f, text="", style="Muted.TLabel")
-        self.lbl_zhoehe.grid(row=15, column=0, columnspan=3, sticky="w", pady=8)
+        self.lbl_zhoehe.grid(row=14, column=0, columnspan=3, sticky="w", pady=8)
         self._show_sf()
 
     # ---------------------------------------------------------------- Maschine
@@ -1998,12 +2001,13 @@ class App:
         d = self.presets.get(self.v_preset.get())
         if not d:
             return
-        # Was das Preset nicht kennt, bleibt stehen. Aeltere Presets haben
-        # keine Korrektur - mit 0 als Ersatzwert loeschte das Laden eines
-        # solchen Presets die gemessene Korrektur, schrieb die 0 gleich in
-        # die Konfiguration und gravierte ab da ausser Fokus weiter.
+        # Die Fokuskorrektur steht nicht mehr im Preset: sie sagt, wo die
+        # Brennebene zur Z-Referenz liegt, und das ist eine Eigenschaft der
+        # Maschine. In jedem Preset mitzulaufen hiess, dass jedes alte Preset
+        # eine veraltete Zahl mitschleppt - geladen hat eines davon die
+        # frisch gemessene Korrektur ueberschrieben. Aeltere Presets haben
+        # den Schluessel noch; er wird nicht mehr gelesen.
         self.v_dicke.set(d.get("dicke", self.v_dicke.get()))
-        self.v_korr.set(d.get("korrektur", self.v_korr.get()))
         self.v_s.set(d.get("s", 830)); self.v_f.set(d.get("f", 1000))
         self.v_smin.set(d.get("smin", 0))
         self.v_line.set(d.get("line", 0.1)); self.v_notiz.set(d.get("notiz", ""))
@@ -2014,7 +2018,7 @@ class App:
         self.v_cs.set(d.get("schnitt_s", 0)); self.v_cf.set(d.get("schnitt_f", 0))
         self.v_passes.set(d.get("durchgaenge", 1))
         self.v_pname.set(self.v_preset.get())
-        self._save_cfg()           # Dicke und Korrektur ueberleben den Neustart
+        self._save_cfg()           # die Dicke ueberlebt den Neustart
 
     def _anlauf(self, feed=None):
         """Wirksamer Anlauf: eingestellt, oder 0 = aus der Maschine gerechnet."""
@@ -2122,7 +2126,8 @@ class App:
         n = self.v_pname.get().strip()
         if not n:
             return
-        self.presets[n] = dict(dicke=self.v_dicke.get(), korrektur=self.v_korr.get(),
+        # Ohne Fokuskorrektur: die gehoert zur Maschine, nicht zum Material.
+        self.presets[n] = dict(dicke=self.v_dicke.get(),
                                s=self.v_s.get(), smin=self.v_smin.get(),
                                f=self.v_f.get(), line=self.v_line.get(),
                                mode=self.v_mode.get(), schwelle=round(self.v_schw.get(), 2),
@@ -2488,8 +2493,9 @@ class App:
             "= Dicke {d:.2f} mm, Korrektur {k:+.2f} mm").format(z=d + k, d=d, k=k))
         self.lbl_zhoehe.configure(text=T(
             "Z fährt auf {z:.2f} mm = Dicke {d:.2f} mm,\n"
-            "Korrektur {k:+.2f} mm. Dafür muss unter\n"
-            "'Maschine' eine Z-Referenz gesetzt sein.").format(z=d + k, d=d, k=k))
+            "Korrektur {k:+.2f} mm (Reiter Tests; gilt für\n"
+            "jedes Material). Dafür muss unter 'Maschine'\n"
+            "eine Z-Referenz gesetzt sein.").format(z=d + k, d=d, k=k))
 
     def _fokus_sichern(self):
         """Materialdicke und Fokuskorrektur in die Konfiguration schreiben.

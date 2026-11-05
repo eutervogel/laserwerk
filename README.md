@@ -60,7 +60,10 @@ settings for a new material.
   Otherwise the first part would already be loose in the board while the
   second one is still being engraved. The mode belongs to the element: change
   it and Laserwerk asks whether the others should follow — loading five cut
-  files and clicking "cut" once used to engrave four of them.
+  files and clicking "cut" once used to engrave four of them. A newly loaded
+  element lands next to the others instead of on top of them, and starts a
+  new row once the old one is full. A drawing comes in at its own size — a
+  cut blown up to the full travel is never what was meant.
 - **Draw shapes** — a rectangle with its measurements and corner radius, or a
   frame around the selected artwork with a margin all round. No drawing
   program needed for the simple case, and the result is an ordinary element
@@ -124,7 +127,9 @@ settings for a new material.
   again afterwards, so "move to origin" still means the workpiece and not the
   machine's own zero. That holds however the stop was triggered, from the
   button or from the phone, and however long you take to unlock afterwards.
-  Should it ever go missing anyway, `/nullzurueck` puts it back. Only a USB
+  Should it ever go missing anyway, `/nullzurueck` puts it back. An origin
+  that sits on the machine's own zero — which is what you get when you set
+  it right after connecting — counts as remembered too. Only a USB
   dropout ends it: after that nobody knows where the head stands, and a
   restored offset would be worse than none.
 

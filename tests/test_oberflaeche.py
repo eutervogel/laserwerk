@@ -8,6 +8,8 @@ waeren; Beschriftungen, die sich gegenseitig verdeckten.
 
 Ohne Anzeige werden diese Tests uebersprungen.
 """
+import os
+import tempfile
 import time
 import unittest
 
@@ -452,6 +454,41 @@ class NullpunktUeberDieSitzung(Nullpunkt):
         self.app._event("jobend", ("Gravur", "verbindung"))
         self.pumpe(0.3)
         self.assertFalse(self.app.zero_ok)
+
+    def test_nullpunkt_auf_der_maschinennull_ueberlebt_auch(self):
+        """Wer ihn setzt, ohne vorher zu fahren, hat den Versatz (0, 0, 0) -
+        nach dem Verbinden steht die Maschine auf ihrer eigenen Null. Genau
+        der galt als "nichts gemerkt": kein G92 zurueck, und X0 Y0 war
+        danach die Null der Maschine, nicht die des Werkstuecks."""
+        g = self.gesetzt(mpos=(0.0, 0.0, 0.0))
+        self.assertEqual(self.app.null_wco, (0.0, 0.0, 0.0))
+        g.mpos = (30.0, 15.0, 0.0)
+        self.app.stop()
+        self.pumpe()
+        self.assertTrue(self.app.zero_ok)
+        self.assertIn("G92 X30.000 Y15.000 Z0.000", g.protokoll)
+        self.app.goto_zero()
+        self.pumpe(0.6)
+        self.assertEqual(g.mpos[:2], (0.0, 0.0))
+
+    def test_maschinennull_auch_vom_handy(self):
+        g = self.gesetzt(mpos=(0.0, 0.0, 0.0))
+        g.mpos = (30.0, 15.0, 0.0)
+        self.app.fern_tun("stopp")
+        self.pumpe()
+        self.assertTrue(self.app.zero_ok)
+        self.assertIn("G92 X30.000 Y15.000 Z0.000", g.protokoll)
+
+    def test_maschinennull_laesst_sich_zurueckholen(self):
+        """Derselbe Fehler steckte im Knopf 'Nullpunkt zurückholen'."""
+        g = self.gesetzt(mpos=(0.0, 0.0, 0.0))
+        g.mpos, g.wco = (30.0, 15.0, 0.0), (0.0, 0.0, 0.0)
+        self.app.zero_ok = False
+        antwort = self.app.nullpunkt_zurueck()
+        self.pumpe()
+        self.assertNotIn("Kein Nullpunkt", antwort)
+        self.assertTrue(self.app.zero_ok)
+        self.assertIn("G92 X30.000 Y15.000 Z0.000", g.protokoll)
 
     def test_nach_abriss_wird_nichts_zurueckgeholt(self):
         """Nach einem USB-Abriss weiss niemand mehr, wo der Kopf steht - ein
@@ -2550,6 +2587,81 @@ class NurDasBild(Grundlage):
         self.app._nurbild_anwenden()
         self.assertIsNot(self.app.src, vorher)
         self.assertFalse(self.app.src_nurbild)
+
+
+@ohne_bildschirm
+class NeueMotiveLiegenNebeneinander(Grundlage):
+    """Jedes neu geladene Element wurde auf das Hoechstmass eingepasst und
+    bekam denselben Versatz: fuenf Dateien hintereinander lagen deckungs-
+    gleich uebereinander. Wer es nicht merkte, schnitt fuenfmal dieselbe
+    Stelle - und sah nur ein Motiv."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 200.0, 200.0
+        self.ordner = tempfile.mkdtemp()
+
+    def svg(self, b, h):
+        p = os.path.join(self.ordner, "m%d.svg" % len(self.app.elemente))
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="%gmm" '
+                    'height="%gmm" viewBox="0 0 %g %g">'
+                    '<path d="M0 0 H%g V%g H0 Z" stroke="#ff0000" '
+                    'stroke-width="0.1" fill="none"/></svg>'
+                    % (b, h, b, h, b, h))
+        self.app.lade_motiv(p, fragen=False)
+        return self.app.elemente[-1]
+
+    def test_zeichnung_kommt_im_originalmass(self):
+        """Ein Schnitt, auf den Verfahrweg aufgeblasen, ist nie gemeint."""
+        e = self.svg(40.0, 30.0)
+        self.assertAlmostEqual(e["v_w"], 40.0, delta=0.3)
+        self.assertAlmostEqual(e["v_h"], 30.0, delta=0.3)
+
+    def test_zweites_motiv_liegt_rechts_daneben(self):
+        eins = self.svg(40.0, 30.0)
+        x1, y1 = eins["v_xoff"], eins["v_yoff"]
+        zwei = self.svg(40.0, 30.0)
+        self.assertGreaterEqual(zwei["v_xoff"], x1 + 40.0)
+        self.assertEqual(zwei["v_yoff"], y1)
+        self.assertAlmostEqual(zwei["v_w"], 40.0, delta=0.3)
+
+    def test_volle_reihe_faengt_eine_neue_an(self):
+        kaesten = [self.svg(40.0, 30.0) for _ in range(5)]
+        letzte = kaesten[-1]
+        self.assertLess(letzte["v_xoff"], kaesten[-2]["v_xoff"])
+        self.assertGreaterEqual(letzte["v_yoff"], 30.0)
+        self.assertAlmostEqual(letzte["v_w"], 40.0, delta=0.3)
+
+    def test_keine_zwei_motive_uebereinander(self):
+        kaesten = [self.svg(40.0, 30.0) for _ in range(6)]
+        felder = [(k["v_xoff"], k["v_yoff"], k["v_w"], k["v_h"])
+                  for k in kaesten]
+        for i, (x, y, b, h) in enumerate(felder):
+            for j, (x2, y2, b2, h2) in enumerate(felder):
+                if i < j:
+                    self.assertTrue(x + b <= x2 + 0.01 or x2 + b2 <= x + 0.01
+                                    or y + h <= y2 + 0.01 or y2 + h2 <= y + 0.01,
+                                    "%d und %d liegen uebereinander" % (i, j))
+
+    def test_kein_platz_sagt_es_und_laesst_es_liegen(self):
+        self.svg(190.0, 190.0)
+        zwei = self.svg(190.0, 190.0)
+        self.assertIn("Kein Platz", self.app.log.get("1.0", "end"))
+        self.assertAlmostEqual(zwei["v_w"], 190.0, delta=0.3)
+
+    def test_bild_behaelt_sein_eingepasstes_mass(self):
+        """Ein Bild hat kein Mass in Millimetern - da bleibt das Einpassen."""
+        self.svg(40.0, 30.0)
+        im = Image.new("L", (200, 100), 0)
+        p = os.path.join(self.ordner, "bild.png")
+        im.save(p)
+        self.app.lade_motiv(p, fragen=False)
+        e = self.app.elemente[-1]
+        # Eingepasst ist es breiter als der freie Platz rechts, also kommt
+        # es in eine neue Reihe - aber nicht auf das erste Motiv.
+        self.assertGreaterEqual(e["v_yoff"], 30.0)
+        self.assertAlmostEqual(e["v_w"] / e["v_h"], 2.0, delta=0.1)
 
 
 @ohne_bildschirm

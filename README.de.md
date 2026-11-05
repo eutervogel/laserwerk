@@ -63,6 +63,10 @@ Material ausprobieren will.
   das zweite noch graviert wird. Die Betriebsart gehört zum Element: wer sie
   umschaltet, wird gefragt, ob die anderen mitkommen — fünf Schnittdateien
   laden und einmal „Schneiden“ klicken hieß sonst, vier davon zu gravieren.
+  Ein neu geladenes Motiv legt sich neben die vorhandenen, nicht darauf, und
+  fängt eine neue Reihe an, wenn die alte voll ist. Eine Zeichnung kommt
+  dabei im Originalmaß herein — ein Schnitt, der auf den Verfahrweg
+  aufgeblasen wird, ist nie gemeint.
 - **Formen zeichnen** — ein Rechteck mit Maßen und Eckradius, oder gleich ein
   Rahmen um das gewählte Motiv mit einem Abstand ringsum. Braucht keine
   Zeichensoftware für den einfachen Fall und steht danach als ganz normales
@@ -129,7 +133,9 @@ Material ausprobieren will.
   meint und nicht den Nullpunkt der Maschine. Das gilt egal, woher der STOPP
   kam — Knopf oder Handy — und egal, wie lange man sich danach mit dem
   Entsperren Zeit lässt. Ist er doch einmal weg, holt ihn `/nullzurueck`
-  zurück. Nur ein USB-Abriss beendet das: danach weiß niemand mehr, wo der
+  zurück. Auch ein Nullpunkt, der auf der Maschinennull liegt — wer ihn
+  gleich nach dem Verbinden setzt, hat genau den — zählt dabei als gemerkt.
+  Nur ein USB-Abriss beendet das: danach weiß niemand mehr, wo der
   Kopf steht, und ein wiederhergestellter Versatz wäre schlimmer als keiner.
 
 ## So sieht das aus

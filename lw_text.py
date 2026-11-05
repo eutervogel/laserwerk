@@ -805,6 +805,14 @@ EN = {
     "gravieren": "engrave", "schneiden": "cut", "beides": "both",
     "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min":
         "{n} elements\n{b} commands, {m:.1f} m burnt\nabout {min:.0f} min",
+    "{n}. Motiv: {b:.1f} x {h:.1f} mm bei X {x:.1f} / Y {y:.1f} mm abgelegt.":
+        "Element {n}: {b:.1f} x {h:.1f} mm placed at X {x:.1f} / Y {y:.1f} mm.",
+    "Kein Platz mehr auf der Fläche - das neue Motiv liegt auf den anderen. "
+    "Größe und Versatz von Hand setzen.":
+        "No room left on the work area - the new element sits on top of the "
+        "others. Set its size and offset by hand.",
+    "Originalmaß der Zeichnung: {b:.1f} x {h:.1f} mm.":
+        "Drawing's own size: {b:.1f} x {h:.1f} mm.",
     "Betriebsart": "Mode",
     "{n} weitere Element(e) sind anders eingestellt.\n\n"
     "'{art}' auch für sie übernehmen?":

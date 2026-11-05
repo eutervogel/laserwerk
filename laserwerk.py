@@ -890,6 +890,7 @@ class App:
                               "pfad": p, "quelle": p})
         self.aktiv = len(self.elemente) - 1
         self.fit()                       # setzt Groesse, sichert gleich mit
+        self._platz_daneben()
         self._element_sichern()
         self._liste_auffrischen()
         self._gen_knopf()
@@ -1672,6 +1673,67 @@ class App:
         self._stale()
         self._draw()
 
+    LUECKE = 5.0        # mm Luft zwischen zwei Motiven
+
+    def _platz_daneben(self):
+        """Ein neu geladenes Motiv neben die vorhandenen legen statt darauf.
+
+        Jedes neue Element bekam denselben Versatz und wurde auf das
+        Hoechstmass eingepasst: fuenf Dateien hintereinander lagen also
+        deckungsgleich uebereinander, und wer es nicht merkte, schnitt
+        fuenfmal dieselbe Stelle.
+
+        Eine Zeichnung bringt ihr Mass selbst mit - die kommt 1:1 herein,
+        und zwar auch als erste: ein Schnitt, der auf den Verfahrweg
+        aufgeblasen wird, ist nie gemeint, und der Platz fuer die naechsten
+        waere weg. Ein Bild hat kein Mass in Millimetern; es behaelt sein
+        eingepasstes und wird nur verkleinert, wenn der Platz sonst nicht
+        reicht. Von Hand eingetippte Masse fasst niemand mehr an.
+        """
+        xm, ym = float(self.cfg["x_max"]), float(self.cfg["y_max"])
+        if self.vec:
+            bw, bh = self._vec_dreh_bb()
+            if 0 < bw <= xm and 0 < bh <= ym:
+                self.v_w.set(round(bw, 2))
+                self.v_h.set(round(bh, 2))
+                if len(self.elemente) < 2:
+                    self._log(T("Originalmaß der Zeichnung: {b:.1f} x "
+                                "{h:.1f} mm.").format(b=bw, h=bh))
+        belegt = [k for k in (self._box_von(e)
+                              for i, e in enumerate(self.elemente)
+                              if i != self.aktiv) if k]
+        if not belegt:
+            return                          # das erste Motiv liegt schon gut
+        try:
+            b, h = float(self.v_w.get()), float(self.v_h.get())
+        except tk.TclError:
+            return
+        x0 = self._xmin()
+        # Erst rechts daneben, in der Reihe des untersten Motivs.
+        x = max(xx + bb for xx, _, bb, _ in belegt) + self.LUECKE
+        y = min(yy for _, yy, _, _ in belegt)
+        if x + b > xm:                      # Reihe voll: eine neue darueber
+            x = x0
+            y = max(yy + hh for _, yy, _, hh in belegt) + self.LUECKE
+        x = max(x0, x)
+        if x + b > xm or y + h > ym:
+            # Immer noch zu gross: so weit verkleinern, wie der Platz reicht.
+            sc = min((xm - x) / b if b > 0 else 1.0,
+                     (ym - y) / h if h > 0 else 1.0)
+            if sc < 0.25:
+                self._log(T("Kein Platz mehr auf der Fläche - das neue Motiv "
+                            "liegt auf den anderen. Größe und Versatz von "
+                            "Hand setzen."))
+                return
+            b, h = b * sc, h * sc
+            self.v_w.set(round(b, 2))
+            self.v_h.set(round(h, 2))
+        self.v_xoff.set(round(x, 2))
+        self.v_yoff.set(round(y, 2))
+        self._log(T("{n}. Motiv: {b:.1f} x {h:.1f} mm bei X {x:.1f} / "
+                    "Y {y:.1f} mm abgelegt.").format(
+                        n=self.aktiv + 1, b=b, h=h, x=x, y=y))
+
     def generate(self):
         """G-Code fuer alle Elemente: erst alles Gravieren, dann alles
         Schneiden. Umgekehrt faellt ein Teil heraus, bevor der Rest
@@ -2317,8 +2379,15 @@ class App:
         ohne Nullpunkt da - das Fenster war abgelaufen. Es gibt aber keinen
         Grund dafuer: der Versatz bleibt richtig, solange die Maschine ihre
         Position kennt, und genau das prueft das Abraeumen bei 'lost'.
+
+        Gefragt wird, OB etwas gemerkt ist, nicht ob der Versatz von Null
+        verschieden ist. Hier stand any(): wer den Nullpunkt setzt, ohne
+        vorher zu fahren - nach dem Verbinden steht die Maschine auf ihrer
+        eigenen Null - hat den Versatz (0, 0, 0), und der galt als "nichts
+        gemerkt". Der G92 kam nicht zurueck, und X0 Y0 war danach die Null
+        der Maschine.
         """
-        return self._rettung is not None and any(self._rettung[0])
+        return self._rettung is not None and self._rettung[0] is not None
 
     def null_zurueck_knopf(self):
         self._log(self.nullpunkt_zurueck())
@@ -2344,7 +2413,7 @@ class App:
         muessen."""
         if not self.grbl.connected:
             return T("Nicht verbunden.")
-        if not self.null_wco or not any(self.null_wco):
+        if self.null_wco is None:
             return T("Kein Nullpunkt gemerkt - in dieser Sitzung wurde noch "
                      "keiner gesetzt.")
         self._rettung = (self.null_wco, True, self.zref_ok, time.time())
@@ -2366,6 +2435,8 @@ class App:
         if rettung is None:
             return
         wco, war_null, war_zref, wann = rettung
+        if wco is None:
+            return
         self.grbl.wait_idle(timeout=8)
         st = self.grbl.status
         if self.grbl.alarm or st["state"].startswith(("Alarm", "Door")):
@@ -2869,8 +2940,14 @@ class App:
         # faehrt "Zum Nullpunkt" an den Maschinennullpunkt. Der mitgefuehrte
         # Versatz ist die bessere Quelle: WCO kommt nur gelegentlich im
         # Statusbericht, und nach einem Alarm steht da schon (0, 0, 0).
-        self._rettung = (self.null_wco or tuple(self.grbl.status.get("wco", (0, 0, 0))),
-                         self.zero_ok, self.zref_ok, time.time())
+        wco = self.null_wco
+        if wco is None:
+            # Nichts mitgeschrieben: dann taugt nur ein Versatz aus dem
+            # Statusbericht, und der ist nach einem Alarm schon (0, 0, 0) -
+            # also nur, wenn wirklich etwas drinsteht.
+            st = tuple(self.grbl.status.get("wco", ()) or ())
+            wco = st if any(st) else None
+        self._rettung = (wco, self.zero_ok, self.zref_ok, time.time())
         self._log(T("STOPP"))
         threading.Thread(target=self.grbl.stop, daemon=True).start()
 
@@ -3009,8 +3086,7 @@ class App:
                 # dieses Ereignis loeschte ihn eine Sekunde spaeter wieder.
                 # Genau das war das "ab und zu". Nur ein Abriss ist
                 # endgueltig - der raeumt in seinem eigenen Zweig auf.
-                if res == "verbindung" or not (self.null_wco
-                                               and any(self.null_wco)):
+                if res == "verbindung" or self.null_wco is None:
                     self.zero_ok = self.zref_ok = False
                 else:
                     if self._rettung is None:

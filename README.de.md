@@ -169,6 +169,15 @@ Material ausprobieren will.
   gleich nach dem Verbinden setzt, hat genau den — zählt dabei als gemerkt.
   Nur ein USB-Abriss beendet das: danach weiß niemand mehr, wo der
   Kopf steht, und ein wiederhergestellter Versatz wäre schlimmer als keiner.
+- **Eine Zeile sagt, woran man ist** — Maschine, Anschluss, Zustand,
+  Nullpunkt, Z-Referenz unten links, die Position unten rechts; während
+  eines Jobs dort die laufende Zeile. Die Jobleiste ist in Gruppen geteilt
+  (vorbereiten — zielen — fahren — STOPP), und was gerade nicht geht, ist
+  abgeblendet statt mit einer Meldung zu antworten. Rechts außen steht in
+  Akzentfarbe, was als Nächstes dran ist — „Motiv öffnen", „G-Code
+  erzeugen", „Maschine verbinden", „Nullpunkt setzen", „bereit". Die
+  Erklärtexte lassen sich in einem Zug ausblenden, sobald man sie nicht
+  mehr braucht.
 
 ## So sieht das aus
 

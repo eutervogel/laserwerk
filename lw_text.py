@@ -312,8 +312,13 @@ EN = {
         "Cannot move Z yet.\n\nUnder 'Machine': focus on material of known\nthickness and set the Z reference.",
     'Z auf {z:.2f} mm fahren?\n(Kopf muss frei über dem Material stehen)':
         'Move Z to {z:.2f} mm?\n(the head must stand clear above the material)',
-    "Z fährt auf {z} mm = Dicke {d} mm,\nKorrektur {v}{k} mm (Reiter Tests; gilt für\njedes Material). Dafür muss unter 'Maschine'\neine Z-Referenz gesetzt sein.":
-        "Z moves to {z} mm = thickness {d} mm,\ncorrection {v}{k} mm (Tests tab; it applies to\nevery material). This needs a Z reference set\nunder 'Machine'.",
+    "Z fährt auf {z} mm = Dicke {d} mm, Korrektur {v}{k} mm":
+        "Z moves to {z} mm = thickness {d} mm, correction {v}{k} mm",
+    "Die Korrektur steht im Reiter Tests und gilt für jedes\n"
+    "Material. Dafür muss unter 'Maschine' eine Z-Referenz\n"
+    "gesetzt sein.":
+        "The correction lives in the Tests tab and applies to every\n"
+        "material. It needs a Z reference set under 'Machine'.",
     'Z -> {z:.2f}':
         'Z -> {z:.2f}',
     'Z-Referenz: aktuelle Höhe = Fokus für {0:.2f} mm':

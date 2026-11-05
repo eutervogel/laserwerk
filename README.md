@@ -162,6 +162,14 @@ settings for a new material.
   it right after connecting — counts as remembered too. Only a USB
   dropout ends it: after that nobody knows where the head stands, and a
   restored offset would be worse than none.
+- **One line says where you stand** — machine, port, state, origin and Z
+  reference at the bottom left, the position at the bottom right; during a
+  job the current row instead. The job bar is split into groups (prepare —
+  aim — run — STOP), and whatever is not possible right now is greyed out
+  rather than answering with a message box. At the far right, in the accent
+  colour, stands the next step: "open artwork", "generate G-code", "connect
+  the machine", "set the origin", "ready". The explanatory texts can be
+  switched off in one go once you no longer need them.
 
 ## How it looks
 

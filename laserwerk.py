@@ -639,8 +639,16 @@ class App:
         bb.grid(row=13, column=0, columnspan=3, sticky="ew", pady=4)
         ttk.Button(bb, text=T("Speichern"), command=self.save_preset).pack(side="left")
         ttk.Button(bb, text=T("Löschen"), command=self.delete_preset).pack(side="left", padx=4)
+        # Die Hoehe ist ein Wert, der Rest ist eine Erklaerung - und nur
+        # der Rest verschwindet, wenn man sie abschaltet.
         self.lbl_zhoehe = ttk.Label(f, text="", style="Muted.TLabel")
-        self.lbl_zhoehe.grid(row=14, column=0, columnspan=3, sticky="w", pady=8)
+        self.lbl_zhoehe.grid(row=14, column=0, columnspan=3, sticky="w",
+                             pady=(8, 0))
+        self._erklaerung(ttk.Label(f, text=T(
+            "Die Korrektur steht im Reiter Tests und gilt für jedes\n"
+            "Material. Dafür muss unter 'Maschine' eine Z-Referenz\n"
+            "gesetzt sein."), style="Muted.TLabel")).grid(
+                row=15, column=0, columnspan=3, sticky="w", pady=(0, 8))
         self._show_sf()
 
     # ---------------------------------------------------------------- Maschine
@@ -3234,10 +3242,7 @@ class App:
             "= Dicke {d} mm, Korrektur {v}{k} mm").format(
                 z=Z(d + k, 2), d=Z(d, 2), v=vor, k=Z(abs(k), 2)))
         self.lbl_zhoehe.configure(text=T(
-            "Z fährt auf {z} mm = Dicke {d} mm,\n"
-            "Korrektur {v}{k} mm (Reiter Tests; gilt für\n"
-            "jedes Material). Dafür muss unter 'Maschine'\n"
-            "eine Z-Referenz gesetzt sein.").format(
+            "Z fährt auf {z} mm = Dicke {d} mm, Korrektur {v}{k} mm").format(
                 z=Z(d + k, 2), d=Z(d, 2), v=vor, k=Z(abs(k), 2)))
 
     def _fokus_sichern(self):

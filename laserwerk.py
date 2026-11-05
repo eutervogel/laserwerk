@@ -588,7 +588,7 @@ class App:
         mf.columnconfigure(0, weight=1)
         self.v_maschine = tk.StringVar(value=self._maschine_name())
         self.cb_maschine = ttk.Combobox(mf, textvariable=self.v_maschine,
-                                        width=17, state="readonly",
+                                        width=15, state="readonly",
                                         values=self._maschinen_namen())
         self.cb_maschine.grid(row=0, column=0, sticky="ew")
         self.cb_maschine.bind("<<ComboboxSelected>>",
@@ -596,16 +596,16 @@ class App:
         # Daneben der Name einer neuen: frei eintippen oder eine bekannte
         # Maschine aus der Liste nehmen, die bringt ihre Werte mit.
         self.v_mneu = tk.StringVar()
-        ttk.Combobox(mf, textvariable=self.v_mneu, width=11,
+        ttk.Combobox(mf, textvariable=self.v_mneu, width=9,
                      values=sorted(P.VORLAGEN)).grid(row=0, column=1, padx=4)
         ttk.Button(mf, text=T("anlegen"), command=self.maschine_anlegen,
-                   width=8).grid(row=0, column=2)
+                   width=11).grid(row=0, column=2)
         self.v_port = tk.StringVar(value=self.cfg.get("port", ""))
-        self.cb_port = ttk.Combobox(mf, textvariable=self.v_port, width=17,
+        self.cb_port = ttk.Combobox(mf, textvariable=self.v_port, width=15,
                                     values=G.ports())
         self.cb_port.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 0))
         ttk.Button(mf, text=T("neu suchen"), command=lambda: self.cb_port.configure(
-            values=G.ports()), width=8).grid(row=1, column=2, pady=(3, 0))
+            values=G.ports()), width=11).grid(row=1, column=2, pady=(3, 0))
         # Die Leistung gehoert zur Maschine, nicht zum Verfahrweg: sie
         # entscheidet, was dieselbe Energie je Millimeter kostet.
         self.v_watt = tk.DoubleVar(value=float(self.cfg.get("watt", J.WATT)))
@@ -616,7 +616,7 @@ class App:
                     textvariable=self.v_watt, command=self.set_watt
                     ).pack(side="left", padx=3)
         ttk.Label(lw, text=T("W optisch")).pack(side="left")
-        ttk.Button(mf, text=T("übernehmen"), command=self.set_watt, width=8
+        ttk.Button(mf, text=T("übernehmen"), command=self.set_watt, width=11
                    ).grid(row=2, column=2, pady=(3, 0))
         self.lbl_maschine = ttk.Label(mf, text="", style="Muted.TLabel")
         self.lbl_maschine.grid(row=3, column=0, columnspan=3, sticky="w")

@@ -1616,7 +1616,8 @@ class RahmenUndAnfasser(Grundlage):
         self.app._draw()
         texte = [self.app.cv.itemcget(i, "text") for i in self.app.cv.find_all()
                  if self.app.cv.type(i) == "text"]
-        self.assertTrue(any("63.5" in t and "31.8" in t for t in texte), texte)
+        # Deutsche Oberflaeche: Komma.
+        self.assertTrue(any("63,5" in t and "31,8" in t for t in texte), texte)
 
     def test_ohne_motiv_keine_anfasser(self):
         self.app.clear_motif()
@@ -2631,6 +2632,101 @@ class NurDasBild(Grundlage):
         self.app._nurbild_anwenden()
         self.assertIsNot(self.app.src, vorher)
         self.assertFalse(self.app.src_nurbild)
+
+
+@ohne_bildschirm
+class MitDerMausDrehen(Grundlage):
+    """Drehen ging nur ueber ein Zahlenfeld und vier Knoepfe. Ein Motiv
+    gerade auf ein schiefes Brettchen zu legen hiess: Winkel schaetzen,
+    eintippen, hinsehen, wieder eintippen."""
+
+    class Zeiger:
+        def __init__(self, x, y):
+            self.x, self.y = int(x), int(y)
+
+    def aufbauen(self, b=120.0, h=None):
+        self.motiv()
+        self.app.v_lock.set(True)
+        self.app.v_w.set(b)
+        self.app._keep_ratio("w")
+        self.app.v_xoff.set(40.0)
+        self.app.v_yoff.set(40.0)
+        self.app._element_sichern()
+        self.app._draw()
+        return self.app._box()
+
+    def griff(self):
+        return self.Zeiger(*self.app._drehgriff)
+
+    def mitte_zeiger(self, dx, dy):
+        x, y, b, h = self.app._box()
+        mx, my = self.app._mm(x + b / 2, y + h / 2)
+        return self.Zeiger(mx + dx, my + dy)
+
+    def drehen(self, dx, dy):
+        self.app._press(self.griff())
+        self.app._drag_move(self.mitte_zeiger(dx, dy))
+        self.app._drag_ende(self.mitte_zeiger(dx, dy))
+
+    def test_griff_liegt_ueber_der_oberkante(self):
+        x, y, b, h = self.aufbauen()
+        mx, oy = self.app._mm(x + b / 2, y + h)
+        gx, gy = self.app._drehgriff
+        self.assertAlmostEqual(gx, mx, delta=1)
+        self.assertAlmostEqual(gy, oy - self.app.DREHGRIFF, delta=1)
+        art, _, _ = self.app._griff_unter(self.griff())
+        self.assertEqual(art, "dreh")
+
+    def test_ziehen_dreht(self):
+        self.aufbauen()
+        self.app.v_snap.set(True)
+        self.drehen(120, 0)                      # Griff nach rechts
+        self.assertEqual(self.app.v_rot.get() % 360, 270.0)
+
+    def test_motiv_behaelt_seine_groesse_und_mitte(self):
+        """Der umschliessende Kasten dreht sich mit, das Motiv nicht."""
+        x, y, b, h = self.aufbauen()
+        mitte = (x + b / 2, y + h / 2)
+        self.app.v_snap.set(True)
+        self.drehen(120, 0)
+        x2, y2, b2, h2 = self.app._box()
+        self.assertAlmostEqual(b2, h, delta=1.0)     # vertauscht
+        self.assertAlmostEqual(h2, b, delta=1.0)
+        self.assertAlmostEqual(x2 + b2 / 2, mitte[0], delta=1.0)
+        self.assertAlmostEqual(y2 + h2 / 2, mitte[1], delta=1.0)
+
+    def test_einrasten_faengt_bei_fuenfzehn_grad(self):
+        self.aufbauen()
+        self.app.v_snap.set(True)
+        self.drehen(100, 20)                     # irgendwo dazwischen
+        self.assertAlmostEqual(self.app.v_rot.get() % 15, 0.0, places=6)
+
+    def test_ohne_einrasten_jeder_winkel(self):
+        self.aufbauen()
+        self.app.v_snap.set(False)
+        self.drehen(100, 23)
+        self.assertNotAlmostEqual(self.app.v_rot.get() % 15, 0.0, places=3)
+
+    def test_zeigerform_sagt_was_ein_klick_taete(self):
+        x, y, b, h = self.aufbauen()
+        px, py = self.app._mm(x, y + h)
+        qx, qy = self.app._mm(x + b, y)
+        for zeiger, soll in ((self.griff(), "exchange"),
+                             (self.Zeiger(px, py), "top_left_corner"),
+                             (self.Zeiger(qx, qy), "bottom_right_corner"),
+                             (self.Zeiger((px + qx) / 2, (py + qy) / 2), "fleur"),
+                             (self.Zeiger(px - 80, py - 80), "")):
+            self.app._zeiger(zeiger)
+            self.assertEqual(self.app._zeigerform, soll)
+
+    def test_waehrend_des_ziehens_bleibt_die_form(self):
+        """Sonst flackert der Zeiger, sobald der Griff unter der Maus
+        wegwandert - und er wandert beim Drehen staendig."""
+        x, y, b, h = self.aufbauen()
+        self.app._zeiger(self.griff())
+        self.app._press(self.griff())
+        self.app._zeiger(self.Zeiger(5, 5))
+        self.assertEqual(self.app._zeigerform, "exchange")
 
 
 @ohne_bildschirm

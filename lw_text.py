@@ -85,6 +85,9 @@ EN = {
     "Breite": "Width",
     "Höhe": "Height",
     "Seitenverhältnis halten": "Keep aspect ratio",
+    "Werkstück": "Workpiece",
+    "{b} x {h} mm": "{b} x {h} mm",
+    "   {g}°": "   {g}°",
     "Werkstück (Nullpunkt = linke untere Ecke)":
         "Workpiece (origin = bottom left corner)",
     "Länge X": "Length X",
@@ -92,6 +95,12 @@ EN = {
     "anzeigen": "show",
     "einrasten": "snap",
     "Motiv mittig setzen": "Centre the artwork",
+    "Motiv mit der Maus schieben, an den Ecken ziehen zum "
+    "Skalieren,\nam Griff über der Oberkante drehen. Der Nullpunkt "
+    "ist die linke\nuntere Ecke des Werkstücks.":
+        "Drag the artwork with the mouse, pull its corners to scale it,\n"
+        "turn it by the handle above its top edge. The origin is the\n"
+        "lower left corner of the workpiece.",
     "Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren.":
         "Drag the artwork with the mouse, drag a corner to resize.",
     "Größe, Anlauf und Versatz": "Size, overscan and offset",

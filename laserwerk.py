@@ -144,7 +144,10 @@ class App:
         self.cv.bind("<Double-Button-1>", lambda e: self.reset_view())
         self.cv.bind("<Button-1>", self._press)
         self.cv.bind("<B1-Motion>", self._drag_move)
-        self.cv.bind("<ButtonRelease-1>", lambda e: setattr(self, "drag", None))
+        self.cv.bind("<ButtonRelease-1>", self._drag_ende)
+        # Zeigerform folgt dem, was unter der Maus liegt
+        self.cv.bind("<Motion>", self._zeiger)
+        self.cv.bind("<Leave>", lambda e: self.cv.configure(cursor=""))
         ttk.Button(lf, text=T("Ansicht zurücksetzen (Doppelklick)"),
                    command=self.reset_view).pack(fill="x", padx=4, pady=(0, 4))
 
@@ -366,7 +369,7 @@ class App:
         ttk.Checkbutton(f, text=T("Seitenverhältnis halten"), variable=self.v_lock
                         ).grid(row=5, column=0, columnspan=3, sticky="w")
 
-        wk = ttk.LabelFrame(f, text=T("Werkstück (Nullpunkt = linke untere Ecke)"), padding=4)
+        wk = ttk.LabelFrame(f, text=T("Werkstück"), padding=4)
         wk.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(6, 2))
         ttk.Label(wk, text=T("Länge X")).grid(row=0, column=0, sticky="w")
         ttk.Spinbox(wk, from_=1, to=2000, increment=1, width=6,
@@ -411,8 +414,12 @@ class App:
                 row=4, column=0, columnspan=5, sticky="w", pady=(4, 0))
         ttk.Button(wk, text=T("Motiv mittig setzen"), command=self.center_motif
                    ).grid(row=5, column=0, columnspan=5, sticky="ew", pady=(6, 0))
-        self._erklaerung(ttk.Label(wk, text=T("Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren."),
-                  style="Muted.TLabel")).grid(row=6, column=0, columnspan=5, sticky="w")
+        self._erklaerung(ttk.Label(wk, text=T(
+            "Motiv mit der Maus schieben, an den Ecken ziehen zum "
+            "Skalieren,\nam Griff über der Oberkante drehen. Der Nullpunkt "
+            "ist die linke\nuntere Ecke des Werkstücks."),
+            style="Muted.TLabel")).grid(row=6, column=0, columnspan=5,
+                                        sticky="w")
 
         box = ttk.LabelFrame(f, text=T("Größe und Lage"), padding=4)
         box.grid(row=7, column=0, columnspan=3, sticky="ew", pady=6)
@@ -4052,8 +4059,21 @@ class App:
             for hx, hy in ((ax, ay), (cx, ay), (ax, cy), (cx, cy)):
                 cv.create_rectangle(hx - 4, hy - 4, hx + 4, hy + 4,
                                     fill=S.ACCENT, outline="")
-            cv.create_text((ax + cx) / 2, ay - 8, fill=S.ACCENT, anchor="s",
-                           text=T('{0:.1f} x {1:.1f} mm').format(b, h))
+            # Griff zum Drehen: ueber der Oberkante, am Stiel. Dort, wo ihn
+            # jedes Zeichenprogramm hat - und weit genug weg, dass er nicht
+            # mit dem Eckgriff verwechselt wird.
+            gx, gy = (ax + cx) / 2, min(ay, cy) - self.DREHGRIFF
+            self._drehgriff = (gx, gy)
+            cv.create_line(gx, min(ay, cy), gx, gy + 5, fill=S.ACCENT,
+                           dash=(2, 2))
+            cv.create_oval(gx - 5, gy - 5, gx + 5, gy + 5, outline=S.ACCENT,
+                           width=2)
+            cv.create_text((ax + cx) / 2, min(ay, cy) - self.DREHGRIFF - 10,
+                           fill=S.ACCENT, anchor="s",
+                           text=T('{b} x {h} mm').format(b=Z(b, 1), h=Z(h, 1))
+                           + (T('   {g}°').format(g=Z(self.v_rot.get(), 1))
+                              if abs(float(self.v_rot.get() or 0)) > 0.05
+                              else ""))
         if self.lines and not box:      # geladener G-Code ohne Motiv
             ex = J.brenn_extent(self.lines)
             a, b = self._mm(ex[0], ex[3]); c, d = self._mm(ex[1], ex[2])
@@ -4194,32 +4214,104 @@ class App:
         best = min(ziele, key=lambda z: abs(z - wert))
         return best if abs(best - wert) <= tol else wert
 
-    def _press(self, e):
+    DREHGRIFF = 22          # Bildpunkte ueber der Oberkante
+
+    def _griff_unter(self, e):
+        """Was liegt unter dem Zeiger: ein Eckgriff, der Drehgriff, das
+        Motiv selbst - oder nichts. Eine Stelle fuer beides, den Klick und
+        die Zeigerform; sonst fassen sie verschiedene Dinge."""
         box = self._box()
         if box is None:
-            return
+            return None, None, None
         x, y, b, h = box
         px, py = self._mm(x, y + h)                  # linke obere Ecke
         qx, qy = self._mm(x + b, y)                  # rechte untere Ecke
+        gx, gy = (px + qx) / 2, min(py, qy) - self.DREHGRIFF
+        if abs(e.x - gx) <= 9 and abs(e.y - gy) <= 9:
+            return "dreh", None, box
         ecken = {"ul": (px, py), "ur": (qx, py), "ol": (px, qy), "or": (qx, qy)}
         for name, (cx, cy) in ecken.items():
             if abs(e.x - cx) <= 9 and abs(e.y - cy) <= 9:
-                self.drag = ("size", name, box, (e.x, e.y))
-                return
+                return "size", name, box
         # Ein Rahmen ohne Hoehe (gerade Linie) waere sonst gar nicht zu
         # greifen - nur bei duennen Rahmen etwas Luft geben, sonst nicht.
         lx = 0 if abs(qx - px) > 6 else 4
         ly = 0 if abs(qy - py) > 6 else 4
         if min(px, qx) - lx <= e.x <= max(px, qx) + lx and \
                 min(py, qy) - ly <= e.y <= max(py, qy) + ly:
-            self.drag = ("move", None, box, (e.x, e.y))
+            return "move", None, box
+        return None, None, box
+
+    ZEIGER = {("size", "ul"): "top_left_corner",
+              ("size", "ur"): "top_right_corner",
+              ("size", "ol"): "bottom_left_corner",
+              ("size", "or"): "bottom_right_corner",
+              ("dreh", None): "exchange",
+              ("move", None): "fleur"}
+
+    def _drag_ende(self, e):
+        self.drag = None
+        self._zeiger(e)
+
+    def _zeiger(self, e):
+        """Die Zeigerform sagt, was ein Klick hier taete.
+
+        Ohne sie sieht ein Eckgriff aus wie der Rahmen und der Drehgriff
+        wie ein Punkt - man probiert, statt zu sehen.
+        """
+        if self.drag:
+            return
+        art, ecke, _ = self._griff_unter(e)
+        form = self.ZEIGER.get((art, ecke), "")
+        if form != getattr(self, "_zeigerform", None):
+            self._zeigerform = form
+            try:
+                self.cv.configure(cursor=form)
+            except tk.TclError:
+                self.cv.configure(cursor="")        # Form kennt dieses X11 nicht
+
+    def _press(self, e):
+        art, ecke, box = self._griff_unter(e)
+        if art is None:
+            return
+        # Beim Drehen aendert sich der umschliessende Kasten staendig - das
+        # Motiv selbst aber nicht. Gemerkt wird deshalb sein Massstab, nicht
+        # seine Kastenbreite: sonst waechst es beim Drehen, weil die Breite
+        # bleibt und die Hoehe dem neuen Verhaeltnis folgt.
+        bezug = self._bezug_bb()[0]
+        skala = (float(self.v_w.get()) / bezug) if bezug > 0 else None
+        self.drag = (art, ecke, box, (e.x, e.y),
+                     float(self.v_rot.get() or 0.0), skala)
 
     def _drag_move(self, e):
         if not self.drag:
             return
         self.preview_pil = self.preview_img = self.cut_polys = None
-        art, ecke, (bx, by, bb, bh), (sx, sy) = self.drag
+        art, ecke, (bx, by, bb, bh), (sx, sy), grad0, skala = self.drag
         s = self._scale()
+        if art == "dreh":
+            # Winkel zwischen Mitte und Zeiger, Anfang gegen Jetzt. Der
+            # Schirm zaehlt Y nach unten, die Maschine nach oben - deshalb
+            # das Minus, sonst dreht das Motiv andersherum als die Hand.
+            mx, my = self._mm(bx + bb / 2, by + bh / 2)
+            a0 = math.degrees(math.atan2(sy - my, sx - mx))
+            a1 = math.degrees(math.atan2(e.y - my, e.x - mx))
+            grad = (grad0 - (a1 - a0)) % 360
+            if self.v_snap.get():
+                grad = round(grad / 15.0) * 15.0 % 360
+            self.v_rot.set(round(grad, 1))
+            # Der Kasten folgt dem gedrehten Motiv, das Motiv behaelt seine
+            # Groesse. Die Mitte bleibt, wo sie war - gedreht wird um sie,
+            # nicht um die linke untere Ecke.
+            if skala:
+                nb, nh = self._bezug_bb()
+                if nb > 0 and nh > 0:
+                    neu_b, neu_h = nb * skala, nh * skala
+                    self._set_box(bx + bb / 2 - neu_b / 2,
+                                  by + bh / 2 - neu_h / 2, neu_b, neu_h)
+            self._raender_zeigen()
+            self._draw()
+            return
         dx, dy = (e.x - sx) / s, -(e.y - sy) / s
         W, H = float(self.v_bw.get()), float(self.v_bh.get())
         tol = 7 / s                                   # Einrasten: 7 Bildpunkte

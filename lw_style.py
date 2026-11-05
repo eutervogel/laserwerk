@@ -68,7 +68,11 @@ def apply(root, theme=None):
     s.configure("Pos.TLabel", background=BG, foreground=TEXT, font=("DejaVu Sans Mono", 12))
     s.configure("TLabelframe", background=BG, bordercolor=LINE, relief="solid",
                 borderwidth=1, padding=8, lightcolor=BG, darkcolor=BG)
-    s.configure("TLabelframe.Label", background=BG, foreground=MUTED, font=(fam, 9, "bold"))
+    # Ueberschriften der Gruppen: gross genug, um einen Bereich zu finden,
+    # ohne ihn zu lesen. 9 Punkt grau war ein Fluestern zwischen lauter
+    # Feldern - man suchte Zeile fuer Zeile.
+    s.configure("TLabelframe.Label", background=BG, foreground=TEXT,
+                font=(fam, 11, "bold"))
 
     s.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(0, 4, 0, 0),
                 lightcolor=BG, darkcolor=BG, bordercolor=LINE)

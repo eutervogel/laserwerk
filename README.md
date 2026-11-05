@@ -77,7 +77,9 @@ settings for a new material.
   like any other. The project file stores the few numbers, not an image.
 - **Place** — enter the length and width of your workpiece, then drag the
   artwork onto it with the mouse and resize it by its corners, snapping to
-  edges, corners and centre. Rotate to any angle, not just multiples of 90°.
+  edges, corners and centre. Turn it with the mouse by the handle above its
+  top edge, about its centre and to any angle — snapping to 15° steps. The
+  pointer says what a click would do: move, scale, rotate.
   The distances to all four edges sit next to it as fields — readable while
   dragging and typeable when it has to be exactly 5 mm off the right edge.
 - **Trace the outline** — not just the bounding box but the real cut

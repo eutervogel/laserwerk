@@ -2707,6 +2707,32 @@ class MitDerMausDrehen(Grundlage):
         self.drehen(100, 23)
         self.assertNotAlmostEqual(self.app.v_rot.get() % 15, 0.0, places=3)
 
+    def test_knopf_dreht_wie_die_maus(self):
+        """Zwei Wege zum selben Winkel muessen dasselbe Ergebnis haben -
+        sonst wird das Motiv je nach Weg groesser oder kleiner."""
+        self.aufbauen()
+        self.app._dreh_setzen(90)
+        ueber_knopf = (round(self.app.v_w.get(), 1),
+                       round(self.app.v_h.get(), 1))
+        self.app._dreh_setzen(0)
+        self.app.v_snap.set(True)
+        self.drehen(120, 0)                      # dasselbe mit der Maus
+        self.assertEqual(self.app.v_rot.get() % 360, 270.0)
+        self.app._dreh_setzen(90)
+        self.assertEqual((round(self.app.v_w.get(), 1),
+                          round(self.app.v_h.get(), 1)), ueber_knopf)
+
+    def test_drehen_laesst_das_motiv_in_ruhe(self):
+        """Vierteldreh und zurueck: dieselbe Groesse wie vorher. Frueher
+        wuchs das Motiv dabei, weil die Breite blieb und die Hoehe dem
+        neuen Seitenverhaeltnis folgte."""
+        self.aufbauen()
+        vorher = (round(self.app.v_w.get(), 1), round(self.app.v_h.get(), 1))
+        self.app._dreh_setzen(90)
+        self.app._dreh_setzen(0)
+        self.assertEqual((round(self.app.v_w.get(), 1),
+                          round(self.app.v_h.get(), 1)), vorher)
+
     def test_zeigerform_sagt_was_ein_klick_taete(self):
         x, y, b, h = self.aufbauen()
         px, py = self.app._mm(x, y + h)

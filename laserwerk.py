@@ -470,8 +470,13 @@ class App:
         dr = ttk.Frame(f)
         dr.grid(row=9, column=1, columnspan=2, sticky="w")
         sb = ttk.Spinbox(dr, from_=0, to=359.9, increment=5, width=6, wrap=True,
-                         textvariable=self.v_rot, command=self._rotated)
+                         textvariable=self.v_rot,
+                         command=lambda: (self._drehen_merken(),
+                                          self._rotated()))
         sb.pack(side="left")
+        # Vorher merken, nachher anwenden: der Massstab des Motivs laesst
+        # sich nur ablesen, solange der alte Winkel noch steht.
+        sb.bind("<FocusIn>", lambda e: self._drehen_merken())
         sb.bind("<Return>", lambda e: self._rotated())
         sb.bind("<FocusOut>", lambda e: self._rotated())
         ttk.Label(dr, text="°").pack(side="left", padx=(2, 6))
@@ -1743,15 +1748,45 @@ class App:
         self.lbl_gamma.configure(text=f"{g:.1f}")
 
     def _dreh_setzen(self, grad):
+        self._drehen_merken()
         self.v_rot.set(float(grad))
         self._rotated()
 
+    def _drehen_merken(self):
+        """Den Massstab des Motivs festhalten, bevor der Winkel sich
+        aendert - danach laesst er sich nicht mehr ablesen."""
+        try:
+            bezug = self._bezug_bb()[0]
+            self._drehskala = (float(self.v_w.get()) / bezug
+                               if bezug > 0 else None)
+        except (tk.TclError, ValueError, ZeroDivisionError):
+            self._drehskala = None
+
     def _rotated(self):
+        """Nach dem Drehen: Winkel normieren, Kasten nachziehen.
+
+        Gedreht wird das Motiv, nicht sein Kasten. Hier stand
+        _keep_ratio("w"): die Breite blieb, die Hoehe folgte dem neuen
+        Seitenverhaeltnis - aus 120 x 70 wurde beim Vierteldreh 120 x 206,
+        das Motiv wuchs also beim Drehen. Jetzt behaelt es seinen Massstab,
+        der Kasten folgt ihm, und die Mitte bleibt, wo sie war.
+        """
+        alt = self._box()
+        skala = getattr(self, "_drehskala", None)
+        self._drehskala = None
         try:                         # 370 -> 10, -5 -> 355
             self.v_rot.set(round(float(self.v_rot.get()) % 360, 1))
         except tk.TclError:
             return
-        self._keep_ratio("w")
+        nb, nh = self._bezug_bb()
+        if skala and alt and nb > 0 and nh > 0:
+            x, y, b, h = alt
+            neu_b, neu_h = nb * skala, nh * skala
+            self._set_box(x + b / 2 - neu_b / 2, y + h / 2 - neu_h / 2,
+                          neu_b, neu_h)
+        else:
+            self._keep_ratio("w")
+        self._raender_zeigen()
 
     def _gen_knopf(self):
         """Hervorheben, solange kein gueltiger G-Code vorliegt."""
@@ -4299,17 +4334,9 @@ class App:
             grad = (grad0 - (a1 - a0)) % 360
             if self.v_snap.get():
                 grad = round(grad / 15.0) * 15.0 % 360
-            self.v_rot.set(round(grad, 1))
-            # Der Kasten folgt dem gedrehten Motiv, das Motiv behaelt seine
-            # Groesse. Die Mitte bleibt, wo sie war - gedreht wird um sie,
-            # nicht um die linke untere Ecke.
-            if skala:
-                nb, nh = self._bezug_bb()
-                if nb > 0 and nh > 0:
-                    neu_b, neu_h = nb * skala, nh * skala
-                    self._set_box(bx + bb / 2 - neu_b / 2,
-                                  by + bh / 2 - neu_h / 2, neu_b, neu_h)
-            self._raender_zeigen()
+            self._drehskala = skala
+            self.v_rot.set(grad)
+            self._rotated()         # derselbe Weg wie Knopf und Zahlenfeld
             self._draw()
             return
         dx, dy = (e.x - sx) / s, -(e.y - sy) / s

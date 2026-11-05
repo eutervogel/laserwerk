@@ -24,8 +24,16 @@ import lw_vector as L_vector
 
 @ohne_bildschirm
 class Grundlage(unittest.TestCase):
+    # Beschleunigung, Eilgang, Kreuzungstoleranz und Leistung gelten
+    # modulweit und stehen in der Wegwerfkonfiguration. Ein Test, der sie
+    # aendert, aendert sie sonst fuer alle folgenden - die Datei ueberlebt
+    # den Testlauf, und die naechste App liest sie wieder ein.
+    MASCHINE = ("accel", "eilgang", "kreuzung", "watt")
+
     def setUp(self):
         self.wurzel, self.app, self.L = app_bauen()
+        self._modulwerte = (J.ACCEL, J.EILGANG, J.KREUZUNG, J.WATT)
+        self._cfgwerte = {k: self.app.cfg.get(k) for k in self.MASCHINE}
         self.app.zero_ok = True
         self.gezeigt = []
         self.L.messagebox.showerror = lambda t, m: self.gezeigt.append(("!", m))
@@ -37,8 +45,14 @@ class Grundlage(unittest.TestCase):
         self.L.messagebox.askyesnocancel = lambda t, m: False
 
     def tearDown(self):
+        J.ACCEL, J.EILGANG, J.KREUZUNG, J.WATT = self._modulwerte
+        app = getattr(self, "app", None)
+        if app is not None and {k: app.cfg.get(k)
+                                for k in self.MASCHINE} != self._cfgwerte:
+            app.cfg.update(self._cfgwerte)
+            self.L.P.save_config(app.cfg)
         if self.wurzel is not None:
-            app_schliessen(self.wurzel, getattr(self, "app", None))
+            app_schliessen(self.wurzel, app)
 
     def motiv(self, breite=400, hoehe=200):
         """Ein Element anlegen, wie es das Laden einer Datei tut."""
@@ -456,6 +470,19 @@ class NullpunktUeberDieSitzung(Nullpunkt):
         self.app._event("jobend", ("Gravur", "verbindung"))
         self.pumpe(0.3)
         self.assertFalse(self.app.zero_ok)
+
+    def test_fremde_firmware_ohne_startzeile(self):
+        """Die Rettung hing daran, dass der Controller sich mit einer Zeile
+        zurueckmeldet, die "Grbl" heisst. Der Soft-Reset ist aber unser
+        eigener - eine Firmware, die sich anders meldet, darf den Nullpunkt
+        nicht kosten. (Der Creality-Controller kommt die Tage.)"""
+        g = self.gesetzt()
+        g.melden = False                       # Startzeile wird nicht erkannt
+        g.mpos = (150.0, 95.0, 0.0)
+        self.app.stop()
+        self.pumpe(4.0)                        # der Faden wartet 3 s darauf
+        self.assertTrue(self.app.zero_ok)
+        self.assertEqual(g.wco, (120.0, 80.0, 0.0))
 
     def test_nullpunkt_auf_der_maschinennull_ueberlebt_auch(self):
         """Wer ihn setzt, ohne vorher zu fahren, hat den Versatz (0, 0, 0) -
@@ -959,8 +986,10 @@ class AnlaufAusDerMaschine(Grundlage):
     def test_beschleunigung_kommt_aus_dollar_120(self):
         self.app.grbl = Attrappe()
         self.app.grbl.settings["120"] = 250.0
+        self.app.grbl.settings["121"] = 250.0
         self.app._einstellungen_pruefen(self.app.grbl.settings)
         self.assertEqual(self.app.cfg["accel"], 250.0)
+        self.assertEqual(J.ACCEL, 250.0)
 
     def test_gcode_nimmt_den_gerechneten_anlauf(self):
         self.motiv()
@@ -2589,6 +2618,51 @@ class NurDasBild(Grundlage):
         self.app._nurbild_anwenden()
         self.assertIsNot(self.app.src, vorher)
         self.assertFalse(self.app.src_nurbild)
+
+
+@ohne_bildschirm
+class WerteKommenVonDerMaschine(Grundlage):
+    """Beschleunigung, Eilgang und Kreuzungstoleranz gehoeren der Maschine.
+    Als Vorgabe in den Funktionen rechnete jede Schaetzung mit den Werten
+    des Geraets, auf dem Laserwerk entstanden ist: 30 mm/s^2, 3000 mm/min.
+    Eine Creality Falcon2 Pro sagt 500 und 8000 - das ist keine Feinheit,
+    das ist ein anderes Ergebnis."""
+
+    def maschine(self, **werte):
+        self.app.grbl = Attrappe(app=self.app)
+        self.app.grbl.settings.update(werte)
+        self.app._einstellungen_pruefen(self.app.grbl.settings)
+
+    def test_uebernimmt_was_die_maschine_sagt(self):
+        self.maschine(**{"11": 0.02, "110": 25000.0, "111": 8000.0,
+                         "120": 500.0, "121": 500.0})
+        self.assertEqual(J.ACCEL, 500.0)
+        self.assertEqual(J.EILGANG, 8000.0)      # die langsamere Achse bremst
+        self.assertEqual(J.KREUZUNG, 0.02)
+        self.assertEqual(self.app.cfg["accel"], 500.0)
+
+    def test_die_langsamere_achse_zaehlt(self):
+        self.maschine(**{"120": 500.0, "121": 180.0})
+        self.assertEqual(J.ACCEL, 180.0)
+
+    def test_schaetzung_folgt_der_maschine(self):
+        lahm = J.setze_maschine({"accel": 30.0}) and J.fahrzeit(100.0, 1000 / 60)
+        flink = J.setze_maschine({"accel": 500.0}) and J.fahrzeit(100.0, 1000 / 60)
+        self.assertLess(flink, lahm)
+
+    def test_leistung_steht_in_der_konfiguration(self):
+        self.app.v_watt.set(22.0)
+        self.app.set_watt()
+        self.assertEqual(J.WATT, 22.0)
+        self.assertEqual(self.app.cfg["watt"], 22.0)
+        # Dieselbe Energie braucht an 22 W ein Viertel von S/F
+        self.assertAlmostEqual(J.energie(1000, 330), 4.0, delta=0.05)
+        self.assertIn("J/mm", self.app.lbl_watt.cget("text"))
+
+    def test_unsinnige_leistung_wird_abgelehnt(self):
+        self.app.v_watt.set(0.0)
+        self.app.set_watt()
+        self.assertNotEqual(self.app.cfg.get("watt"), 0.0)
 
 
 @ohne_bildschirm

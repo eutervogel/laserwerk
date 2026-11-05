@@ -14,11 +14,38 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 S_MAX = 1000          # $30
-ACCEL = 30.0          # $120 mm/s^2
+POINTER_FEED = 600    # Vorschub fuer Sichtkreuz und sichtbaren Rahmen
+
+# Werte der Maschine. Die Vorgaben sind die des Geraets, auf dem Laserwerk
+# entstanden ist (450 nm, 5,5 W, GRBL 1.1f) - setze_maschine() holt sie aus
+# der Konfiguration, wo sie nach dem ersten '$$' der angeschlossenen
+# Maschine stehen. Ein anderer Laser rechnet voellig anders: 500 statt
+# 30 mm/s^2 und 8000 statt 3000 mm/min Eilgang sind keine Feinheiten.
+ACCEL = 30.0          # $120/$121 mm/s^2
 EILGANG = 3000.0      # $110/$111 mm/min
 KREUZUNG = 0.01       # $11 junction deviation, mm
-POINTER_FEED = 600    # Vorschub fuer Sichtkreuz und sichtbaren Rahmen
-WATT = 5.5            # optische Leistung dieser Diode bei S_MAX
+WATT = 5.5            # optische Leistung bei S_MAX, Watt
+
+
+def setze_maschine(cfg):
+    """Beschleunigung, Eilgang, Kreuzungstoleranz und Leistung uebernehmen.
+
+    Als Vorgabe in der Signatur waeren sie beim Import festgenagelt - ein
+    spaeter gelesenes $$ kaeme nicht mehr an. Deshalb stehen sie im Modul
+    und werden hier gesetzt.
+    """
+    global ACCEL, EILGANG, KREUZUNG, WATT
+    for name, schluessel, kleinste in (("ACCEL", "accel", 1.0),
+                                       ("EILGANG", "eilgang", 60.0),
+                                       ("KREUZUNG", "kreuzung", 1e-4),
+                                       ("WATT", "watt", 0.1)):
+        try:
+            wert = float(cfg.get(schluessel))
+        except (TypeError, ValueError):
+            continue
+        if wert >= kleinste:
+            globals()[name] = wert
+    return dict(accel=ACCEL, eilgang=EILGANG, kreuzung=KREUZUNG, watt=WATT)
 
 
 # ---------------------------------------------------------------- Laden
@@ -447,7 +474,7 @@ def raster_gcode(p, line, s_max, feed, s_min=0, overscan=1.5, x_off=2.0,
     return g, info
 
 
-def fahrzeit(weg, v, accel=ACCEL):
+def fahrzeit(weg, v, accel=None):
     """Zeit fuer eine Strecke aus dem Stand bis zum Stillstand. v in mm/s.
 
     Trapez, solange die Strecke reicht, um v zu erreichen; sonst ein
@@ -455,7 +482,7 @@ def fahrzeit(weg, v, accel=ACCEL):
     """
     if weg <= 0 or v <= 0:
         return 0.0
-    a = max(1e-6, float(accel))
+    a = max(1e-6, float(ACCEL if accel is None else accel))
     if weg >= v * v / a:
         return 2 * v / a + (weg - v * v / a) / v
     return 2 * (weg / a) ** 0.5
@@ -475,7 +502,7 @@ def _ecktempo(u1, u2, accel, delta):
     return math.sqrt(max(1e-9, accel) * delta * s / (1.0 - s))
 
 
-def bahnzeit(pts, v, accel=ACCEL, delta=KREUZUNG):
+def bahnzeit(pts, v, accel=None, delta=None):
     """Zeit fuer eine Punktfolge aus dem Stand bis zum Stillstand.
 
     Wie GRBLs Planer: an jeder Ecke begrenzt $11 das Tempo, dann ein Lauf
@@ -493,7 +520,8 @@ def bahnzeit(pts, v, accel=ACCEL, delta=KREUZUNG):
         return 0.0
     if len(seg) == 1:
         return fahrzeit(seg[0][0], v, accel)
-    a = max(1e-6, float(accel))
+    a = max(1e-6, float(ACCEL if accel is None else accel))
+    delta = KREUZUNG if delta is None else delta
     n = len(seg)
     tempo = [0.0] * (n + 1)                 # erlaubtes Tempo an jedem Punkt
     for i in range(1, n):
@@ -516,19 +544,20 @@ def bahnzeit(pts, v, accel=ACCEL, delta=KREUZUNG):
     return t
 
 
-def energie(s, f, passes=1, watt=WATT):
+def energie(s, f, passes=1, watt=None):
     """Energie je Millimeter in J/mm - das Mass, ob etwas schneidet.
 
     s zaehlt auf der Skala 0..S_MAX, f in mm/min. Nicht uebertragbar auf
     eine andere Maschine: watt ist die optische Leistung dieser Diode.
     """
     try:
+        watt = WATT if watt is None else watt
         return watt * (float(s) / S_MAX) / (float(f) / 60.0) * max(1, int(passes))
     except (TypeError, ValueError, ZeroDivisionError):
         return 0.0
 
 
-def estimate(bahnen, feed, eilwege=(), accel=ACCEL, eil=EILGANG):
+def estimate(bahnen, feed, eilwege=(), accel=None, eil=None):
     """Laufzeit aus den Bahnen, die die Maschine faehrt.
 
     Eine Bahn ist, was ohne Halt durchlaeuft: eine ganze Gravurzeile, eine
@@ -551,7 +580,7 @@ def estimate(bahnen, feed, eilwege=(), accel=ACCEL, eil=EILGANG):
     Stunde.
     """
     v = feed / 60.0
-    ve = eil / 60.0
+    ve = (EILGANG if eil is None else eil) / 60.0
     t = sum(fahrzeit(w, ve, accel) for w in eilwege)
     for b in bahnen:
         t += (bahnzeit(b, v, accel) if hasattr(b, "__len__")

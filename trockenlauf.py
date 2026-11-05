@@ -20,6 +20,7 @@ import os
 import re
 import sys
 
+import lw_job as J
 import lw_presets as P
 import lw_text
 from lw_job import ACCEL, estimate
@@ -359,13 +360,16 @@ def lies(pfad, lauf, bei=None):
 
 def main():
     cfg = P.load_config()
+    # Eilgang, Kreuzungstoleranz und Leistung der angeschlossenen Maschine -
+    # sonst rechnet der Trockenlauf mit anderen Werten als die Vorschau.
+    J.setze_maschine(cfg)
     p = argparse.ArgumentParser(description=T("G-Code durchrechnen, ohne zu fahren"))
     p.add_argument("datei")
     p.add_argument("--x-max", type=float, default=cfg.get("x_max", 295.0))
     p.add_argument("--y-max", type=float, default=cfg.get("y_max", 180.0))
     p.add_argument("--s-max", type=float, default=1000.0,
                    help="$30 der Maschine")
-    p.add_argument("--accel", type=float, default=cfg.get("accel", ACCEL),
+    p.add_argument("--accel", type=float, default=cfg.get("accel", J.ACCEL),
                    help="$120 in mm/s^2")
     p.add_argument("--laser-aus", action="store_true",
                    help="rechnen, als waere $32=0 (G0 brennt dann mit)")

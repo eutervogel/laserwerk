@@ -90,6 +90,15 @@ Material ausprobieren will.
 - **Maschine fahren** — Achsen tippen, Nullpunkt setzen, Z-Referenz,
   Rahmenfahrt um das Motiv, Sichtkreuz mit schwacher Leistung („wo steht er
   gerade?"), Entsperren, einzelne G-Code-Befehle.
+- **Die Maschine sagt ihre Werte selbst** — beim Verbinden liest Laserwerk
+  `$$` und übernimmt Beschleunigung (`$120`/`$121`), Eilgang (`$110`/`$111`)
+  und Kreuzungstoleranz (`$11`) in das Zeitmodell, warnt bei `$30` ≠ 1000,
+  bei abgeschaltetem Lasermodus (`$32`) und bei einem Verfahrweg, der nicht
+  zu `$130`/`$131` passt. Bei zwei verschiedenen Achswerten gilt der
+  kleinere — der bremst. Nur die optische Leistung in Watt trägt man ein:
+  die kennt die Maschine nicht, und ohne sie ist die Energie je Millimeter
+  eine Zahl ohne Bezug. 30 mm/s² und 3000 mm/min sind nicht dasselbe wie
+  500 und 8000.
 - **Material finden** — Fokustest über Z, Materialtest als Feldraster aus
   Leistungen und Vorschüben, Graustufentest mit einem Tonwertkeil je
   Leistung, Presets mit Materialdicke, Leistung, Vorschub,

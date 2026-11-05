@@ -62,15 +62,19 @@ class Attrappe:
     job_running = False
     port = "/dev/attrappe"
 
+    reset_seen = 0                # wie oft der Controller sich neu meldete
+
     def __init__(self, mpos=(0.0, 0.0, 0.0), s30=1000.0, s32=1.0,
                  x130=200.0, y131=200.0, app=None):
         self.app = app            # fuer Ereignisse wie den Neustart
+        self.reset_seen = 0
         self.alarm = None
         self.mpos = tuple(mpos)
         self.wco = (0.0, 0.0, 0.0)
         self.protokoll = []
-        self.settings = {"30": s30, "32": s32, "20": 0.0, "110": 1000.0,
-                         "120": 30.0, "130": x130, "131": y131}
+        self.settings = {"30": s30, "32": s32, "20": 0.0, "11": 0.01,
+                         "110": 1000.0, "111": 1000.0,
+                         "120": 30.0, "121": 30.0, "130": x130, "131": y131}
 
     @property
     def status(self):
@@ -111,13 +115,21 @@ class Attrappe:
         self.alarm = None
         return "ok"
 
+    melden = True                 # meldet der Controller seinen Neustart?
+
     def stop(self):
         """Wie GRBL: anhalten, Soft-Reset - der G92-Versatz ist weg, und der
-        Controller meldet sich mit seiner Startzeile zurueck."""
+        Controller meldet sich mit seiner Startzeile zurueck.
+
+        melden=False ist eine fremde Firmware, deren Startzeile Laserwerk
+        nicht als solche erkennt. Der Nullpunkt muss auch dann zurueck.
+        """
         self.protokoll.append("STOPP")
         self.wco = (0.0, 0.0, 0.0)
-        if self.app is not None:
-            self.app.q.put(("reset", "Grbl 1.1f ['$' for help]"))
+        if self.melden:
+            self.reset_seen += 1
+            if self.app is not None:
+                self.app.q.put(("reset", "Grbl 1.1f ['$' for help]"))
 
     job_errors = 0
     job_done = 0

@@ -74,6 +74,10 @@ class App:
         self.projekt_pfad = None       # zuletzt gespeichertes Projekt
         self.quelle_pfad = None        # Vorlage, wie der Nutzer sie kennt
         self.s_max = float(self.cfg.get("s_max", J.S_MAX))   # $30 der Maschine
+        # Beschleunigung, Eilgang, Kreuzungstoleranz und Leistung gehoeren
+        # der Maschine. Ohne das rechnete jede Schaetzung mit den Werten des
+        # Geraets, auf dem Laserwerk entstanden ist.
+        J.setze_maschine(self.cfg)
         self.area = max(float(self.cfg["x_max"]), float(self.cfg["y_max"]), 10.0)
         self.v_zeig_s = tk.IntVar(value=50)     # Leistung Sichtkreuz/Rahmen
         self.v_zeig_a = tk.DoubleVar(value=3.0)  # Armlaenge des Kreuzes
@@ -625,6 +629,20 @@ class App:
         ttk.Label(vw, text=T("Bestimmt die gezeichnete Arbeitsfläche und die\n"
                              "Warnung, wenn ein Job nicht hineinpasst."),
                   style="Muted.TLabel").grid(row=2, column=0, columnspan=5, sticky="w")
+        ttk.Label(vw, text=T("Leistung")).grid(row=3, column=0, sticky="w",
+                                               pady=(6, 0))
+        self.v_watt = tk.DoubleVar(value=float(self.cfg.get("watt", J.WATT)))
+        ttk.Spinbox(vw, from_=0.5, to=200.0, increment=0.5, width=6,
+                    textvariable=self.v_watt, command=self.set_watt
+                    ).grid(row=3, column=1, sticky="w", pady=(6, 0))
+        ttk.Label(vw, text=T("W optisch")).grid(row=3, column=2, sticky="w",
+                                                pady=(6, 0))
+        ttk.Button(vw, text=T("übernehmen"), command=self.set_watt
+                   ).grid(row=3, column=3, columnspan=2, sticky="ew",
+                          padx=(4, 0), pady=(6, 0))
+        self.lbl_watt = ttk.Label(vw, text="", style="Muted.TLabel")
+        self.lbl_watt.grid(row=4, column=0, columnspan=5, sticky="w")
+        self._watt_zeigen()
 
         # Beide Nullpunktknoepfe nebeneinander in eine Zelle - eine neue
         # Gitterzeile waere die Gelegenheit fuer genau die Ueberdeckung,
@@ -2301,6 +2319,7 @@ class App:
                 sf=s / self.v_f.get(), u=self._s_unten(s), o=s))
         except (tk.TclError, ZeroDivisionError):
             pass
+        self._watt_zeigen()
 
     # --------------------------------------------------- Laufzeit
     def _zeitfaktor(self):
@@ -2521,6 +2540,42 @@ class App:
             self.q.put(("msg", T("Nullpunkt konnte nicht wiederhergestellt "
                                  "werden ({r}) - bitte neu setzen.").format(r=r)))
 
+    def set_watt(self):
+        """Optische Leistung uebernehmen. Sie steht in keinem $-Wert: die
+        Maschine kennt ihre Watt nicht, nur ihre Skala."""
+        try:
+            w = float(self.v_watt.get())
+        except tk.TclError:
+            return
+        if not (0.1 <= w <= 500):
+            messagebox.showerror(T("Leistung"), T("Wert zwischen 0,1 und 500 W."))
+            return
+        self.cfg["watt"] = w
+        P.save_config(self.cfg)
+        J.setze_maschine(self.cfg)
+        self._watt_zeigen()
+        self._log(T("Leistung der Maschine: {w:.1f} W").format(w=w))
+
+    def _watt_zeigen(self):
+        """Was die Leistung fuer die eingestellten Werte bedeutet.
+
+        Die Presets sind an 5,5 W gemessen. An einer staerkeren Maschine
+        bringt dasselbe S/F ein Mehrfaches an Energie - und wer das nicht
+        umrechnet, verbrennt das erste Brett.
+        """
+        if not hasattr(self, "lbl_watt"):
+            return
+        try:
+            s, f = int(self.v_s.get()), int(self.v_f.get())
+        except (tk.TclError, AttributeError):
+            s, f = 830, 1000
+        j = J.energie(s, f, 1, self._watt())
+        self.lbl_watt.configure(text=T(
+            "Geht in die Energie je Millimeter ein: S{s}/F{f} = {j:.2f} J/mm.\n"
+            "Die mitgelieferten Werte sind an 5,5 W gemessen - an einer\n"
+            "stärkeren Maschine braucht dieselbe Energie S/F mal {v:.2f}."
+            ).format(s=s, f=f, j=j, v=5.5 / max(0.1, self._watt())))
+
     def _flaeche_titel(self):
         self.lf_flaeche.configure(text=T(
             "Arbeitsbereich ({x:.0f} x {y:.0f} mm, Nullpunkt unten links)").format(
@@ -2579,9 +2634,24 @@ class App:
                          "(S{a:.0f} wird S{b:.0f}).").format(
                 ist=s30, soll=J.S_MAX, a=self.v_s.get(),
                 b=self._s(self.v_s.get())))
-        if d.get("120"):
-            self.cfg["accel"] = float(d["120"])
+        # Was die Maschine selbst sagt, zaehlt mehr als jede Vorgabe. Bei
+        # unterschiedlichen Achsen die kleinere: die bremst den Weg.
+        gelesen = {}
+        if d.get("120") or d.get("121"):
+            gelesen["accel"] = min(v for v in (d.get("120"), d.get("121")) if v)
+        if d.get("110") or d.get("111"):
+            gelesen["eilgang"] = min(v for v in (d.get("110"), d.get("111")) if v)
+        if d.get("11"):
+            gelesen["kreuzung"] = float(d["11"])
+        alt = {k: self.cfg.get(k) for k in gelesen}
+        if gelesen and alt != gelesen:
+            self.cfg.update(gelesen)
             P.save_config(self.cfg)
+            J.setze_maschine(self.cfg)
+            self._log(T("Von der Maschine übernommen: {b:.0f} mm/s² "
+                        "Beschleunigung, {e:.0f} mm/min Eilgang, "
+                        "$11 = {k:.3f} mm").format(
+                            b=J.ACCEL, e=J.EILGANG, k=J.KREUZUNG))
             self._anlauf_zeigen()
         if d.get("32") is not None and d["32"] < 0.5:
             hin.append(T("$32 = 0: Der Lasermodus ist AUS. Der Strahl brennt dann "
@@ -3014,7 +3084,25 @@ class App:
             wco = st if any(st) else None
         self._rettung = (wco, self.zero_ok, self.zref_ok, time.time())
         self._log(T("STOPP"))
-        threading.Thread(target=self.grbl.stop, daemon=True).start()
+        # Die Rettung haengt sonst daran, dass der Controller sich mit einer
+        # Zeile zurueckmeldet, die "Grbl" heisst. Der Soft-Reset ist aber
+        # unser eigener: kommt keine erkannte Startzeile, holt dieser Faden
+        # den Nullpunkt selbst zurueck. Eine fremde Firmware sagt etwas
+        # anderes - und der Nullpunkt waere ohne das weg.
+        vorher = getattr(self.grbl, "reset_seen", 0)
+
+        def werk():
+            self.grbl.stop()
+            for _ in range(30):                   # bis zu 3 s
+                if getattr(self.grbl, "reset_seen", 0) != vorher:
+                    return                        # das Ereignis macht es
+                time.sleep(0.1)
+            self.q.put(("msg", T("Keine erkannte Startzeile nach dem "
+                                 "Soft-Reset - der Nullpunkt wird ohne sie "
+                                 "wiederhergestellt.")))
+            self._nullpunkt_retten()
+
+        threading.Thread(target=werk, daemon=True).start()
 
     # ================================================================ Aussehen
     def _theme_label(self):

@@ -86,6 +86,15 @@ settings for a new material.
 - **Drive the machine** — jog the axes, set the origin, set a Z reference,
   trace a frame around the artwork, show where the head stands with a short
   sight cross at low power, unlock, send single G-code commands.
+- **The machine states its own numbers** — on connecting, Laserwerk reads
+  `$$` and takes acceleration (`$120`/`$121`), rapid rate (`$110`/`$111`) and
+  junction deviation (`$11`) into the timing model; it warns about `$30` ≠
+  1000, about laser mode being off (`$32`) and about a travel that does not
+  match `$130`/`$131`. Where two axes differ, the smaller value wins — that
+  is the one that slows the path down. Only the optical power in watts is
+  typed in: the machine does not know it, and without it the energy per
+  millimetre is a number without a reference. 30 mm/s² and 3000 mm/min are
+  not the same thing as 500 and 8000.
 - **Find material settings** — a focus test along Z, a material test as a grid
   of power and feed values, a greyscale test with one tonal wedge per power,
   and presets holding thickness, power, feed, row pitch,

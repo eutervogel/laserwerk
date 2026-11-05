@@ -8,6 +8,11 @@ das Verhaeltnis S/F, also die Energie je Millimeter; die Leistungen selbst
 beziehen sich auf die Skala 0..1000 und werden beim Senden auf $30 der
 angeschlossenen Maschine umgerechnet.
 
+An einer anderen Leistung gilt dieselbe Energie bei S/F mal 5,5/Watt: wer
+diese Werte auf einen 22-W-Laser uebertraegt, braucht ein Viertel davon -
+sonst verbrennt das erste Brett. Die eingetragene Leistung steht unter
+"Maschine", die Energie je Millimeter neben jedem Schnitt.
+
 Z-Logik: Die Z-Referenz wird so gesetzt, dass Z = Materialdicke im Fokus
 bedeutet. Ein Preset faehrt dann auf Z = dicke + korrektur. Die Dicke bringt
 es selbst mit, die Korrektur nicht: die sagt, wo die Brennebene wirklich zur
@@ -49,9 +54,13 @@ CONFIG_DEFAULTS = {"z_invert": False, "jog_feed": 1000, "port": "",
                    "x_max": 200.0, "y_max": 200.0, "theme": "dunkel",
                    "brett_x": 100.0, "brett_y": 50.0, "brett_an": True,
                    "einrasten": True, "sprache": "de",
-                   "accel": 30.0,
-                   # Optische Leistung bei S1000. Geht nur in die Anzeige
-                   # der Energie je Millimeter ein, nicht in den G-Code.
+                   # Werte der angeschlossenen Maschine. Beim ersten '$$'
+                   # nach dem Verbinden ueberschreibt Laserwerk sie mit dem,
+                   # was die Maschine selbst sagt ($120/$121, $110/$111, $11).
+                   "accel": 30.0, "eilgang": 3000.0, "kreuzung": 0.01,
+                   # Optische Leistung bei S1000. Geht in die Energie je
+                   # Millimeter ein, nicht in den G-Code. Muss von Hand
+                   # stimmen - die Maschine sagt ihre Leistung nicht.
                    "watt": 5.5,
                    # Materialdicke und Fokuskorrektur ueberleben den Neustart.
                    # Die Korrektur misst der Fokustest, sie gehoert zur

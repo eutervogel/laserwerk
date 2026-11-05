@@ -309,16 +309,30 @@ class App:
         return None
 
     def _row(self, parent, r, label, var, width=8, unit=""):
+        """Eine Zeile: Beschriftung, Feld, Einheit.
+
+        Feld und Einheit stehen zusammen in einer Zelle. In einer eigenen
+        Gitterspalte wandert die Einheit dorthin, wo das breiteste Widget
+        des ganzen Reiters endet - bei der Elementliste also an den rechten
+        Rand, meterweit vom Feld entfernt, zu dem sie gehoert.
+        """
         ttk.Label(parent, text=T(label)).grid(row=r, column=0, sticky="w", pady=2)
-        e = ttk.Entry(parent, textvariable=var, width=width)
-        e.grid(row=r, column=1, sticky="w")
+        zelle = ttk.Frame(parent)
+        zelle.grid(row=r, column=1, columnspan=2, sticky="w")
+        e = ttk.Entry(zelle, textvariable=var, width=width)
+        e.pack(side="left")
         if unit:
-            ttk.Label(parent, text=T(unit)).grid(row=r, column=2, sticky="w")
+            ttk.Label(zelle, text=T(unit)).pack(side="left", padx=(6, 0))
         return e
 
     # ---------------------------------------------------------------- Motiv
     def _build_motiv(self):
         f = self.tab_motiv
+        # Breite Widgets ueber alle drei Spalten (Liste, Dateiname) verteilen
+        # ihren Ueberschuss sonst gleichmaessig - die Beschriftungsspalte
+        # wird dadurch dreimal so breit wie "Breite", und die Felder stehen
+        # weit eingerueckt. Der Platz gehoert nach rechts.
+        f.columnconfigure(2, weight=1)
         ob = ttk.Frame(f)
         ob.grid(row=0, column=0, columnspan=3, sticky="ew")
         o1 = ttk.Frame(ob)

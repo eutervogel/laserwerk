@@ -2722,6 +2722,31 @@ class MitDerMausDrehen(Grundlage):
         self.assertEqual((round(self.app.v_w.get(), 1),
                           round(self.app.v_h.get(), 1)), ueber_knopf)
 
+    def test_zahlenfeld_dreht_wie_die_knoepfe(self):
+        """Der Weg ueber das Feld haengt an keinem Vormerken mehr: der
+        Massstab kommt aus dem Winkel, zu dem die Masse gehoeren."""
+        self.aufbauen()
+        self.app._dreh_setzen(45)
+        ueber_knopf = (round(self.app.v_w.get(), 1),
+                       round(self.app.v_h.get(), 1))
+        self.app._dreh_setzen(0)
+        self.app.v_rot.set(45)            # wie eingetippt, ohne Vorlauf
+        self.app._rotated()
+        self.assertEqual((round(self.app.v_w.get(), 1),
+                          round(self.app.v_h.get(), 1)), ueber_knopf)
+
+    def test_elementwechsel_verwirrt_die_drehung_nicht(self):
+        """Jedes Element bringt seinen eigenen Winkel mit - die Masse des
+        einen duerfen nicht am Winkel des anderen gemessen werden."""
+        self.aufbauen()
+        self.app._dreh_setzen(90)
+        gedreht = (round(self.app.v_w.get(), 1), round(self.app.v_h.get(), 1))
+        self.app._element_sichern()
+        self.app._element_laden(0, zeichnen=False)
+        self.app._dreh_setzen(90)         # schon dort: darf nichts aendern
+        self.assertEqual((round(self.app.v_w.get(), 1),
+                          round(self.app.v_h.get(), 1)), gedreht)
+
     def test_drehen_laesst_das_motiv_in_ruhe(self):
         """Vierteldreh und zurueck: dieselbe Groesse wie vorher. Frueher
         wuchs das Motiv dabei, weil die Breite blieb und die Hoehe dem

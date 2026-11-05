@@ -53,6 +53,7 @@ class App:
         self._prev_cache = None
         self._live_cache = None      # Motivbild in der aktuellen Zoomstufe
         self.drag = None             # laufende Maus-Aktion
+        self._rot_alt = 0.0          # Winkel, zu dem die Masse gehoeren
         self.v_bw = tk.DoubleVar(value=self.cfg["brett_x"])   # Brettchen X
         self.v_bh = tk.DoubleVar(value=self.cfg["brett_y"])   # Brettchen Y
         self.v_board = tk.BooleanVar(value=self.cfg["brett_an"])
@@ -470,13 +471,8 @@ class App:
         dr = ttk.Frame(f)
         dr.grid(row=9, column=1, columnspan=2, sticky="w")
         sb = ttk.Spinbox(dr, from_=0, to=359.9, increment=5, width=6, wrap=True,
-                         textvariable=self.v_rot,
-                         command=lambda: (self._drehen_merken(),
-                                          self._rotated()))
+                         textvariable=self.v_rot, command=self._rotated)
         sb.pack(side="left")
-        # Vorher merken, nachher anwenden: der Massstab des Motivs laesst
-        # sich nur ablesen, solange der alte Winkel noch steht.
-        sb.bind("<FocusIn>", lambda e: self._drehen_merken())
         sb.bind("<Return>", lambda e: self._rotated())
         sb.bind("<FocusOut>", lambda e: self._rotated())
         ttk.Label(dr, text="°").pack(side="left", padx=(2, 6))
@@ -1017,6 +1013,7 @@ class App:
         elif not vec and self.v_job.get() in ("schnitt", "beides"):
             self.v_job.set("gravur")
         self.v_rot.set(0)
+        self._rot_alt = 0.0
         name = anzeige or os.path.basename(p)
         self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
             name, im.width, im.height))
@@ -1098,6 +1095,7 @@ class App:
         self.ebene = None
         self._vecdreh = self._live_cache = None
         self.v_rot.set(0)
+        self._rot_alt = 0.0
         self.v_job.set("schnitt")          # eine Form ist zum Schneiden da
         self.lbl_src.configure(text=anzeige)
         self.elemente.append({"anzeige": anzeige, "src": im, "vec": polys,
@@ -1331,6 +1329,8 @@ class App:
                         pass
         finally:
             self._still = False
+        # Die Masse dieses Elements gehoeren zu SEINEM Winkel.
+        self._rot_alt = float(self.v_rot.get() or 0.0)
         self.lbl_src.configure(text=T('{0}\n{1} x {2} px').format(
             e["anzeige"], e["src"].width, e["src"].height))
         self._bk_zeigen(); self._gamma_zeigen(); self._show_sf()
@@ -1636,14 +1636,14 @@ class App:
         self._log(T("{n} Element(e) auf '{art}' umgestellt.").format(
             n=len(geht), art=self._artname(art)))
 
-    def _vec_dreh_bb(self):
+    def _vec_dreh_bb(self, grad=None):
         """Ausdehnung der GEDREHTEN Konturen. Das gedrehte Rechteck um eine
         Kontur ist meist groesser als das Rechteck um die gedrehte Kontur -
         wer damit rechnet, setzt das Motiv nicht wirklich mittig."""
         if not self.vec:
             return None
         try:
-            grad = round(float(self.v_rot.get()), 1)
+            grad = round(float(self.v_rot.get() if grad is None else grad), 1)
         except tk.TclError:
             grad = 0.0
         if self._vecdreh and self._vecdreh[0] == grad:
@@ -1653,27 +1653,30 @@ class App:
         self._vecdreh = (grad, (x1 - x0, y1 - y0))
         return self._vecdreh[1]
 
-    def _dreh_bb(self, w, h):
+    def _dreh_bb(self, w, h, grad=None):
         """Umschliessendes Rechteck nach dem Drehen - fuer jeden Winkel, nicht
         nur fuer Vielfache von 90 Grad."""
         try:
-            a = math.radians(float(self.v_rot.get()))
+            a = math.radians(float(self.v_rot.get() if grad is None else grad))
         except tk.TclError:
             return w, h
         c, s = abs(math.cos(a)), abs(math.sin(a))
         return w * c + h * s, w * s + h * c
 
-    def _bezug_bb(self):
+    def _bezug_bb(self, grad=None):
         """Ausdehnung der Vorlage, auf die sich Breite und Hoehe beziehen.
 
         Beim Schneiden ist das die echte Kontur, beim Gravieren das
         gerenderte Bild - das ist breiter, weil die Strichdicke mitzaehlt.
+        Mit 'grad' auch fuer einen anderen als den eingestellten Winkel:
+        nur so laesst sich nach dem Drehen ausrechnen, wie gross das Motiv
+        vorher war.
         """
         if self.src is None:
             return 0.0, 0.0
         if self.v_job.get() == "schnitt" and self.vec:
-            return self._vec_dreh_bb()
-        return self._dreh_bb(*self.src.size)
+            return self._vec_dreh_bb(grad)
+        return self._dreh_bb(*self.src.size, grad=grad)
 
     def _aspect(self):
         """Seitenverhaeltnis der Vorlage, oder None, wenn es keines gibt.
@@ -1748,36 +1751,35 @@ class App:
         self.lbl_gamma.configure(text=f"{g:.1f}")
 
     def _dreh_setzen(self, grad):
-        self._drehen_merken()
         self.v_rot.set(float(grad))
         self._rotated()
-
-    def _drehen_merken(self):
-        """Den Massstab des Motivs festhalten, bevor der Winkel sich
-        aendert - danach laesst er sich nicht mehr ablesen."""
-        try:
-            bezug = self._bezug_bb()[0]
-            self._drehskala = (float(self.v_w.get()) / bezug
-                               if bezug > 0 else None)
-        except (tk.TclError, ValueError, ZeroDivisionError):
-            self._drehskala = None
 
     def _rotated(self):
         """Nach dem Drehen: Winkel normieren, Kasten nachziehen.
 
-        Gedreht wird das Motiv, nicht sein Kasten. Hier stand
-        _keep_ratio("w"): die Breite blieb, die Hoehe folgte dem neuen
-        Seitenverhaeltnis - aus 120 x 70 wurde beim Vierteldreh 120 x 206,
-        das Motiv wuchs also beim Drehen. Jetzt behaelt es seinen Massstab,
-        der Kasten folgt ihm, und die Mitte bleibt, wo sie war.
+        Gedreht wird das MOTIV, nicht sein Kasten. Hier stand
+        _keep_ratio("w"): die Breite blieb stehen und die Hoehe folgte dem
+        neuen Seitenverhaeltnis - aus 90 x 52,5 wurde beim Vierteldreh
+        90 x 154, das Motiv wuchs also beim Drehen um zwei Drittel. Will
+        aber niemand: man dreht ein Schild, man vergroessert es nicht.
+
+        Der Massstab kommt aus dem Winkel, bei dem die jetzigen Masse
+        entstanden sind (_rot_alt). Ihn vorher zu merken hiesse, sich auf
+        jeden Weg einzeln zu verlassen - Knopf, Zahlenfeld, Mausgriff,
+        Preset, Projekt. So rechnet ihn jeder Weg selbst aus.
         """
         alt = self._box()
-        skala = getattr(self, "_drehskala", None)
-        self._drehskala = None
+        alt_grad = getattr(self, "_rot_alt", 0.0)
         try:                         # 370 -> 10, -5 -> 355
             self.v_rot.set(round(float(self.v_rot.get()) % 360, 1))
         except tk.TclError:
             return
+        vorher = self._bezug_bb(alt_grad)[0]
+        self._rot_alt = float(self.v_rot.get())
+        try:
+            skala = float(self.v_w.get()) / vorher if vorher > 0 else None
+        except (tk.TclError, ValueError):
+            skala = None
         nb, nh = self._bezug_bb()
         if skala and alt and nb > 0 and nh > 0:
             x, y, b, h = alt
@@ -4309,20 +4311,14 @@ class App:
         art, ecke, box = self._griff_unter(e)
         if art is None:
             return
-        # Beim Drehen aendert sich der umschliessende Kasten staendig - das
-        # Motiv selbst aber nicht. Gemerkt wird deshalb sein Massstab, nicht
-        # seine Kastenbreite: sonst waechst es beim Drehen, weil die Breite
-        # bleibt und die Hoehe dem neuen Verhaeltnis folgt.
-        bezug = self._bezug_bb()[0]
-        skala = (float(self.v_w.get()) / bezug) if bezug > 0 else None
         self.drag = (art, ecke, box, (e.x, e.y),
-                     float(self.v_rot.get() or 0.0), skala)
+                     float(self.v_rot.get() or 0.0))
 
     def _drag_move(self, e):
         if not self.drag:
             return
         self.preview_pil = self.preview_img = self.cut_polys = None
-        art, ecke, (bx, by, bb, bh), (sx, sy), grad0, skala = self.drag
+        art, ecke, (bx, by, bb, bh), (sx, sy), grad0 = self.drag
         s = self._scale()
         if art == "dreh":
             # Winkel zwischen Mitte und Zeiger, Anfang gegen Jetzt. Der
@@ -4334,7 +4330,6 @@ class App:
             grad = (grad0 - (a1 - a0)) % 360
             if self.v_snap.get():
                 grad = round(grad / 15.0) * 15.0 % 360
-            self._drehskala = skala
             self.v_rot.set(grad)
             self._rotated()         # derselbe Weg wie Knopf und Zahlenfeld
             self._draw()

@@ -34,6 +34,20 @@ def T(text):
     return EN.get(text, text)
 
 
+def Z(wert, n=1):
+    """Eine Zahl, wie sie in der eingestellten Sprache geschrieben wird.
+
+    Im Deutschen mit Komma. "5.5 W" in einer deutschen Oberflaeche ist das
+    kleine Zeichen dafuer, dass niemand hingesehen hat - und es steht an
+    hundert Stellen. Deshalb hier und nicht in jedem Format.
+    """
+    try:
+        s = ("%%.%df" % max(0, int(n))) % float(wert)
+    except (TypeError, ValueError):
+        return str(wert)
+    return s.replace(".", ",") if SPRACHE == "de" else s
+
+
 def fehlende(texte):
     """Welche der uebergebenen Texte haben keine Uebersetzung? (fuer Tests)"""
     return [t for t in texte if t not in EN]
@@ -813,11 +827,18 @@ EN = {
         "others. Set its size and offset by hand.",
     "Originalmaß der Zeichnung: {b:.1f} x {h:.1f} mm.":
         "Drawing's own size: {b:.1f} x {h:.1f} mm.",
+    # ---- Statuszeile
+    "keine Maschine": "no machine",
+    "Nullpunkt steht": "origin set",
+    "kein Nullpunkt": "no origin",
+    "Z-Referenz steht": "Z reference set",
+    "F{v:.0f}  S{s:.0f}": "F{v:.0f}  S{s:.0f}",
+    "X {x}   Y {y}   Z {z}": "X {x}   Y {y}   Z {z}",
     # ---- Maschinenprofile ("Maschine" steht schon oben)
     "anlegen": "add",
     "Presets": "Presets",
     "Neue Maschine": "New machine",
-    "Diodenlaser {w:.1f} W": "Diode laser {w:.1f} W",
+    "Diodenlaser {w} W": "Diode laser {w} W",
     "Diesen Namen gibt es schon.": "That name is already taken.",
     "Erst einen Namen eintragen - oder eine bekannte Maschine aus der "
     "Liste nehmen, die bringt ihre Werte mit.":
@@ -827,10 +848,8 @@ EN = {
     " (aus der Vorlage)": " (from the template)",
     "Maschine: {n} ({x:.0f} x {y:.0f} mm, {w:.1f} W)":
         "Machine: {n} ({x:.0f} x {y:.0f} mm, {w:.1f} W)",
-    "{x:.0f} x {y:.0f} mm, {w:.1f} W, {b:.0f} mm/s², Eilgang "
-    "{e:.0f} mm/min, {n} Presets":
-        "{x:.0f} x {y:.0f} mm, {w:.1f} W, {b:.0f} mm/s², rapid "
-        "{e:.0f} mm/min, {n} presets",
+    "{x} x {y} mm, {w} W, {b} mm/s², Eilgang {e} mm/min, {n} Presets":
+        "{x} x {y} mm, {w} W, {b} mm/s², rapid {e} mm/min, {n} presets",
     "Auf '{n}' umschalten?\n\nVerfahrweg, Beschleunigung, Eilgang, "
     "Leistung, Fokuskorrektur, Laufzeitmessungen und die Presets wechseln "
     "mit. Der Stand von '{a}' wird vorher gesichert.":
@@ -859,7 +878,7 @@ EN = {
     "Leistung": "Power",
     "W optisch": "W optical",
     "Wert zwischen 0,1 und 500 W.": "A value between 0.1 and 500 W.",
-    "Gravur S{s}/F{f} = {j:.2f} J/mm": "Engraving S{s}/F{f} = {j:.2f} J/mm",
+    "Gravur S{s}/F{f} = {j} J/mm": "Engraving S{s}/F{f} = {j} J/mm",
     "Leistung der Maschine: {w:.1f} W - mitgelieferte Werte sind an 5,5 W "
     "gemessen, dieselbe Energie braucht hier S/F mal {v:.2f}.":
         "Machine power: {w:.1f} W - the settings shipped here were measured "

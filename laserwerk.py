@@ -20,7 +20,7 @@ import lw_vector as V
 import lw_projekt as PR
 import lw_telegram as TG
 import lw_text
-from lw_text import T
+from lw_text import T, Z
 
 AREA = 200.0          # mm, Voreinstellung; wirklich gilt cfg["x_max"]/["y_max"]
 CANVAS = 540          # px
@@ -178,13 +178,20 @@ class App:
         jb.grid(row=1, column=0, columnspan=2, sticky="ew")
         self.btn_gen = ttk.Button(jb, text=T("Erzeugen"), command=self.generate)
         self.btn_gen.grid(row=0, column=0, padx=(0, 10))
-        for i, (t, f, st) in enumerate([("Rahmen", self.frame, "TButton"),
-                                        ("Kontur", self.kontur, "TButton"),
-                                        ("Start", self.start, "Accent.TButton"),
-                                        ("Pause", self.pause, "TButton"),
-                                        ("Weiter", self.resume, "TButton"),
-                                        ("STOPP", self.stop, "Danger.TButton")]):
-            ttk.Button(jb, text=T(t), command=f, style=st).grid(row=0, column=i + 1, padx=3)
+        # Jeder Knopf wird gemerkt: was gerade nicht geht, soll auch nicht so
+        # aussehen, als ginge es. Ein Knopf, der immer gleich aussieht und
+        # dann eine Meldung zeigt, ist die billigste Art zu beschaeftigen.
+        self.jobknoepfe = {}
+        for i, (name, titel, f, st) in enumerate(
+                [("rahmen", "Rahmen", self.frame, "TButton"),
+                 ("kontur", "Kontur", self.kontur, "TButton"),
+                 ("start", "Start", self.start, "Accent.TButton"),
+                 ("pause", "Pause", self.pause, "TButton"),
+                 ("weiter", "Weiter", self.resume, "TButton"),
+                 ("stopp", "STOPP", self.stop, "Danger.TButton")]):
+            k = ttk.Button(jb, text=T(titel), command=f, style=st)
+            k.grid(row=0, column=i + 1, padx=3)
+            self.jobknoepfe[name] = k
         # Die beiden Schalter in eine eigene Spalte - frueher lagen sie in
         # derselben Zelle wie STOPP und deckten den Knopf zu.
         sch = ttk.Frame(jb)
@@ -204,14 +211,17 @@ class App:
         if TG.lade().get("auto") and self.v_tg_token.get().strip():
             self.root.after(800, self.fern_start)
 
-        self.lbl_status = ttk.Label(main, text=T("nicht verbunden"), anchor="w",
+        # Eine Zeile, die sagt, woran man ist. Vorher stand das an vier
+        # Stellen: Verbindung unten links, Position und Nullpunkt im Reiter
+        # "Maschine", der Job unten rechts - und die Maschine nur im
+        # Fenstertitel.
+        self.lbl_status = ttk.Label(main, text="", anchor="w",
                                     style="Status.TLabel")
         self.lbl_status.grid(row=2, column=0, sticky="ew", pady=(6, 0))
-        # Zeilenzaehler in die Statuszeile - die Jobleiste ist voll, und hier
-        # steht er neben Zustand und Vorschub, wo man ihn sucht.
         self.lbl_marke = ttk.Label(main, text="", anchor="e",
-                                   style="Status.TLabel")
+                                   style="Pos.TLabel")
         self.lbl_marke.grid(row=2, column=1, sticky="ew", pady=(6, 0))
+        self._status_zeigen()
 
     def _scrollbereich(self, nb, titel):
         """Reiterinhalt in einen scrollbaren Bereich packen - die Spalte ist
@@ -531,9 +541,10 @@ class App:
     def _build_material(self):
         f = self.tab_mat
         self.v_preset = tk.StringVar()
-        self.cb_preset = ttk.Combobox(f, textvariable=self.v_preset, width=30,
+        ttk.Label(f, text=T("Material")).grid(row=0, column=0, sticky="w")
+        self.cb_preset = ttk.Combobox(f, textvariable=self.v_preset, width=24,
                                       values=sorted(self.presets), state="readonly")
-        self.cb_preset.grid(row=0, column=0, columnspan=3, sticky="ew")
+        self.cb_preset.grid(row=0, column=1, columnspan=2, sticky="ew")
         self.cb_preset.bind("<<ComboboxSelected>>", lambda e: self.load_preset())
 
         self.v_dicke = tk.DoubleVar(value=self.cfg.get("dicke", 12.0))
@@ -564,7 +575,8 @@ class App:
         ttk.Label(f, text=T("Notiz")).grid(row=8, column=0, sticky="w")
         ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=9, column=0, columnspan=3, sticky="ew")
 
-        ttk.Button(f, text=T("Übernehmen + Z-Höhe anfahren"), command=self.apply_preset, style="Accent.TButton"
+        ttk.Button(f, text=T("Übernehmen + Z-Höhe anfahren"),
+                   command=self.apply_preset
                    ).grid(row=10, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         ttk.Separator(f).grid(row=11, column=0, columnspan=3, sticky="ew", pady=8)
         self.v_pname = tk.StringVar()
@@ -624,13 +636,11 @@ class App:
         self.lbl_watt.grid(row=4, column=0, columnspan=3, sticky="w")
         self._maschine_zeigen()
         self._watt_zeigen()
-        self.btn_conn = ttk.Button(f, text=T("Verbinden"), command=self.toggle_connect, style="Accent.TButton")
+        self.btn_conn = ttk.Button(f, text=T("Verbinden"),
+                                   command=self.toggle_connect,
+                                   style="Accent.TButton")
         self.btn_conn.grid(row=1, column=0, columnspan=3, sticky="ew", pady=4)
 
-        self.lbl_pos = ttk.Label(f, text=T("X -  Y -  Z -"), style="Pos.TLabel")
-        self.lbl_pos.grid(row=2, column=0, columnspan=3, sticky="w")
-        self.lbl_ref = ttk.Label(f, text="")
-        self.lbl_ref.grid(row=3, column=0, columnspan=3, sticky="w")
 
         jg = ttk.LabelFrame(f, text=T("Verfahren"), padding=4)
         jg.grid(row=4, column=0, columnspan=3, sticky="ew", pady=6)
@@ -1672,6 +1682,64 @@ class App:
             return
         fehlt = self.src is not None and self.lines is None
         self.btn_gen.configure(style="Accent.TButton" if fehlt else "TButton")
+        self._status_zeigen()
+
+    def _status_zeigen(self):
+        """Die eine Zeile, die sagt, woran man gerade ist.
+
+        Maschine, Verbindung, Zustand, Nullpunkt, Z-Referenz - vorher an
+        vier Stellen verteilt, zwei davon im Reiter "Maschine", den man
+        beim Platzieren gar nicht offen hat.
+        """
+        if not hasattr(self, "lbl_status"):
+            return
+        teile = [self._maschine_name() or T("keine Maschine")]
+        if self.grbl.connected:
+            teile.append(self.grbl.port or T("verbunden"))
+            if getattr(self, "zustand", ""):
+                teile.append(self.zustand)
+            if self.grbl.job_running:
+                v, s = getattr(self, "kopf_fs", (0, 0))
+                teile.append(T("F{v:.0f}  S{s:.0f}").format(v=v, s=s))
+        else:
+            teile.append(T("nicht verbunden"))
+        teile.append(T("Nullpunkt steht") if self.zero_ok
+                     else T("kein Nullpunkt"))
+        if self.zref_ok:
+            teile.append(T("Z-Referenz steht"))
+        self.lbl_status.configure(text="   ·   ".join(teile))
+        if not self.grbl.job_running:
+            x, y, z = getattr(self, "kopf_pos", (0.0, 0.0, 0.0))
+            self.lbl_marke.configure(
+                text=T("X {x}   Y {y}   Z {z}").format(
+                    x=Z(x, 2).rjust(8), y=Z(y, 2).rjust(8),
+                    z=Z(z, 2).rjust(7)) if self.grbl.connected else "")
+        self._knoepfe_zeigen()
+
+    def _knoepfe_zeigen(self):
+        """Nur anbieten, was gerade geht.
+
+        Ein Knopf, der immer gleich aussieht und beim Druecken eine Meldung
+        zeigt, beschaeftigt nur. Abgeblendet sagt er dasselbe, ohne dass man
+        ihn druecken muss.
+        """
+        if not hasattr(self, "jobknoepfe"):
+            return
+        verbunden = bool(self.grbl.connected)
+        laeuft = bool(self.grbl.job_running)
+        pausiert = bool(getattr(self.grbl, "pausiert", False))
+        fertig = bool(self.lines)
+        an = lambda b: "normal" if b else "disabled"
+        self.btn_gen.configure(state=an(bool(self.elemente) and not laeuft))
+        self.jobknoepfe["start"].configure(
+            state=an(fertig and verbunden and not laeuft))
+        self.jobknoepfe["pause"].configure(state=an(laeuft and not pausiert))
+        self.jobknoepfe["weiter"].configure(state=an(laeuft and pausiert))
+        self.jobknoepfe["stopp"].configure(state=an(verbunden))
+        self.jobknoepfe["rahmen"].configure(
+            state=an(verbunden and not laeuft and bool(self.elemente)))
+        self.jobknoepfe["kontur"].configure(
+            state=an(verbunden and not laeuft and self._schneidet()))
 
     def _stale(self):
         """Größe/Drehung geändert: erzeugter G-Code passt nicht mehr.
@@ -1737,8 +1805,8 @@ class App:
         laesst sich eine zweite daneben legen.
         """
         if not (self.maschinen.get("maschinen") or {}):
-            name = self.cfg.get("maschine") or T("Diodenlaser {w:.1f} W").format(
-                w=float(self.cfg.get("watt", J.WATT)))
+            name = self.cfg.get("maschine") or T("Diodenlaser {w} W").format(
+                w=Z(self.cfg.get("watt", J.WATT), 1))
             self.cfg["maschine"] = name
             P.maschine_sichern(self.maschinen, name, self.cfg, self.presets)
             P.save_maschinen(self.maschinen)
@@ -1756,11 +1824,11 @@ class App:
         if not hasattr(self, "lbl_maschine"):
             return
         self.lbl_maschine.configure(text=T(
-            "{x:.0f} x {y:.0f} mm, {w:.1f} W, {b:.0f} mm/s², Eilgang "
-            "{e:.0f} mm/min, {n} Presets").format(
-                x=float(self.cfg["x_max"]), y=float(self.cfg["y_max"]),
-                w=self._watt(), b=float(self.cfg.get("accel", J.ACCEL)),
-                e=float(self.cfg.get("eilgang", J.EILGANG)),
+            "{x} x {y} mm, {w} W, {b} mm/s², Eilgang {e} mm/min, "
+            "{n} Presets").format(
+                x=Z(self.cfg["x_max"], 0), y=Z(self.cfg["y_max"], 0),
+                w=Z(self._watt(), 1), b=Z(self.cfg.get("accel", J.ACCEL), 0),
+                e=Z(self.cfg.get("eilgang", J.EILGANG), 0),
                 n=len(self.presets)))
         self.cb_maschine.configure(values=self._maschinen_namen())
         self.v_maschine.set(self._maschine_name())
@@ -2609,8 +2677,10 @@ class App:
         self._rettung = self.null_wco = None
         if self.grbl.connected:
             self.grbl.disconnect()
-            self.btn_conn.configure(text=T("Verbinden"))
-            self.lbl_status.configure(text=T("getrennt"))
+            self.btn_conn.configure(text=T("Verbinden"),
+                                    style="Accent.TButton")
+            self.zustand = ""
+            self._status_zeigen()
             return
         port = self.v_port.get() or (G.ports() or [""])[0]
         if not port:
@@ -2623,8 +2693,11 @@ class App:
             return
         self.cfg["port"] = port
         self._save_cfg()
-        self.btn_conn.configure(text=T("Trennen"))
+        # Verbunden ist "Trennen" kein naechster Schritt mehr, sondern eine
+        # Ausnahme - genau ein hervorgehobener Knopf auf dem Schirm.
+        self.btn_conn.configure(text=T("Trennen"), style="TButton")
         self.zero_ok = self.zref_ok = False
+        self._status_zeigen()
         self._log(T('verbunden: {0}').format(port))
         self._bg(self._lies_einstellungen, T("lese Maschineneinstellungen ($$)"))
 
@@ -2761,8 +2834,8 @@ class App:
         except (tk.TclError, AttributeError):
             s, f = 830, 1000
         self.lbl_watt.configure(text=T(
-            "Gravur S{s}/F{f} = {j:.2f} J/mm").format(
-                s=s, f=f, j=J.energie(s, f, 1, self._watt())))
+            "Gravur S{s}/F{f} = {j} J/mm").format(
+                s=s, f=f, j=Z(J.energie(s, f, 1, self._watt()), 2)))
 
     def _flaeche_titel(self):
         self.lf_flaeche.configure(text=T(
@@ -3411,21 +3484,17 @@ class App:
             x, y, z = (list(d["wpos"]) + [0, 0, 0])[:3]
             if self.v_zinv.get():
                 z = -z
-            self.lbl_pos.configure(text=T('X{0:8.2f}  Y{1:8.2f}  Z{2:7.2f}').format(x, y, z))
-            self.lbl_status.configure(text=T("{port}  |  {zustand}  |  Vorschub {v:.0f}"
-                                             "  Leistung {s:.0f}").format(
-                port=self.grbl.port, zustand=d["state"],
-                v=d["fs"][0] if d["fs"] else 0,
-                s=d["fs"][1] if len(d["fs"]) > 1 else 0))
+            self.kopf_pos = (x, y, z)
+            self.kopf_fs = (d["fs"][0] if d["fs"] else 0,
+                            d["fs"][1] if len(d["fs"]) > 1 else 0)
+            self.zustand = d["state"]
             self.head = (x, y)
             # Den Versatz mitschreiben, solange der Nullpunkt steht. GRBL
             # schickt WCO nur gelegentlich, deshalb nur bei echten Werten.
             if self.zero_ok and any(d.get("wco", ())):
                 self.null_wco = tuple(d["wco"])
             self._draw_head()
-            self.lbl_ref.configure(text=T("Nullpunkt: {null}   Z-Ref: {zref}").format(
-                null=T("gesetzt") if self.zero_ok else T("NICHT gesetzt"),
-                zref=T("gültig") if self.zref_ok else T("fehlt")))
+            self._status_zeigen()
         elif k == "prog":
             done, tot, el, er = d
             self.prog["value"] = done * 1000 / tot
@@ -3451,6 +3520,7 @@ class App:
             self.lbl_prog.configure(text=T('{0}: {1}').format(name, txt)
                                     + (T("   {n} Fehler").format(n=er) if er else ""))
             self.lbl_marke.configure(text="")
+            self._status_zeigen()
             self._log(T('{0}: {1}').format(name, txt))
             # Die Fehlerzahl stand bisher nur in der Fortschrittsanzeige und
             # war mit dem Jobende weg. Hinterher ist sie die einzige Spur,
@@ -3503,7 +3573,8 @@ class App:
                 self._log(T("Controller neu gestartet - Nullpunkt und "
                             "Z-Referenz neu setzen!"))
         elif k == "lost":
-            self.btn_conn.configure(text=T("Verbinden"))
+            self.btn_conn.configure(text=T("Verbinden"), style="Accent.TButton")
+            self.zustand = ""
             self.zero_ok = self.zref_ok = False
             # Position nach einem Abriss unbekannt - ein wiederhergestellter
             # Versatz waere dann schlimmer als gar keiner.

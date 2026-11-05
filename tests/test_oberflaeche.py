@@ -1873,10 +1873,12 @@ class Zeilenzaehler(Grundlage):
         self.assertEqual(marken[0][1], "kontur")
 
     def test_zaehler_verschwindet_am_ende(self):
+        """Nach dem Job steht dort wieder die Position - aber keine Zeile
+        aus einem Job, der vorbei ist."""
         self.motiv()
         self.app.lbl_marke.configure(text="Zeile 5 von 9")
         self.app._event("jobend", ("Gravur", "fertig"))
-        self.assertEqual(self.app.lbl_marke.cget("text"), "")
+        self.assertNotIn("Zeile", self.app.lbl_marke.cget("text"))
 
 
 @ohne_bildschirm
@@ -2621,6 +2623,101 @@ class NurDasBild(Grundlage):
         self.app._nurbild_anwenden()
         self.assertIsNot(self.app.src, vorher)
         self.assertFalse(self.app.src_nurbild)
+
+
+@ohne_bildschirm
+class WasNichtGehtSiehtManAuch(Grundlage):
+    """Start, Pause, Weiter, STOPP, Rahmen und Kontur sahen immer gleich
+    aus und antworteten mit einer Meldung. Abgeblendet sagen sie dasselbe,
+    ohne dass man sie druecken muss."""
+
+    def zustand(self, name):
+        return str(self.app.jobknoepfe[name].cget("state"))
+
+    def test_ohne_verbindung_geht_nur_erzeugen(self):
+        self.motiv()
+        self.app.grbl.connected = False
+        self.app._status_zeigen()
+        self.assertEqual(str(self.app.btn_gen.cget("state")), "normal")
+        for k in ("start", "stopp", "rahmen", "kontur", "pause", "weiter"):
+            self.assertEqual(self.zustand(k), "disabled", k)
+
+    def test_ohne_gcode_kein_start(self):
+        self.motiv()
+        self.app.lines = None
+        self.app._status_zeigen()
+        self.assertEqual(self.zustand("start"), "disabled")
+        self.assertEqual(self.zustand("stopp"), "normal")   # verbunden
+
+    def test_mit_gcode_und_verbindung_geht_start(self):
+        self.motiv()
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.assertEqual(self.zustand("start"), "normal")
+
+    def test_waehrend_des_jobs_kein_start_und_kein_erzeugen(self):
+        self.motiv()
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.app.grbl.job_running = True
+        self.app._status_zeigen()
+        self.assertEqual(self.zustand("start"), "disabled")
+        self.assertEqual(str(self.app.btn_gen.cget("state")), "disabled")
+        self.assertEqual(self.zustand("pause"), "normal")
+        self.assertEqual(self.zustand("weiter"), "disabled")
+
+    def test_pause_und_weiter_schliessen_sich_aus(self):
+        self.motiv()
+        self.app.grbl.job_running = True
+        self.app.grbl.pausiert = True
+        self.app._status_zeigen()
+        self.assertEqual(self.zustand("pause"), "disabled")
+        self.assertEqual(self.zustand("weiter"), "normal")
+
+    def test_stopp_geht_immer_wenn_verbunden(self):
+        """Der eine Knopf, der nie abgeblendet sein darf, solange die
+        Maschine hoeren kann."""
+        self.app.grbl.job_running = True
+        self.app._status_zeigen()
+        self.assertEqual(self.zustand("stopp"), "normal")
+
+
+@ohne_bildschirm
+class EineZeileSagtWoranManIst(Grundlage):
+    """Maschine, Verbindung, Zustand, Nullpunkt und Z-Referenz standen an
+    vier Stellen, zwei davon im Reiter 'Maschine' - den man beim
+    Platzieren gar nicht offen hat."""
+
+    def zeile(self):
+        return self.app.lbl_status.cget("text")
+
+    def test_nennt_die_maschine(self):
+        self.app._status_zeigen()
+        self.assertIn(self.app._maschine_name(), self.zeile())
+
+    def test_sagt_ob_verbunden(self):
+        self.app.grbl.connected = False
+        self.app._status_zeigen()
+        self.assertIn("nicht verbunden", self.zeile())
+        self.app.grbl.connected = True
+        self.app._status_zeigen()
+        self.assertNotIn("nicht verbunden", self.zeile())
+
+    def test_sagt_ob_der_nullpunkt_steht(self):
+        self.app.zero_ok = False
+        self.app._status_zeigen()
+        self.assertIn("kein Nullpunkt", self.zeile())
+        self.app.zero_ok = True
+        self.app._status_zeigen()
+        self.assertIn("Nullpunkt steht", self.zeile())
+
+    def test_position_steht_rechts(self):
+        self.app._event("status", {"wpos": (12.0, 34.0, 5.0), "state": "Idle",
+                                   "fs": (0, 0), "mpos": (12.0, 34.0, 5.0),
+                                   "wco": (0, 0, 0)})
+        # Deutsche Oberflaeche: Komma, nicht Punkt.
+        self.assertIn("12,00", self.app.lbl_marke.cget("text"))
+        self.assertIn("Idle", self.zeile())
 
 
 @ohne_bildschirm

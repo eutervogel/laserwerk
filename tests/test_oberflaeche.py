@@ -33,6 +33,8 @@ class Grundlage(unittest.TestCase):
         self.L.messagebox.showwarning = lambda t, m: self.gezeigt.append(("w", m))
         self.L.messagebox.askokcancel = lambda t, m: True
         self.L.messagebox.askyesno = lambda t, m: True
+        # Nein heisst "so erzeugen, wie es dasteht" - aendert nichts.
+        self.L.messagebox.askyesnocancel = lambda t, m: False
 
     def tearDown(self):
         if self.wurzel is not None:
@@ -2587,6 +2589,101 @@ class NurDasBild(Grundlage):
         self.app._nurbild_anwenden()
         self.assertIsNot(self.app.src, vorher)
         self.assertFalse(self.app.src_nurbild)
+
+
+@ohne_bildschirm
+class SchnittwerteGeltenJeElement(Grundlage):
+    """Leistung, Vorschub und Durchgaenge fuers Schneiden gehoeren zum
+    Element, und 0 heisst dort "nimm die Gravurwerte". In einem Projekt mit
+    fuenf Baggern stand das an einem Element - das wurde geschnitten, die
+    anderen vier mit S830/F1000 nur angeritzt. In der Liste steht die
+    Betriebsart, die Werte dahinter nicht."""
+
+    def setUp(self):
+        super().setUp()
+        self.gefragt = []
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 200.0, 200.0
+        self.ordner = tempfile.mkdtemp()
+
+    def antwort(self, wert):
+        def frage(titel, text):
+            self.gefragt.append(text)
+            return wert
+        self.L.messagebox.askyesnocancel = frage
+
+    def svg(self, cs=0, cf=0, passes=1):
+        p = os.path.join(self.ordner, "s%d.svg" % len(self.app.elemente))
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="30mm" '
+                    'height="20mm" viewBox="0 0 30 20">'
+                    '<path d="M1 1 H29 V19 H1 Z" stroke="#ff0000" '
+                    'stroke-width="0.1" fill="none"/></svg>')
+        self.app.lade_motiv(p, fragen=False)
+        self.app.v_job.set("schnitt")
+        self.app.v_cs.set(cs)
+        self.app.v_cf.set(cf)
+        self.app.v_passes.set(passes)
+        self.app._element_sichern()
+        return self.app.elemente[-1]
+
+    def test_gleiche_werte_fragen_nicht(self):
+        self.antwort(None)
+        self.svg(cs=500, cf=600, passes=3)
+        self.svg(cs=500, cf=600, passes=3)
+        self.app.generate()
+        self.assertEqual(self.gefragt, [])
+        self.assertTrue(self.app.lines)
+
+    def test_gravurwerte_neben_schnittwerten_fragen_nach(self):
+        self.antwort(False)
+        self.svg()                                  # 0/0 -> S830/F1000 x1
+        self.svg(cs=1000, cf=330, passes=6)
+        self.app.generate()
+        self.assertEqual(len(self.gefragt), 1)
+        self.assertIn("0.27 J/mm", self.gefragt[0])
+        self.assertIn("6.00 J/mm", self.gefragt[0])
+
+    def test_nein_erzeugt_es_wie_es_dasteht(self):
+        self.antwort(False)
+        eins = self.svg()
+        self.svg(cs=1000, cf=330, passes=6)
+        self.app.generate()
+        self.assertTrue(self.app.lines)
+        self.assertEqual(eins["v_cs"], 0)
+        self.assertEqual(eins["v_passes"], 1)
+
+    def test_ja_uebernimmt_die_staerksten_werte(self):
+        self.antwort(True)
+        eins = self.svg()
+        self.svg(cs=1000, cf=330, passes=6)
+        self.app.generate()
+        self.assertEqual((eins["v_cs"], eins["v_cf"], eins["v_passes"]),
+                         (1000, 330, 6))
+        self.assertTrue(self.app.lines)
+
+    def test_abbrechen_erzeugt_nichts(self):
+        self.antwort(None)
+        self.svg()
+        self.svg(cs=1000, cf=330, passes=6)
+        self.app.generate()
+        self.assertIsNone(self.app.lines)
+
+    def test_gravieren_zaehlt_nicht_mit(self):
+        """Ein graviertes Element hat keine Schnittwerte - das darf die
+        Frage nicht ausloesen."""
+        self.antwort(None)
+        self.svg(cs=1000, cf=330, passes=6)
+        self.app.v_job.set("gravur")
+        self.app._element_sichern()
+        self.svg(cs=1000, cf=330, passes=6)
+        self.app.generate()
+        self.assertEqual(self.gefragt, [])
+
+    def test_energie_steht_in_der_beschriftung(self):
+        self.antwort(None)
+        self.svg(cs=1000, cf=330, passes=6)
+        self.app.generate()
+        self.assertIn("J/mm", self.app.lbl_info.cget("text"))
 
 
 @ohne_bildschirm

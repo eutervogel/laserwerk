@@ -50,6 +50,9 @@ CONFIG_DEFAULTS = {"z_invert": False, "jog_feed": 1000, "port": "",
                    "brett_x": 100.0, "brett_y": 50.0, "brett_an": True,
                    "einrasten": True, "sprache": "de",
                    "accel": 30.0,
+                   # Optische Leistung bei S1000. Geht nur in die Anzeige
+                   # der Energie je Millimeter ein, nicht in den G-Code.
+                   "watt": 5.5,
                    # Materialdicke und Fokuskorrektur ueberleben den Neustart.
                    # Die Korrektur misst der Fokustest, sie gehoert zur
                    # Maschine - sie nur in einem Preset abzulegen, das man

@@ -197,6 +197,66 @@ class Laufzeit(unittest.TestCase):
         self.assertLess(mit, ohne)
 
 
+class EckenKostenZeit(unittest.TestCase):
+    """Eine nachgezeichnete Kontur hat Hunderte Richtungswechsel, und an
+    jedem laesst $11 nur noch wenig Tempo durch. Als eine gerade Strecke
+    gerechnet war der Schnitt fast um die Haelfte zu kurz angesagt."""
+
+    def test_gerade_punktfolge_ist_die_gerade_strecke(self):
+        """Geradeaus bremst niemand - sonst waere die Gravurzeile falsch."""
+        pts = [(x, 0.0) for x in range(0, 101)]
+        self.assertAlmostEqual(J.bahnzeit(pts, 1000 / 60.0),
+                               J.fahrzeit(100.0, 1000 / 60.0), places=9)
+
+    def test_zickzack_dauert_laenger_als_die_gerade(self):
+        zick = [(i * 1.0, 0.5 if i % 2 else 0.0) for i in range(101)]
+        weg = sum(((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+                  for a, b in zip(zick, zick[1:]))
+        self.assertGreater(J.bahnzeit(zick, 1000 / 60.0),
+                           2 * J.fahrzeit(weg, 1000 / 60.0))
+
+    def test_spitzer_knick_bremst_mehr_als_ein_flacher(self):
+        import math
+        def knick(grad):
+            r = math.radians(grad)
+            return [(0.0, 0.0), (20.0, 0.0),
+                    (20.0 + 20 * math.cos(r), 20 * math.sin(r))]
+        self.assertGreater(J.bahnzeit(knick(90), 1000 / 60.0),
+                           J.bahnzeit(knick(10), 1000 / 60.0))
+
+    def test_eine_bahn_darf_zahl_oder_punktfolge_sein(self):
+        zahl = J.estimate([100.0], 1000)
+        punkte = J.estimate([[(0.0, 0.0), (100.0, 0.0)]], 1000)
+        self.assertAlmostEqual(zahl, punkte, places=9)
+
+    def test_schnitt_sieht_die_ecken(self):
+        """Dieselbe Schnittlaenge, einmal gerade, einmal nachgezeichnet."""
+        import lw_vector as V
+        gerade = [{"pts": [(0.0, 0.0), (100.0, 0.0)], "closed": False}]
+        zackig = [{"pts": [(i * 1.0, 0.5 if i % 2 else 0.0)
+                           for i in range(101)], "closed": False}]
+        _, a = V.cut_gcode(gerade, 500, 600)
+        _, b = V.cut_gcode(zackig, 500, 600)
+        self.assertAlmostEqual(a["cut_m"], 0.1, places=3)
+        self.assertGreater(b["sekunden"], 2 * a["sekunden"])
+
+
+class EnergieJeMillimeter(unittest.TestCase):
+    def test_gravurwerte_ritzen_nur_an(self):
+        """Genau der Fall aus dem Projekt mit fuenf Baggern: vier Elemente
+        standen auf den Gravurwerten, eines auf echten Schnittwerten."""
+        self.assertAlmostEqual(J.energie(830, 1000, 1), 0.27, delta=0.01)
+        self.assertAlmostEqual(J.energie(1000, 330, 6), 6.0, delta=0.05)
+
+    def test_durchgaenge_zaehlen_mit(self):
+        self.assertAlmostEqual(J.energie(500, 600, 4),
+                               4 * J.energie(500, 600, 1), places=9)
+
+    def test_haelt_unsinn_aus(self):
+        self.assertEqual(J.energie(500, 0), 0.0)
+        self.assertEqual(J.energie(None, 600), 0.0)
+
+
 class Testmuster(unittest.TestCase):
     def test_graustufentest_bildet_die_echte_abbildung_ab(self):
         g, i = J.graustufentest([200], 1000, stufen=6, feld=7.0)

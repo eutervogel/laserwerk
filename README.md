@@ -31,6 +31,13 @@ settings for a new material.
   Floyd-Steinberg dithering, where every dot burns at the same power and the
   tone comes from dot density — the answer for material with a sharp
   threshold. Plus a midtone control and overscan at the row ends.
+- **Energy per millimetre** — what cuts is not the power but
+  `0.33 · S/F · passes` J/mm. Laserwerk prints it next to every cut. And
+  since power, feed and passes belong to the element: when they are far apart
+  within one job, Laserwerk asks before generating and offers to use the
+  strongest for all of them. Before that, one part was cut through while the
+  other four were merely scored with the engraving values — 0.27 against
+  6.0 J/mm, and you only saw it on the workpiece.
 - **Cut** — contours from SVG and DXF, inner before outer, several passes,
   original size 1:1 for templates straight out of CAD.
 - **Both in one run** — engrave first, then cut it out, with its own power and
@@ -94,6 +101,10 @@ settings for a new material.
 - **A runtime estimate that learns** — the estimate computes one
   trapezoid per path from feed rate and acceleration; the axis does not stop
   for a power change, so a finer subdivision does not slow it down either.
+  Direction changes do slow it down: at every corner `$11` only lets a
+  certain speed through, and a traced contour has hundreds of them. Laserwerk
+  accounts for them the way Grbl's planner does — without that, a cut was
+  announced almost half too short.
   After every finished job the log says what was announced and what it took,
   and from the third run on the median of those measurements corrects the
   model. Measured rather than believed — a single run changes nothing.

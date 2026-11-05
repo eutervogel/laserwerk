@@ -16,7 +16,9 @@ from PIL import Image, ImageFilter
 S_MAX = 1000          # $30
 ACCEL = 30.0          # $120 mm/s^2
 EILGANG = 3000.0      # $110/$111 mm/min
+KREUZUNG = 0.01       # $11 junction deviation, mm
 POINTER_FEED = 600    # Vorschub fuer Sichtkreuz und sichtbaren Rahmen
+WATT = 5.5            # optische Leistung dieser Diode bei S_MAX
 
 
 # ---------------------------------------------------------------- Laden
@@ -459,6 +461,73 @@ def fahrzeit(weg, v, accel=ACCEL):
     return 2 * (weg / a) ** 0.5
 
 
+def _ecktempo(u1, u2, accel, delta):
+    """Tempo, mit dem GRBL ueber eine Ecke zwischen zwei Richtungen faehrt.
+
+    Dieselbe Rechnung wie in GRBLs Planer: aus $11 und der Beschleunigung
+    folgt, wie viel Tempo ein Richtungswechsel noch durchlaesst. Geradeaus
+    ist die Grenze unendlich, eine Kehrtwende laesst nichts uebrig.
+    """
+    dot = max(-1.0, min(1.0, u1[0] * u2[0] + u1[1] * u2[1]))
+    s = math.sqrt(max(0.0, 0.5 * (1.0 + dot)))     # cos(halber Wechsel)
+    if s >= 1.0 - 1e-9:
+        return float("inf")
+    return math.sqrt(max(1e-9, accel) * delta * s / (1.0 - s))
+
+
+def bahnzeit(pts, v, accel=ACCEL, delta=KREUZUNG):
+    """Zeit fuer eine Punktfolge aus dem Stand bis zum Stillstand.
+
+    Wie GRBLs Planer: an jeder Ecke begrenzt $11 das Tempo, dann ein Lauf
+    rueckwaerts (rechtzeitig bremsen) und einer vorwaerts (nur so schnell,
+    wie die Strecke hergibt). Eine Kontur als eine gerade Strecke zu
+    rechnen war bei 2500 Abschnitten mit lauter Richtungswechseln fast um
+    die Haelfte zu kurz - genau die Datei, bei der die Ansage daneben lag.
+    """
+    seg = []
+    for a, b in zip(pts, pts[1:]):
+        L = math.hypot(b[0] - a[0], b[1] - a[1])
+        if L > 1e-9:
+            seg.append((L, ((b[0] - a[0]) / L, (b[1] - a[1]) / L)))
+    if not seg:
+        return 0.0
+    if len(seg) == 1:
+        return fahrzeit(seg[0][0], v, accel)
+    a = max(1e-6, float(accel))
+    n = len(seg)
+    tempo = [0.0] * (n + 1)                 # erlaubtes Tempo an jedem Punkt
+    for i in range(1, n):
+        tempo[i] = min(v, _ecktempo(seg[i - 1][1], seg[i][1], a, delta))
+    for i in range(n - 1, -1, -1):
+        tempo[i] = min(tempo[i],
+                       math.sqrt(tempo[i + 1] ** 2 + 2 * a * seg[i][0]))
+    for i in range(n):
+        tempo[i + 1] = min(tempo[i + 1],
+                           math.sqrt(tempo[i] ** 2 + 2 * a * seg[i][0]))
+    t = 0.0
+    for i, (L, _) in enumerate(seg):
+        ve, vx = tempo[i], tempo[i + 1]
+        vp = min(v, math.sqrt((ve * ve + vx * vx) / 2 + a * L))
+        if vp <= 0:
+            continue
+        la = max(0.0, (vp * vp - ve * ve) / (2 * a))
+        lb = max(0.0, (vp * vp - vx * vx) / (2 * a))
+        t += (vp - ve) / a + (vp - vx) / a + max(0.0, L - la - lb) / vp
+    return t
+
+
+def energie(s, f, passes=1, watt=WATT):
+    """Energie je Millimeter in J/mm - das Mass, ob etwas schneidet.
+
+    s zaehlt auf der Skala 0..S_MAX, f in mm/min. Nicht uebertragbar auf
+    eine andere Maschine: watt ist die optische Leistung dieser Diode.
+    """
+    try:
+        return watt * (float(s) / S_MAX) / (float(f) / 60.0) * max(1, int(passes))
+    except (TypeError, ValueError, ZeroDivisionError):
+        return 0.0
+
+
 def estimate(bahnen, feed, eilwege=(), accel=ACCEL, eil=EILGANG):
     """Laufzeit aus den Bahnen, die die Maschine faehrt.
 
@@ -472,12 +541,22 @@ def estimate(bahnen, feed, eilwege=(), accel=ACCEL, eil=EILGANG):
     Graustufenlauf geeicht hat, zog alles andere mit nach unten.
 
     Was wirklich Zeit kostet, ist jeder Halt: am Zeilenende und an jeder
-    Kontur beschleunigt die Achse aus dem Stand und bremst wieder ab.
+    Kontur beschleunigt die Achse aus dem Stand und bremst wieder ab - und
+    jede Ecke dazwischen.
+
+    Eine Bahn ist deshalb entweder eine Zahl (gerade Strecke, zum Beispiel
+    eine Gravurzeile) oder eine Punktfolge. Im zweiten Fall zaehlen die
+    Richtungswechsel mit: eine nachgezeichnete Kontur bremst an jeder Ecke,
+    und das ist der Unterschied zwischen "Laserwerk sagt 43 min" und einer
+    Stunde.
     """
     v = feed / 60.0
     ve = eil / 60.0
-    return (sum(fahrzeit(w, v, accel) for w in bahnen)
-            + sum(fahrzeit(w, ve, accel) for w in eilwege))
+    t = sum(fahrzeit(w, ve, accel) for w in eilwege)
+    for b in bahnen:
+        t += (bahnzeit(b, v, accel) if hasattr(b, "__len__")
+              else fahrzeit(b, v, accel))
+    return t
 
 
 def preview_image(p):
@@ -632,30 +711,24 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     im = Image.new("L", (W, H), 255)
     dr = ImageDraw.Draw(im)
     cut = trav = 0.0
-    # Fremder G-Code sagt nicht, wo eine Bahn aufhoert. Aufeinander folgende
-    # Arbeitsfahrten laufen durch, solange die Richtung ungefaehr stimmt; ein
-    # G0 und ein scharfer Knick beenden die Bahn. Genau trifft das nur die
-    # Richtungswechsel nicht, an denen GRBL je nach Toleranz doch noch Tempo
-    # mitnimmt - fuer eine Vorschau reicht es.
+    # Fremder G-Code sagt nicht, wo eine Bahn aufhoert: alles, was ohne G0
+    # dazwischen weiterlaeuft, ist eine. Wie viel Tempo die Ecken darin
+    # durchlassen, rechnet estimate - hier wurde frueher pauschal bei
+    # ueber 60 Grad angehalten und alles darunter geschenkt.
     bahnen, eilwege = [], []
-    lauf = 0.0
-    richtung = None
+    lauf = []
     for a, b, c, e, p in moves:
         L = ((c - a) ** 2 + (e - b) ** 2) ** 0.5
         if p is None:
-            if lauf:
+            if len(lauf) > 1:
                 bahnen.append(lauf)
-            lauf, richtung = 0.0, None
+            lauf = []
             eilwege.append(L)
             trav += L
             continue
-        neu = ((c - a) / L, (e - b) / L) if L > 1e-9 else richtung
-        if (richtung and neu
-                and richtung[0] * neu[0] + richtung[1] * neu[1] < 0.5):
-            bahnen.append(lauf)         # Knick ueber 60 Grad: Halt
-            lauf = 0.0
-        lauf += L
-        richtung = neu or richtung
+        if not lauf:
+            lauf.append((a, b))
+        lauf.append((c, e))
         cut += L
         dr.line([((a - x0) * sc, H - 1 - (b - y0) * sc),
                  ((c - x0) * sc, H - 1 - (e - y0) * sc)],
@@ -663,7 +736,7 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     im = im.resize((max(1, W // super_), max(1, H // super_)), Image.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, format="PNG")
-    if lauf:
+    if len(lauf) > 1:
         bahnen.append(lauf)
     info = dict(breite=x1 - x0, hoehe=y1 - y0, xmin=x0, xmax=x1, ymin=y0, ymax=y1,
                 befehle=len(lines), cut_m=cut / 1000, trav_m=trav / 1000,

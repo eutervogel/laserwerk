@@ -1673,6 +1673,67 @@ class App:
         self._stale()
         self._draw()
 
+    def _watt(self):
+        """Optische Leistung der Maschine - fuer die Energie je Millimeter."""
+        try:
+            return max(0.1, float(self.cfg.get("watt", J.WATT)))
+        except (TypeError, ValueError):
+            return J.WATT
+
+    def _schnittwerte_pruefen(self):
+        """Schneidende Elemente mit grob verschiedener Energie je Millimeter.
+
+        Leistung, Vorschub und Durchgaenge fuers Schneiden gelten je
+        Element, und 0 heisst dort "nimm die Gravurwerte". Wer sie an einem
+        Element einstellt und an den anderen nicht, schneidet eines durch
+        und ritzt die anderen nur an: S830/F1000 mit einem Durchgang sind
+        0,27 J/mm, sechs Durchgaenge S1000/F330 sind 6,0 - der Faktor 22.
+        In der Elementliste steht die Betriebsart, die Werte dahinter nicht,
+        und zu sehen war der Unterschied erst am Werkstueck.
+        """
+        liste = []
+        for i, e in enumerate(self.elemente):
+            if e.get("v_job") not in ("schnitt", "beides"):
+                continue
+            s = int(e.get("v_cs") or 0) or int(e.get("v_s") or 0)
+            f = int(e.get("v_cf") or 0) or int(e.get("v_f") or 0)
+            n = max(1, int(e.get("v_passes") or 1))
+            if s > 0 and f > 0:
+                liste.append((i, J.energie(s, f, n, self._watt()), s, f, n))
+        if len(liste) < 2:
+            return True
+        stark = max(liste, key=lambda d: d[1])
+        schwach = min(liste, key=lambda d: d[1])
+        if schwach[1] <= 0 or stark[1] / schwach[1] < 2:
+            return True
+        zeilen = "\n".join(
+            T("{n}. {name}: S{s}/F{f} x {p} = {j:.2f} J/mm").format(
+                n=i + 1, name=self.elemente[i]["anzeige"][:30],
+                s=s, f=f, p=k, j=j)
+            for i, j, s, f, k in liste)
+        antwort = messagebox.askyesnocancel(T("Schnittwerte"), T(
+            "Die Schnittwerte gelten je Element, und sie liegen weit "
+            "auseinander:\n\n{zeilen}\n\nWo Leistung oder Vorschub fürs "
+            "Schneiden auf 0 stehen, gelten die Gravurwerte - damit wird "
+            "die Linie nur angeritzt, nicht geschnitten.\n\n"
+            "JA: die stärksten Werte (S{s}/F{f} x {p}) für alle "
+            "schneidenden Elemente übernehmen.\n"
+            "NEIN: so erzeugen, wie es dasteht.").format(
+                zeilen=zeilen, s=stark[2], f=stark[3], p=stark[4]))
+        if antwort is None:
+            return False
+        if antwort:
+            for i, _j, _s, _f, _n in liste:
+                self.elemente[i].update(v_cs=stark[2], v_cf=stark[3],
+                                        v_passes=stark[4])
+                self.elemente[i].pop("ergebnis", None)
+            self._element_laden(self.aktiv, zeichnen=False)
+            self._log(T("{n} schneidende Elemente auf S{s}/F{f} x {p} = "
+                        "{j:.2f} J/mm umgestellt.").format(
+                            n=len(liste), s=stark[2], f=stark[3],
+                            p=stark[4], j=stark[1]))
+        return True
+
     LUECKE = 5.0        # mm Luft zwischen zwei Motiven
 
     def _platz_daneben(self):
@@ -1742,6 +1803,8 @@ class App:
             messagebox.showinfo(T("Kein Motiv"), T("Erst ein Bild oder SVG öffnen."))
             return
         self._element_sichern()
+        if not self._schnittwerte_pruefen():
+            return
         merke = self.aktiv
         gravur, schnitt = [], []
         infos = []
@@ -2039,9 +2102,10 @@ class App:
         self.schnitt_ab = versatz
         self.lbl_info.configure(text=self.lbl_info.cget("text") + T(
             "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
-            "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min").format(
+            "S{s}/F{f} x {p} = {j:.2f} J/mm, ca. {min:.0f} min").format(
                 k=ci["konturen"], m=ci["cut_m"], p=passes, s=cs, f=cf,
-                sf=cs / cf if cf else 0, min=max(1, self._min(ci["sekunden"]))))
+                j=J.energie(cs, cf, passes, self._watt()),
+                min=max(1, self._min(ci["sekunden"]))))
         # Frueher stand die Gravur schon mit dem Schnitt zusammen in info,
         # als die Warnung geschrieben wurde. Jetzt kommt der Schnitt spaeter -
         # also hier noch einmal nachsehen, ob er ueber den Verfahrweg laeuft.
@@ -2073,10 +2137,11 @@ class App:
                 "{k} Konturen, innen vor außen\n"
                 "Schnittlänge {m:.2f} m x {p} Durchgang/-gänge\n"
                 "Laufzeit ca. {min:.0f} min\n"
-                "S{s}/F{f} = S/F {sf:.2f}{warn}").format(
+                "S{s}/F{f} x {p} = {j:.2f} J/mm{warn}").format(
                 b=i["breite"], h=i["hoehe"], k=i["konturen"], m=i["cut_m"],
                 p=passes, min=max(1, self._min(i["sekunden"])),
-                s=s, f=f, sf=s / f, warn=warn)))
+                s=s, f=f, j=J.energie(s, f, passes, self._watt()),
+                warn=warn)))
         self._draw()
 
     def save_gcode(self):

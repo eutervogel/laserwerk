@@ -32,6 +32,13 @@ Material ausprobieren will.
   der Tonwert aus der Punktdichte kommt — das Mittel für Material mit scharfer
   Schwelle. Dazu ein Tonwertregler für die Mitten und Anlauf (Overscan) an den
   Zeilenenden.
+- **Energie je Millimeter** — was schneidet, ist nicht die Leistung, sondern
+  `0,33 · S/F · Durchgänge` J/mm. Laserwerk schreibt sie neben jeden Schnitt.
+  Und weil Leistung, Vorschub und Durchgänge zum Element gehören: liegen sie
+  in einem Job weit auseinander, fragt Laserwerk vor dem Erzeugen nach und
+  bietet an, die stärksten für alle zu übernehmen. Vorher wurde ein Teil
+  durchgeschnitten und die anderen vier mit den Gravurwerten nur angeritzt —
+  0,27 gegen 6,0 J/mm, zu sehen erst am Werkstück.
 - **Schneiden** — Konturen aus SVG und DXF, innen vor außen, mehrere Durchgänge,
   Originalgröße 1:1 für Schablonen aus dem CAD.
 - **Beides in einem Lauf** — erst gravieren, dann ausschneiden, mit eigener
@@ -97,10 +104,14 @@ Material ausprobieren will.
   ohne neuen Test nachstellen lässt.
 - **Laufzeit, die dazulernt** — die Schätzung rechnet je Bahn ein Trapez
   aus Vorschub und Beschleunigung; für einen Leistungswechsel hält die Achse
-  nicht an, also bremst eine feinere Zerlegung sie auch nicht. Nach jedem
-  fertigen Job steht im Protokoll, was angesagt war und was es gedauert hat,
-  und ab dem dritten Lauf korrigiert der Median der Messungen das Modell.
-  Gemessen statt geglaubt — ein einzelner Lauf ändert nichts.
+  nicht an, also bremst eine feinere Zerlegung sie auch nicht. Richtungs-
+  wechsel bremsen dagegen sehr wohl: an jeder Ecke lässt `$11` nur ein
+  bestimmtes Tempo durch, und eine nachgezeichnete Kontur hat Hunderte davon.
+  Laserwerk rechnet sie wie GRBLs Planer mit — ohne das war ein Schnitt um
+  fast die Hälfte zu kurz angesagt. Nach jedem fertigen Job steht im
+  Protokoll, was angesagt war und was es gedauert hat, und ab dem dritten
+  Lauf korrigiert der Median der Messungen das Modell. Gemessen statt
+  geglaubt — ein einzelner Lauf ändert nichts.
 - **Zweiseitig gravieren** — Spiegeln an einer Wendeachse, mit Prüfung, ob das
   gespiegelte Motiv noch im positiven Bereich liegt.
 - **Fernsteuerung über Telegram** — Achsen und Sichtkreuz vom Handy, während man

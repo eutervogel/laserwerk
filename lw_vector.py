@@ -749,16 +749,15 @@ def cut_gcode(polys, s, feed, passes=1, kommentar=""):
             trav += anfahrt
             eilwege.append(anfahrt)
             g.append(f"G0 X{p[0][0]:.3f} Y{p[0][1]:.3f}")
-            bahn = 0.0
             for q_prev, q in zip(p, p[1:]):
                 g.append(f"G1 X{q[0]:.3f} Y{q[1]:.3f} S{s} F{feed}")
-                d = math.dist(q_prev, q)
-                cut += d
-                bahn += d
+                cut += math.dist(q_prev, q)
             if pl["closed"] and math.dist(p[-1], p[0]) > 1e-6:
                 g.append(f"G1 X{p[0][0]:.3f} Y{p[0][1]:.3f} S{s} F{feed}")
-                d = math.dist(p[-1], p[0]); cut += d; bahn += d
-            bahnen.append(bahn)
+                cut += math.dist(p[-1], p[0])
+            # Nicht die Laenge, sondern die Punkte: eine nachgezeichnete
+            # Kontur bremst an jeder Ecke, und davon hat sie Hunderte.
+            bahnen.append(list(p) + ([p[0]] if pl["closed"] else []))
             g.append("G1 S0")
             pos = p[0] if pl["closed"] else p[-1]
     g += ["M5", "G0 X0 Y0"]

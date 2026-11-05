@@ -262,8 +262,8 @@ EN = {
         'Y-',
     'Motiv {b:.1f} x {h:.1f} mm\nX {x0:.1f} .. {x1:.1f} mm (mit Overscan)\n{n} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min\nS{s}/F{f} = S/F {sf:.2f}{warn}':
         'Artwork {b:.1f} x {h:.1f} mm\nX {x0:.1f} .. {x1:.1f} mm (with overscan)\n{n} commands, {m:.1f} m burnt\nabout {min:.0f} min\nS{s}/F{f} = S/F {sf:.2f}{warn}',
-    'Schnitt {b:.1f} x {h:.1f} mm\n{k} Konturen, innen vor außen\nSchnittlänge {m:.2f} m x {p} Durchgang/-gänge\nLaufzeit ca. {min:.0f} min\nS{s}/F{f} = S/F {sf:.2f}{warn}':
-        'Cut {b:.1f} x {h:.1f} mm\n{k} contours, inner before outer\n{m:.2f} m of cut x {p} pass(es)\nabout {min:.0f} min\nS{s}/F{f} = S/F {sf:.2f}{warn}',
+    'Schnitt {b:.1f} x {h:.1f} mm\n{k} Konturen, innen vor außen\nSchnittlänge {m:.2f} m x {p} Durchgang/-gänge\nLaufzeit ca. {min:.0f} min\nS{s}/F{f} x {p} = {j:.2f} J/mm{warn}':
+        'Cut {b:.1f} x {h:.1f} mm\n{k} contours, inner before outer\n{m:.2f} m of cut x {p} pass(es)\nabout {min:.0f} min\nS{s}/F{f} x {p} = {j:.2f} J/mm{warn}',
     '{datei}\nX {x0:.1f} .. {x1:.1f}   Y {y0:.1f} .. {y1:.1f} mm\n{n} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min':
         '{datei}\nX {x0:.1f} .. {x1:.1f}   Y {y0:.1f} .. {y1:.1f} mm\n{n} commands, {m:.1f} m burnt\nabout {min:.0f} min',
     '\nACHTUNG: größer als der Verfahrweg!':
@@ -797,9 +797,9 @@ EN = {
         "Cutting usually needs more power and less\n"
         "feed than engraving.",
     "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
-    "S{s}/F{f} = S/F {sf:.2f}, ca. {min:.0f} min":
+    "S{s}/F{f} x {p} = {j:.2f} J/mm, ca. {min:.0f} min":
         "\n\nPlus cut: {k} contours, {m:.2f} m x {p}\n"
-        "S{s}/F{f} = S/F {sf:.2f}, about {min:.0f} min",
+        "S{s}/F{f} x {p} = {j:.2f} J/mm, about {min:.0f} min",
     # ---- Elementliste
     "Entfernen": "Remove",
     "gravieren": "engrave", "schneiden": "cut", "beides": "both",
@@ -813,6 +813,21 @@ EN = {
         "others. Set its size and offset by hand.",
     "Originalmaß der Zeichnung: {b:.1f} x {h:.1f} mm.":
         "Drawing's own size: {b:.1f} x {h:.1f} mm.",
+    "Schnittwerte": "Cut settings",
+    "{n}. {name}: S{s}/F{f} x {p} = {j:.2f} J/mm":
+        "{n}. {name}: S{s}/F{f} x {p} = {j:.2f} J/mm",
+    "Die Schnittwerte gelten je Element, und sie liegen weit auseinander:"
+    "\n\n{zeilen}\n\nWo Leistung oder Vorschub fürs Schneiden auf 0 stehen, "
+    "gelten die Gravurwerte - damit wird die Linie nur angeritzt, nicht "
+    "geschnitten.\n\nJA: die stärksten Werte (S{s}/F{f} x {p}) für alle "
+    "schneidenden Elemente übernehmen.\nNEIN: so erzeugen, wie es dasteht.":
+        "Cut settings belong to the element, and these are far apart:"
+        "\n\n{zeilen}\n\nWhere cutting power or feed is 0, the engraving "
+        "values apply - that only scores the line, it does not cut it."
+        "\n\nYES: use the strongest settings (S{s}/F{f} x {p}) for every "
+        "cutting element.\nNO: generate it as it stands.",
+    "{n} schneidende Elemente auf S{s}/F{f} x {p} = {j:.2f} J/mm umgestellt.":
+        "{n} cutting elements switched to S{s}/F{f} x {p} = {j:.2f} J/mm.",
     "Betriebsart": "Mode",
     "{n} weitere Element(e) sind anders eingestellt.\n\n"
     "'{art}' auch für sie übernehmen?":

@@ -86,15 +86,19 @@ class Lauf:
         self.nach_f = {}
         self.eilwege = []
         self.stopps = 0
-        self._bahn = 0.0              # laufende Bahn
+        self._bahn = []               # Punkte der laufenden Bahn
         self._bahn_f = None
 
     # ------------------------------------------------------------- Hilfen
     def _bahn_zu(self):
-        """Die laufende Bahn abschliessen - hier haelt die Achse an."""
-        if self._bahn > 0 and self._bahn_f:
+        """Die laufende Bahn abschliessen - hier haelt die Achse an.
+
+        Gemerkt werden die Punkte, nicht die Laenge: die Zeit haengt an den
+        Ecken dazwischen.
+        """
+        if len(self._bahn) > 1 and self._bahn_f:
             self.nach_f.setdefault(self._bahn_f, []).append(self._bahn)
-        self._bahn = 0.0
+        self._bahn = []
         self._bahn_f = self.f
 
     def merke(self, art, nr, text):
@@ -256,7 +260,9 @@ class Lauf:
             if self.f != self._bahn_f:
                 self._bahn_zu()
                 self._bahn_f = self.f
-            self._bahn += d
+            if not self._bahn:
+                self._bahn.append((self.x, self.y))
+            self._bahn.append((nx, ny))
 
         self.x, self.y, self.z = nx, ny, nz
         self.xs.append(nx)

@@ -827,6 +827,22 @@ EN = {
         "others. Set its size and offset by hand.",
     "Originalmaß der Zeichnung: {b:.1f} x {h:.1f} mm.":
         "Drawing's own size: {b:.1f} x {h:.1f} mm.",
+    # ---- Oberflaeche: Fluss und Erklaerungen
+    "Erklärungen anzeigen": "Show explanations",
+    "Größe und Lage": "Size and position",
+    "Rand = Abstand zum Werkstück. Negativ heißt: das Motiv hängt darüber "
+    "hinaus.\nVersatz unten = Abstand zum Nullpunkt der Maschine.":
+        "Margin = distance to the workpiece. Negative means the artwork "
+        "hangs over its edge.\nOffset below = distance to the machine's "
+        "origin.",
+    "Striche des letzten Tests": "Lines of the last test",
+    "sichtbar": "visible",
+    "am Zeilenende": "at row end",
+    "→ Motiv öffnen": "→ open artwork",
+    "→ G-Code erzeugen": "→ generate G-code",
+    "→ Maschine verbinden": "→ connect the machine",
+    "→ Nullpunkt setzen": "→ set the origin",
+    "→ bereit": "→ ready",
     # ---- Statuszeile
     "keine Maschine": "no machine",
     "Nullpunkt steht": "origin set",

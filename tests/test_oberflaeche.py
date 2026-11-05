@@ -2460,10 +2460,19 @@ class Jobleiste(Grundlage):
     """
 
     def kaesten(self):
+        """Alle Knoepfe und Schalter der Leiste, in Fensterkoordinaten -
+        die Leiste ist jetzt in Gruppen unterteilt, also eine Ebene tief."""
         self.wurzel.deiconify()
         self.wurzel.update()
-        return [(c.winfo_x(), c.winfo_y(), c.winfo_width(), c.winfo_height())
-                for c in self.app.btn_gen.master.winfo_children()]
+        leiste = self.app.btn_gen.master.master
+        kaesten = []
+        for gruppe in leiste.winfo_children():
+            kinder = (gruppe.winfo_children()
+                      if gruppe.winfo_class() == "TFrame" else [gruppe])
+            for c in kinder:
+                kaesten.append((c.winfo_rootx(), c.winfo_rooty(),
+                                c.winfo_width(), c.winfo_height()))
+        return kaesten
 
     def test_nichts_deckt_sich(self):
         k = self.kaesten()
@@ -2480,9 +2489,7 @@ class Jobleiste(Grundlage):
         den Klick."""
         self.wurzel.deiconify()
         self.wurzel.update()
-        knopf = [c for c in self.app.btn_gen.master.winfo_children()
-                 if c.winfo_class() == "TButton"
-                 and c.cget("text") in ("STOPP", "STOP")][0]
+        knopf = self.app.jobknoepfe["stopp"]
         x = knopf.winfo_rootx() + knopf.winfo_width() // 2
         y = knopf.winfo_rooty() + knopf.winfo_height() // 2
         self.assertIs(self.wurzel.winfo_containing(x, y), knopf)

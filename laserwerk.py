@@ -34,6 +34,10 @@ class App:
         self.presets = P.load_presets()
         self.maschinen = P.load_maschinen()
         self._maschine_einrichten()
+        # Erklaertexte helfen beim Lernen und stehen danach im Weg. Sie
+        # sammeln sich hier und lassen sich in einem Zug ausblenden.
+        self.hilfetexte = []
+        self.v_hilfe = tk.BooleanVar(value=bool(self.cfg.get("hilfetexte", True)))
         self.q = queue.Queue()
         self.grbl = G.Grbl(lambda k, d: self.q.put((k, d)))
         self.src = None            # Graustufenbild (zugeschnitten)
@@ -173,40 +177,65 @@ class App:
         for v in (self.v_bw, self.v_bh, self.v_board, self.v_snap):
             v.trace_add("write", lambda *a: self._brett_geaendert())
 
-        # Jobleiste
+        # Jobleiste: drei Gruppen mit Trennern statt einer Reihe aus sieben
+        # Knoepfen. Vorbereiten ruehrt die Maschine nicht an, Zielen faehrt
+        # sie mit schwachem Strahl, Fahren brennt - und STOPP steht fuer
+        # sich, mit Abstand.
         jb = ttk.Frame(main, padding=(0, 6, 0, 0))
         jb.grid(row=1, column=0, columnspan=2, sticky="ew")
-        self.btn_gen = ttk.Button(jb, text=T("Erzeugen"), command=self.generate)
-        self.btn_gen.grid(row=0, column=0, padx=(0, 10))
-        # Jeder Knopf wird gemerkt: was gerade nicht geht, soll auch nicht so
-        # aussehen, als ginge es. Ein Knopf, der immer gleich aussieht und
-        # dann eine Meldung zeigt, ist die billigste Art zu beschaeftigen.
         self.jobknoepfe = {}
-        for i, (name, titel, f, st) in enumerate(
-                [("rahmen", "Rahmen", self.frame, "TButton"),
-                 ("kontur", "Kontur", self.kontur, "TButton"),
-                 ("start", "Start", self.start, "Accent.TButton"),
-                 ("pause", "Pause", self.pause, "TButton"),
-                 ("weiter", "Weiter", self.resume, "TButton"),
-                 ("stopp", "STOPP", self.stop, "Danger.TButton")]):
-            k = ttk.Button(jb, text=T(titel), command=f, style=st)
-            k.grid(row=0, column=i + 1, padx=3)
+
+        def gruppe(spalte, trenner=True):
+            if trenner:
+                ttk.Separator(jb, orient="vertical").grid(
+                    row=0, column=spalte, sticky="ns", padx=10, pady=2)
+            g = ttk.Frame(jb)
+            g.grid(row=0, column=spalte + 1)
+            return g
+
+        vorbereiten = ttk.Frame(jb)
+        vorbereiten.grid(row=0, column=0)
+        self.btn_gen = ttk.Button(vorbereiten, text=T("Erzeugen"),
+                                  command=self.generate)
+        self.btn_gen.pack(side="left")
+
+        zielen = gruppe(1)
+        for name, titel, f in (("rahmen", "Rahmen", self.frame),
+                               ("kontur", "Kontur", self.kontur)):
+            k = ttk.Button(zielen, text=T(titel), command=f)
+            k.pack(side="left", padx=2)
             self.jobknoepfe[name] = k
-        # Die beiden Schalter in eine eigene Spalte - frueher lagen sie in
-        # derselben Zelle wie STOPP und deckten den Knopf zu.
-        sch = ttk.Frame(jb)
-        sch.grid(row=0, column=7, padx=(10, 2))
-        ttk.Checkbutton(sch, text=T("Rahmen sichtbar"), variable=self.v_frame_laser
-                        ).pack(anchor="w")
-        ttk.Checkbutton(sch, text=T("Pause am Zeilenende"),
-                        variable=self.v_pause_ende).pack(anchor="w")
+        ttk.Checkbutton(zielen, text=T("sichtbar"), variable=self.v_frame_laser
+                        ).pack(side="left", padx=(6, 0))
+
+        fahren = gruppe(3)
+        for name, titel, f, st in (("start", "Start", self.start, "Accent.TButton"),
+                                   ("pause", "Pause", self.pause, "TButton"),
+                                   ("weiter", "Weiter", self.resume, "TButton")):
+            k = ttk.Button(fahren, text=T(titel), command=f, style=st)
+            k.pack(side="left", padx=2)
+            self.jobknoepfe[name] = k
+        # "am Zeilenende" reicht: der Knopf daneben heisst Pause.
+        ttk.Checkbutton(fahren, text=T("am Zeilenende"),
+                        variable=self.v_pause_ende).pack(side="left", padx=(6, 0))
+
+        halt = gruppe(5)
+        k = ttk.Button(halt, text=T("STOPP"), command=self.stop,
+                       style="Danger.TButton")
+        k.pack(side="left")
+        self.jobknoepfe["stopp"] = k
+
         self.prog = ttk.Progressbar(jb, length=78, maximum=1000)
-        self.prog.grid(row=0, column=8, padx=8, sticky="ew")
-        self.lbl_prog = ttk.Label(jb, text=T("kein Job"), width=18, anchor="w")
-
-        self.lbl_prog.grid(row=0, column=9)
-
-        jb.columnconfigure(8, weight=1)
+        self.prog.grid(row=0, column=8, padx=8, sticky="e")
+        # Ein Etikett, zwei Rollen: solange kein Job laeuft, steht dort der
+        # naechste Schritt - die einzige Stelle, die etwas von einem
+        # verlangt, also auch die einzige in Akzentfarbe. Laeuft einer,
+        # steht dort, wie weit er ist. Beides gleichzeitig braucht niemand,
+        # und zwei Etiketten passen bei 1400 Punkten Breite nicht.
+        self._jobtext = ""
+        self.lbl_prog = ttk.Label(jb, text="", width=24, anchor="e")
+        self.lbl_prog.grid(row=0, column=9, sticky="e")
+        jb.columnconfigure(7, weight=1)
 
         if TG.lade().get("auto") and self.v_tg_token.get().strip():
             self.root.after(800, self.fern_start)
@@ -221,6 +250,8 @@ class App:
         self.lbl_marke = ttk.Label(main, text="", anchor="e",
                                    style="Pos.TLabel")
         self.lbl_marke.grid(row=2, column=1, sticky="ew", pady=(6, 0))
+        if not self.v_hilfe.get():
+            self._hilfe_zeigen()
         self._status_zeigen()
 
     def _scrollbereich(self, nb, titel):
@@ -339,11 +370,13 @@ class App:
         # rechten Rand wegzubleiben.
         ttk.Label(wk, text=T("Rand")).grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.v_rand = {}
+        self.e_rand = {}
         for sp, (seite, name) in enumerate((("l", "links"), ("r", "rechts"))):
             self.v_rand[seite] = tk.DoubleVar(value=0.0)
             ttk.Label(wk, text=T(name)).grid(row=2 + sp, column=1, sticky="e",
                                              padx=(0, 2), pady=(6 if not sp else 0, 0))
             e = ttk.Entry(wk, textvariable=self.v_rand[seite], width=6)
+            self.e_rand[seite] = e
             e.grid(row=2 + sp, column=2, sticky="w", pady=(6 if not sp else 0, 0))
             e.bind("<Return>", lambda ev, s=seite: self._rand_setzen(s))
             e.bind("<FocusOut>", lambda ev, s=seite: self._rand_setzen(s))
@@ -352,16 +385,22 @@ class App:
             ttk.Label(wk, text=T(name)).grid(row=2 + sp, column=3, sticky="e",
                                              padx=(8, 2), pady=(6 if not sp else 0, 0))
             e = ttk.Entry(wk, textvariable=self.v_rand[seite], width=6)
+            self.e_rand[seite] = e
             e.grid(row=2 + sp, column=4, sticky="w", pady=(6 if not sp else 0, 0))
             e.bind("<Return>", lambda ev, s=seite: self._rand_setzen(s))
             e.bind("<FocusOut>", lambda ev, s=seite: self._rand_setzen(s))
 
+        self._erklaerung(ttk.Label(wk, text=T(
+            "Rand = Abstand zum Werkstück. Negativ heißt: das Motiv hängt "
+            "darüber hinaus.\nVersatz unten = Abstand zum Nullpunkt der "
+            "Maschine."), style="Muted.TLabel")).grid(
+                row=4, column=0, columnspan=5, sticky="w", pady=(4, 0))
         ttk.Button(wk, text=T("Motiv mittig setzen"), command=self.center_motif
-                   ).grid(row=4, column=0, columnspan=5, sticky="ew", pady=(6, 0))
-        ttk.Label(wk, text=T("Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren."),
-                  style="Muted.TLabel").grid(row=5, column=0, columnspan=5, sticky="w")
+                   ).grid(row=5, column=0, columnspan=5, sticky="ew", pady=(6, 0))
+        self._erklaerung(ttk.Label(wk, text=T("Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren."),
+                  style="Muted.TLabel")).grid(row=6, column=0, columnspan=5, sticky="w")
 
-        box = ttk.LabelFrame(f, text=T("Größe, Anlauf und Versatz"), padding=4)
+        box = ttk.LabelFrame(f, text=T("Größe und Lage"), padding=4)
         box.grid(row=7, column=0, columnspan=3, sticky="ew", pady=6)
         self.v_maxw = tk.DoubleVar(value=190.0)
         self.v_maxh = tk.DoubleVar(value=110.0)
@@ -386,9 +425,9 @@ class App:
         ttk.Label(box, text="mm").grid(row=3, column=5, sticky="w")
         self.lbl_anlauf = ttk.Label(box, text="", style="Muted.TLabel")
         self.lbl_anlauf.grid(row=4, column=0, columnspan=6, sticky="w", pady=(4, 0))
-        ttk.Label(box, text=T("0 = aus Vorschub und Beschleunigung gerechnet.\n"
+        self._erklaerung(ttk.Label(box, text=T("0 = aus Vorschub und Beschleunigung gerechnet.\n"
                               "Zu kurz heißt: der Zeilenanfang brennt zu schwach."),
-                  style="Muted.TLabel").grid(row=5, column=0, columnspan=6,
+                  style="Muted.TLabel")).grid(row=5, column=0, columnspan=6,
                                              sticky="w")
 
         rs = ttk.LabelFrame(f, text=T("Rückseite (zweiseitig gravieren)"), padding=4)
@@ -402,8 +441,8 @@ class App:
         ttk.Spinbox(rs, from_=0, to=200, increment=0.5, width=6,
                     textvariable=self.v_achse).grid(row=3, column=1, sticky="w")
         ttk.Label(rs, text="mm").grid(row=3, column=2, sticky="w")
-        ttk.Label(rs, text=T("Mittellinie der Aufspannung, nicht des Motivs."),
-                  style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+        self._erklaerung(ttk.Label(rs, text=T("Mittellinie der Aufspannung, nicht des Motivs."),
+                  style="Muted.TLabel")).grid(row=4, column=0, columnspan=3, sticky="w")
 
         self.v_rot = tk.DoubleVar(value=0.0)
         ttk.Label(f, text=T("Drehen")).grid(row=9, column=0, sticky="w")
@@ -486,10 +525,10 @@ class App:
                    ).pack(side="left", fill="x", expand=True)
         ttk.Button(kb, text=T("Zurücksetzen"), command=self.bk_zuruecksetzen
                    ).pack(side="left", fill="x", expand=True, padx=(4, 0))
-        ttk.Label(bk, text=T("Fotos brauchen das fast immer: ohne Korrektur\n"
+        self._erklaerung(ttk.Label(bk, text=T("Fotos brauchen das fast immer: ohne Korrektur\n"
                              "brennt ein hellgrauer Hintergrund als dünner\n"
                              "Punkteteppich mit. 'Auto' zieht ihn auf Weiß."),
-                  style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+                  style="Muted.TLabel")).grid(row=4, column=0, columnspan=3, sticky="w")
         self._bk_zeigen()
 
         jb = ttk.LabelFrame(f, text=T("Bearbeitung"), padding=4)
@@ -515,10 +554,10 @@ class App:
                                         pady=(6, 0))
         ttk.Spinbox(jb, from_=0, to=5000, increment=50, width=6,
                     textvariable=self.v_cf).grid(row=4, column=3, sticky="w", pady=(6, 0))
-        ttk.Label(jb, text=T("0 = Werte aus dem Reiter Material.\n"
+        self._erklaerung(ttk.Label(jb, text=T("0 = Werte aus dem Reiter Material.\n"
                              "Schneiden braucht meist mehr Leistung und\n"
                              "weniger Vorschub als Gravieren."),
-                  style="Muted.TLabel").grid(row=5, column=0, columnspan=4, sticky="w")
+                  style="Muted.TLabel")).grid(row=5, column=0, columnspan=4, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
                    ).grid(row=19, column=0, columnspan=3, sticky="ew", pady=(10, 2))
@@ -562,11 +601,11 @@ class App:
         self._row(f, 3, "Leistung ab", self.v_smin, unit="0 = automatisch")
         self._row(f, 4, "Vorschub F", self.v_f, unit="mm/min")
         self._row(f, 5, "Zeilenabstand", self.v_line, unit="mm")
-        ttk.Label(f, text=T("'Leistung ab' ist die kleinste Leistung, bei der das\n"
+        self._erklaerung(ttk.Label(f, text=T("'Leistung ab' ist die kleinste Leistung, bei der das\n"
                             "Material überhaupt zeichnet. Graustufen werden dann\n"
                             "zwischen diesen beiden Werten verteilt statt zwischen\n"
                             "30 % und S. Für Strichgrafik ohne Bedeutung."),
-                  style="Muted.TLabel").grid(row=6, column=0, columnspan=3, sticky="w")
+                  style="Muted.TLabel")).grid(row=6, column=0, columnspan=3, sticky="w")
         self.lbl_sf = ttk.Label(f, text="")
         self.lbl_sf.grid(row=7, column=0, columnspan=3, sticky="w", pady=4)
         for v in (self.v_s, self.v_f, self.v_smin):
@@ -675,9 +714,9 @@ class App:
                    ).grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         ttk.Button(vw, text=T("aus der Maschine ($130/$131)"), command=self.area_von_maschine
                    ).grid(row=1, column=3, columnspan=2, sticky="ew", padx=(4, 0), pady=(4, 0))
-        ttk.Label(vw, text=T("Bestimmt die gezeichnete Arbeitsfläche und die\n"
+        self._erklaerung(ttk.Label(vw, text=T("Bestimmt die gezeichnete Arbeitsfläche und die\n"
                              "Warnung, wenn ein Job nicht hineinpasst."),
-                  style="Muted.TLabel").grid(row=2, column=0, columnspan=5, sticky="w")
+                  style="Muted.TLabel")).grid(row=2, column=0, columnspan=5, sticky="w")
 
 
         # Beide Nullpunktknoepfe nebeneinander in eine Zelle - eine neue
@@ -709,9 +748,9 @@ class App:
                     textvariable=self.v_zeig_a).grid(row=1, column=1, sticky="w")
         ttk.Button(zg, text=T("Kreuz fahren"), command=self.zeigen
                    ).grid(row=0, column=2, rowspan=2, padx=(8, 0), sticky="nsew")
-        ttk.Label(zg, text=T("Kurzes Kreuz mit schwacher Leistung, danach\n"
+        self._erklaerung(ttk.Label(zg, text=T("Kurzes Kreuz mit schwacher Leistung, danach\n"
                              "exakt zurück. Gilt auch für 'Rahmen sichtbar'."),
-                  style="Muted.TLabel").grid(row=2, column=0, columnspan=3, sticky="w")
+                  style="Muted.TLabel")).grid(row=2, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
         bb.grid(row=9, column=0, columnspan=3, sticky="ew", pady=2)
         ttk.Button(bb, text=T("Entsperren ($X)"), command=self.unlock).pack(side="left")
@@ -734,8 +773,12 @@ class App:
         self.btn_theme = ttk.Button(sp, command=self.toggle_theme, width=8)
         self.btn_theme.grid(row=0, column=1, padx=(8, 0), sticky="w")
         self._theme_label()
-        ttk.Label(sp, text=T("Die Sprache gilt nach einem Neustart."),
-                  style="Muted.TLabel").grid(row=1, column=0, columnspan=2,
+        ttk.Checkbutton(sp, text=T("Erklärungen anzeigen"),
+                        variable=self.v_hilfe, command=self._hilfe_zeigen
+                        ).grid(row=1, column=0, columnspan=2, sticky="w",
+                               pady=(4, 0))
+        self._erklaerung(ttk.Label(sp, text=T("Die Sprache gilt nach einem Neustart."),
+                  style="Muted.TLabel")).grid(row=2, column=0, columnspan=2,
                                              sticky="w", pady=(4, 0))
 
         tg = ttk.LabelFrame(f, text=T("Fernsteuerung über Telegram"), padding=4)
@@ -755,9 +798,9 @@ class App:
         ttk.Checkbutton(tg, text=T("beim Programmstart mitstarten"),
                         variable=self.v_tg_auto, command=self._tg_auto
                         ).grid(row=3, column=0, columnspan=3, sticky="w")
-        ttk.Label(tg, text=T("Achsen und Sichtkreuz vom Handy. Gravur und\n"
+        self._erklaerung(ttk.Label(tg, text=T("Achsen und Sichtkreuz vom Handy. Gravur und\n"
                              "Schnitt starten absichtlich nur hier."),
-                  style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+                  style="Muted.TLabel")).grid(row=4, column=0, columnspan=3, sticky="w")
         tg.columnconfigure(1, weight=1)
 
         self.log = tk.Text(f, width=36, height=6, font=("DejaVu Sans Mono", 8),
@@ -778,8 +821,8 @@ class App:
         self._row(fb, 1, "Schritt", self.v_ft_step, unit="mm")
         self._row(fb, 2, "Leistung S", self.v_ft_s)
         self._row(fb, 3, "Vorschub F", self.v_ft_f)
-        ttk.Label(fb, text=T("Striche von links nach rechts\n"
-                             "= Z aufsteigend."), style="Muted.TLabel").grid(
+        self._erklaerung(ttk.Label(fb, text=T("Striche von links nach rechts\n"
+                             "= Z aufsteigend."), style="Muted.TLabel")).grid(
                                  row=4, column=0, columnspan=3, sticky="w")
         # Die gemessene Korrektur ueberlebt den Neustart, stand aber nur als
         # nackte Zahl im Reiter Material. Hier, wo sie herkommt, gehoert sie
@@ -795,10 +838,15 @@ class App:
         self.lbl_fokus.grid(row=6, column=0, columnspan=3, sticky="w")
         ttk.Button(fb, text=T("Fokustest starten"), command=self.fokustest
                    ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=4)
+        # Eine Liste ohne Ueberschrift ist eine Liste, bei der man raten
+        # muss, was darin steht.
+        self.lbl_fzliste = ttk.Label(fb, text=T("Striche des letzten Tests"))
+        self.lbl_fzliste.grid(row=8, column=0, columnspan=3, sticky="w",
+                              pady=(6, 2))
         self.lb_fz = tk.Listbox(fb, height=6, width=28)
-        self.lb_fz.grid(row=8, column=0, columnspan=3, sticky="ew")
+        self.lb_fz.grid(row=9, column=0, columnspan=3, sticky="ew")
         ttk.Button(fb, text=T("Gewählten Strich ins Material übernehmen"),
-                   command=self.take_focus).grid(row=9, column=0, columnspan=3,
+                   command=self.take_focus).grid(row=10, column=0, columnspan=3,
                                                  sticky="ew", pady=4)
         for v in (self.v_dicke, self.v_korr):
             v.trace_add("write", self._fokus_geaendert)
@@ -812,8 +860,8 @@ class App:
         self._row(mb, 1, "Vorschübe", self.v_mt_f, width=20)
         ttk.Button(mb, text=T("Materialtest starten"), command=self.materialtest
                    ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=4)
-        ttk.Label(mb, text=T("Spalten = Leistung, Zeilen = Vorschub,\n"
-                             "unten links beginnend. Felder 6 mm."), style="Muted.TLabel").grid(row=3, column=0, columnspan=3, sticky="w")
+        self._erklaerung(ttk.Label(mb, text=T("Spalten = Leistung, Zeilen = Vorschub,\n"
+                             "unten links beginnend. Felder 6 mm."), style="Muted.TLabel")).grid(row=3, column=0, columnspan=3, sticky="w")
 
         gb = ttk.LabelFrame(f, text=T("Graustufentest"), padding=6)
         gb.grid(row=2, column=0, sticky="ew", pady=(0, 8))
@@ -825,12 +873,12 @@ class App:
         self._row(gb, 1, "Vorschub F", self.v_gt_f)
         self._row(gb, 2, "Stufen", self.v_gt_n)
         self._row(gb, 3, "Feldgröße", self.v_gt_feld, unit="mm")
-        ttk.Label(gb, text=T("Eine Zeile je Leistung, darin ein Tonwertkeil\n"
+        self._erklaerung(ttk.Label(gb, text=T("Eine Zeile je Leistung, darin ein Tonwertkeil\n"
                              "von hell nach dunkel. Unten die kleinste\n"
                              "Leistung, links der hellste Ton. Jedes Feld\n"
                              "bekommt genau die Leistung, die eine Gravur\n"
                              "an dieser Stelle auch bekäme."),
-                  style="Muted.TLabel").grid(row=4, column=0, columnspan=3, sticky="w")
+                  style="Muted.TLabel")).grid(row=4, column=0, columnspan=3, sticky="w")
         self.lbl_gt = ttk.Label(gb, text="", style="Muted.TLabel")
         self.lbl_gt.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
         ttk.Button(gb, text=T("Graustufentest starten"), command=self.graustufentest
@@ -1708,6 +1756,9 @@ class App:
         if self.zref_ok:
             teile.append(T("Z-Referenz steht"))
         self.lbl_status.configure(text="   ·   ".join(teile))
+        if hasattr(self, "lbl_prog") and not self._jobtext:
+            self.lbl_prog.configure(text=self._naechster_schritt(),
+                                    style="Schritt.TLabel")
         if not self.grbl.job_running:
             x, y, z = getattr(self, "kopf_pos", (0.0, 0.0, 0.0))
             self.lbl_marke.configure(
@@ -1715,6 +1766,46 @@ class App:
                     x=Z(x, 2).rjust(8), y=Z(y, 2).rjust(8),
                     z=Z(z, 2).rjust(7)) if self.grbl.connected else "")
         self._knoepfe_zeigen()
+
+    def _erklaerung(self, w):
+        """Ein Erklaertext. Gibt das Etikett zurueck, damit der Aufrufer es
+        wie bisher gleich setzen kann."""
+        self.hilfetexte.append(w)
+        return w
+
+    def _hilfe_zeigen(self):
+        """Alle Erklaertexte ein- oder ausblenden.
+
+        grid_remove() merkt sich den Platz - beim Einblenden steht alles
+        wieder da, wo es war.
+        """
+        an = bool(self.v_hilfe.get())
+        for w in self.hilfetexte:
+            try:
+                w.grid() if an else w.grid_remove()
+            except tk.TclError:
+                pass
+        self.cfg["hilfetexte"] = an
+        P.save_config(self.cfg)
+
+    def _naechster_schritt(self):
+        """Was jetzt dran ist - aus dem Zustand, nicht aus einer Liste.
+
+        Die Reiter sagen, WO etwas steht, nicht WANN es dran ist. Wer das
+        Programm zum ersten Mal oeffnet, sieht vier Hauptwoerter und keinen
+        Weg.
+        """
+        if self.grbl.job_running:
+            return ""
+        if not self.elemente:
+            return T("→ Motiv öffnen")
+        if not self.lines:
+            return T("→ G-Code erzeugen")
+        if not self.grbl.connected:
+            return T("→ Maschine verbinden")
+        if not self.zero_ok:
+            return T("→ Nullpunkt setzen")
+        return T("→ bereit")
 
     def _knoepfe_zeigen(self):
         """Nur anbieten, was gerade geht.
@@ -2077,6 +2168,7 @@ class App:
             messagebox.showinfo(T("Kein Motiv"), T("Erst ein Bild oder SVG öffnen."))
             return
         self._element_sichern()
+        self._jobtext = ""
         if not self._schnittwerte_pruefen():
             return
         merke = self.aktiv
@@ -3503,10 +3595,11 @@ class App:
                 # Modellschaetzung zaehlt mehr als lineare Hochrechnung
                 rest = (max(0.0, self._min(self.info["sekunden"]) * 60 - el)
                         * 0.6 + rest * 0.4)
-            self.lbl_prog.configure(
-                text=T("{p} %   noch ~{min:.0f} min").format(p=done * 100 // tot,
-                                                             min=rest / 60)
+            self._jobtext = (
+                T("{p} %   noch ~{min:.0f} min").format(p=done * 100 // tot,
+                                                        min=rest / 60)
                 + (T("   {n} Fehler").format(n=er) if er else ""))
+            self.lbl_prog.configure(text=self._jobtext, style="TLabel")
             self.lbl_marke.configure(text=self._marke_text(done))
         elif k == "jobend":
             name, res = d
@@ -3517,8 +3610,9 @@ class App:
                    "fehler": T("zu viele Übertragungsfehler")}.get(res, res)
             er = getattr(self.grbl, "job_errors", 0)
             gesendet = getattr(self.grbl, "job_done", 0)
-            self.lbl_prog.configure(text=T('{0}: {1}').format(name, txt)
-                                    + (T("   {n} Fehler").format(n=er) if er else ""))
+            self._jobtext = (T('{0}: {1}').format(name, txt)
+                             + (T("   {n} Fehler").format(n=er) if er else ""))
+            self.lbl_prog.configure(text=self._jobtext, style="TLabel")
             self.lbl_marke.configure(text="")
             self._status_zeigen()
             self._log(T('{0}: {1}').format(name, txt))
@@ -4146,6 +4240,12 @@ class App:
         for seite, wert in (("l", x), ("r", W - x - b),
                             ("u", y), ("o", H - y - h)):
             self.v_rand[seite].set(round(wert, 1))
+            # Ein negativer Rand ist keine Zahl wie jede andere: so weit
+            # haengt das Motiv ueber das Werkstueck hinaus.
+            feld = getattr(self, "e_rand", {}).get(seite)
+            if feld is not None:
+                feld.configure(style="Warn.TEntry" if wert < -0.05
+                               else "TEntry")
 
     def _rand_setzen(self, seite):
         """Eingetippten Abstand in eine Lage umrechnen."""

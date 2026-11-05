@@ -98,6 +98,14 @@ def apply(root, theme=None):
     s.configure("TEntry", fieldbackground=PANEL, foreground=TEXT, bordercolor=LINE,
                 lightcolor=PANEL, darkcolor=PANEL, padding=4, insertcolor=TEXT)
     s.map("TEntry", bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)])
+    # Ein Feld, dessen Wert nicht stimmen kann - ein negativer Rand heisst,
+    # dass das Motiv ueber das Werkstueck haengt.
+    s.configure("Warn.TEntry", fieldbackground=PANEL, foreground=DANGER,
+                bordercolor=DANGER, lightcolor=DANGER, darkcolor=DANGER,
+                padding=4, insertcolor=TEXT)
+    # Der naechste Schritt: hervorgehoben, aber ruhig.
+    s.configure("Schritt.TLabel", background=BG, foreground=ACCENT,
+                font=(fam, 10, "bold"))
     s.configure("TSpinbox", fieldbackground=PANEL, foreground=TEXT, background=BTN,
                 bordercolor=LINE, lightcolor=PANEL, darkcolor=PANEL, arrowsize=12,
                 padding=3, arrowcolor=TEXT, insertcolor=TEXT)

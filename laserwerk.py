@@ -1663,20 +1663,55 @@ class App:
         c, s = abs(math.cos(a)), abs(math.sin(a))
         return w * c + h * s, w * s + h * c
 
+    def _bild_dreh_bb(self, grad):
+        """Ausdehnung des gedrehten BILDINHALTS - nicht des gedrehten
+        Rechtecks darum.
+
+        Ein rundes Motiv wird beim Drehen nicht groesser. Das Rechteck um
+        sein Bild schon, um bis zu 41 Prozent: bei einem 60-mm-Anhaenger
+        stand bei 301 Grad ein Kasten von 80 x 78 mm um eine Scheibe von
+        56 x 55 mm. Gerechnet wird an einer kleinen Kopie - auf ein
+        Zehntel Millimeter genau reicht das, und es kostet nichts.
+        """
+        if self.src is None:
+            return 0.0, 0.0
+        grad = round(float(grad or 0.0), 1) % 360
+        merker = getattr(self, "_bilddreh", None)
+        if merker and merker[0] is self.src and merker[1] == grad:
+            return merker[2]
+        klein = self.src.convert("L")
+        klein.thumbnail((400, 400), Image.NEAREST)
+        gedreht = klein.rotate(grad, expand=True, resample=Image.NEAREST,
+                               fillcolor=255)
+        kasten = gedreht.point(lambda v: 255 if v < 245 else 0).getbbox()
+        if kasten and klein.size[0]:
+            f = self.src.size[0] / float(klein.size[0])
+            masse = ((kasten[2] - kasten[0]) * f, (kasten[3] - kasten[1]) * f)
+        else:                        # leeres Bild: dann eben das Rechteck
+            masse = self._dreh_bb(*self.src.size, grad=grad)
+        self._bilddreh = (self.src, grad, masse)
+        return masse
+
     def _bezug_bb(self, grad=None):
         """Ausdehnung der Vorlage, auf die sich Breite und Hoehe beziehen.
 
-        Beim Schneiden ist das die echte Kontur, beim Gravieren das
-        gerenderte Bild - das ist breiter, weil die Strichdicke mitzaehlt.
+        Beim Schneiden die echte Kontur. Beim Gravieren der Inhalt des
+        Bildes - frueher stand hier sein Rechteck, und das waechst beim
+        Drehen, auch wenn das Motiv darin rund ist. Eine Zeichnung bringt
+        ihre Kontur selbst mit, die ist genauer als jedes gerenderte Bild;
+        nur eine Schnittvorlage nicht, denn deren Pfade liegen NEBEN dem
+        Motiv, das graviert wird.
+
         Mit 'grad' auch fuer einen anderen als den eingestellten Winkel:
         nur so laesst sich nach dem Drehen ausrechnen, wie gross das Motiv
         vorher war.
         """
         if self.src is None:
             return 0.0, 0.0
-        if self.v_job.get() == "schnitt" and self.vec:
+        if self.vec and (self.v_job.get() == "schnitt"
+                         or not getattr(self, "bildlinien", False)):
             return self._vec_dreh_bb(grad)
-        return self._dreh_bb(*self.src.size, grad=grad)
+        return self._bild_dreh_bb(self.v_rot.get() if grad is None else grad)
 
     def _aspect(self):
         """Seitenverhaeltnis der Vorlage, oder None, wenn es keines gibt.

@@ -2758,6 +2758,44 @@ class MitDerMausDrehen(Grundlage):
         self.assertEqual((round(self.app.v_w.get(), 1),
                           round(self.app.v_h.get(), 1)), vorher)
 
+    def test_rundes_motiv_waechst_beim_drehen_nicht(self):
+        """Der Kasten war das gedrehte RECHTECK um das Bild, nicht der
+        gedrehte Inhalt: bei einem runden 60-mm-Anhaenger stand bei
+        301 Grad ein Kasten von 80 x 78 mm um eine Scheibe von 56 x 55."""
+        from PIL import ImageDraw
+        im = Image.new("L", (800, 800), 255)
+        ImageDraw.Draw(im).ellipse((40, 40, 760, 760), fill=0)
+        p = os.path.join(tempfile.mkdtemp(), "rund.png")
+        im.save(p)
+        self.app.lade_motiv(p, fragen=False)
+        self.app.v_lock.set(True)
+        self.app.v_w.set(60.0)
+        self.app._keep_ratio("w")
+        for grad in (0, 30, 45, 301, 0):
+            self.app._dreh_setzen(grad)
+            b, h = self.app._box()[2:]
+            self.assertAlmostEqual(b, 60.0, delta=1.0, msg="%d Grad" % grad)
+            self.assertAlmostEqual(h, 60.0, delta=1.0, msg="%d Grad" % grad)
+
+    def test_zeichnung_misst_ihre_kontur_auch_beim_gravieren(self):
+        """Eine Zeichnung bringt ihre Kontur mit - die ist genauer als
+        jedes gerenderte Bild, und sie waechst beim Drehen nur so viel,
+        wie die Kontur wirklich waechst."""
+        p = os.path.join(tempfile.mkdtemp(), "kreis.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="60mm" '
+                    'height="60mm" viewBox="0 0 60 60">'
+                    '<circle cx="30" cy="30" r="29" stroke="#ff0000" '
+                    'stroke-width="0.2" fill="none"/></svg>')
+        self.app.lade_motiv(p, fragen=False)
+        self.app.v_job.set("gravur")
+        self.app.v_lock.set(True)
+        self.app._dreh_setzen(0)
+        vorher = self.app._box()[2:]
+        self.app._dreh_setzen(301)
+        self.assertAlmostEqual(self.app._box()[2], vorher[0], delta=1.0)
+        self.assertAlmostEqual(self.app._box()[3], vorher[1], delta=1.0)
+
     def test_zeigerform_sagt_was_ein_klick_taete(self):
         x, y, b, h = self.aufbauen()
         px, py = self.app._mm(x, y + h)

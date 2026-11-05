@@ -60,7 +60,9 @@ Material ausprobieren will.
   Werten, gemeinsam in einer Vorschau, einem G-Code und einer Projektdatei.
   Erst wird alles graviert, dann alles geschnitten — auch bei Elementen, die
   selbst beides tun. Sonst läge das erste Teil schon lose im Brett, während
-  das zweite noch graviert wird.
+  das zweite noch graviert wird. Die Betriebsart gehört zum Element: wer sie
+  umschaltet, wird gefragt, ob die anderen mitkommen — fünf Schnittdateien
+  laden und einmal „Schneiden“ klicken hieß sonst, vier davon zu gravieren.
 - **Formen zeichnen** — ein Rechteck mit Maßen und Eckradius, oder gleich ein
   Rahmen um das gewählte Motiv mit einem Abstand ringsum. Braucht keine
   Zeichensoftware für den einfachen Fall und steht danach als ganz normales

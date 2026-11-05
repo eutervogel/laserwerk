@@ -57,6 +57,7 @@ class App:
         self._vecdreh = None       # Ausdehnung der gedrehten Konturen
         self.cut_polys = None      # erzeugte Schnittkonturen
         self.schnitt_ab = None     # ab welcher Zeile der Schnitt beginnt
+        self._am_erzeugen = False  # laeuft generate() gerade?
         self.zero_ok = False       # Nullpunkt XY in dieser Sitzung gesetzt
         self.zref_ok = False       # Z-Referenz gueltig
         self.fokus_zs = []
@@ -1202,11 +1203,15 @@ class App:
         if zeichnen:
             self._draw()
 
+    @staticmethod
+    def _artname(art):
+        return {"gravur": T("gravieren"), "schnitt": T("schneiden"),
+                "beides": T("beides")}.get(art, "")
+
     def _liste_auffrischen(self):
         self.lb_el.delete(0, "end")
         for i, e in enumerate(self.elemente):
-            art = {"gravur": T("gravieren"), "schnitt": T("schneiden"),
-                   "beides": T("beides")}.get(e.get("v_job", "gravur"), "")
+            art = self._artname(e.get("v_job", "gravur"))
             self.lb_el.insert("end", "%d. %s  (%s)" % (i + 1, e["anzeige"], art))
         if 0 <= self.aktiv < len(self.elemente):
             self.lb_el.selection_clear(0, "end")
@@ -1455,10 +1460,44 @@ class App:
         # gewaehlte Element, und das sieht man sonst erst am fehlenden
         # Schnitt im fertigen Job.
         self._element_sichern()
+        self._auch_die_anderen()
         self._liste_auffrischen()
         self._stale()
         self._raender_zeigen()
         self._draw()
+
+    def _auch_die_anderen(self):
+        """Die Betriebsart auf die anderen Elemente uebertragen, wenn gewollt.
+
+        Sie gilt je Element. Wer mehrere Schnittdateien laedt und danach
+        einmal "Schneiden" anklickt, stellt damit nur die zuletzt geladene
+        um - die anderen wurden graviert. In der Liste stand es, aber gesehen
+        hat man es erst am Werkstueck.
+        """
+        art = self.v_job.get()
+        andere = [e for k, e in enumerate(self.elemente)
+                  if k != self.aktiv and e.get("v_job", "gravur") != art]
+        # Ohne Konturen laesst sich nicht schneiden - solche Elemente bleiben,
+        # wie sie sind, und das sagt das Protokoll. Farbebenen bleiben
+        # ebenfalls: bei ihnen ist die Mischung der Zweck, rot schneiden und
+        # der Rest gravieren.
+        geht = [e for e in andere
+                if not e.get("ebene") and (e.get("vec") or art == "gravur")]
+        if not geht:
+            return
+        if not messagebox.askyesno(T("Betriebsart"), T(
+                "{n} weitere Element(e) sind anders eingestellt.\n\n"
+                "'{art}' auch für sie übernehmen?").format(
+                    n=len(geht), art=self._artname(art))):
+            return
+        for e in geht:
+            e["v_job"] = art
+            e.pop("ergebnis", None)
+        if len(andere) > len(geht):
+            self._log(T("{n} Element(e) ohne Konturen bleiben beim "
+                        "Gravieren.").format(n=len(andere) - len(geht)))
+        self._log(T("{n} Element(e) auf '{art}' umgestellt.").format(
+            n=len(geht), art=self._artname(art)))
 
     def _vec_dreh_bb(self):
         """Ausdehnung der GEDREHTEN Konturen. Das gedrehte Rechteck um eine
@@ -1597,6 +1636,12 @@ class App:
         """
         if getattr(self, "_still", False):
             return
+        # Waehrend des Erzeugens aendert das Programm selbst Felder - der
+        # Anlauf hebt den Versatz X an. Das darf die schon berechneten
+        # Elemente nicht wegwerfen: sonst stand am Ende nur noch das letzte
+        # Motiv da, und generate() fiel ueber das fehlende Ergebnis.
+        if self._am_erzeugen:
+            return
         if self.src is None:
             return
         # Auch die Ergebnisse der einzelnen Elemente wegwerfen: sonst bleibt
@@ -1637,7 +1682,9 @@ class App:
         self._element_sichern()
         merke = self.aktiv
         gravur, schnitt = [], []
+        infos = []
         sekunden = brennweg = 0.0
+        self._am_erzeugen = True
         try:
             for i in range(len(self.elemente)):
                 self._element_laden(i, zeichnen=False)
@@ -1655,6 +1702,7 @@ class App:
                                      cut_polys=self.cut_polys,
                                      schnitt_ab=self.schnitt_ab,
                                      text=self.lbl_info.cget("text"))
+                infos.append(self.info)
                 sekunden += self.info.get("sekunden", 0)
                 brennweg += self.info.get("cut_m", 0)
                 # "beides" bringt Gravur und Schnitt in einem Stueck mit.
@@ -1671,6 +1719,7 @@ class App:
                 else:
                     gravur.append(self._stueck(i, 0, None))
         finally:
+            self._am_erzeugen = False
             self._element_laden(merke, zeichnen=False)
         folge = gravur + schnitt
         zeilen, marken = [], []
@@ -1681,9 +1730,21 @@ class App:
                        for idx, art, nr, gesamt in teilmarken]
             zeilen += teil
         self.lines = zeilen
-        self.info = dict(self.elemente[folge[0][2]]["ergebnis"]["info"])
+        # Die Ausdehnung ist die des ganzen Jobs. Nur die des ersten Elements
+        # zu nehmen hiess: ein Motiv rechts ausserhalb des Verfahrwegs kam
+        # ohne Warnung durch.
+        self.info = dict(infos[0])
         self.info.update(befehle=len(zeilen), sekunden=sekunden, cut_m=brennweg,
-                         marken=marken)
+                         marken=marken,
+                         konturen=sum(i.get("konturen", 0) for i in infos),
+                         xmin=min(i["xmin"] for i in infos),
+                         xmax=max(i["xmax"] for i in infos),
+                         ymin=min(i["ymin"] for i in infos),
+                         ymax=max(i["ymax"] for i in infos),
+                         breite=max(i["xmax"] for i in infos)
+                                - min(i["xmin"] for i in infos),
+                         hoehe=max(i["ymax"] for i in infos)
+                               - min(i["ymin"] for i in infos))
         if len(self.elemente) > 1:
             # Jedes Element einmal, in der Reihenfolge, in der es zuerst
             # drankommt - ein Teil mit Gravur und Schnitt steckt in zwei
@@ -1790,6 +1851,10 @@ class App:
         self.preview_pil = J.preview_image(p)
         self.preview_img = None
         self.preview_pos = (xoff, yoff + self.info["hoehe"])
+        # Die Y-Grenzen kennt nur der Aufrufer: raster_gcode rechnet in
+        # Zeilen, der Versatz kommt von hier.
+        self.info["ymin"] = yoff
+        self.info["ymax"] = yoff + self.info["hoehe"]
         i = self.info
         warn = ""
         if i["xmax"] > self.cfg["x_max"] or h > self.cfg["y_max"]:
@@ -1898,7 +1963,10 @@ class App:
             befehle=len(self.lines),
             cut_m=i["cut_m"] + ci["cut_m"],
             sekunden=i["sekunden"] + ci["sekunden"],
+            xmin=min(i["xmin"], ci["xmin"]),
             xmax=max(i["xmax"], ci["xmax"]),
+            ymin=min(i.get("ymin", ci["ymin"]), ci["ymin"]),
+            ymax=max(i.get("ymax", ci["ymax"]), ci["ymax"]),
             marken=marken,
             konturen=ci["konturen"], schnitt_m=ci["cut_m"],
             schnitt_sekunden=ci["sekunden"])

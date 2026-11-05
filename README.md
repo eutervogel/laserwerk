@@ -58,7 +58,9 @@ settings for a new material.
   in one preview, one G-code run and one project file. Everything is engraved
   first, then everything is cut — including elements that do both themselves.
   Otherwise the first part would already be loose in the board while the
-  second one is still being engraved.
+  second one is still being engraved. The mode belongs to the element: change
+  it and Laserwerk asks whether the others should follow — loading five cut
+  files and clicking "cut" once used to engrave four of them.
 - **Draw shapes** — a rectangle with its measurements and corner radius, or a
   frame around the selected artwork with a margin all round. No drawing
   program needed for the simple case, and the result is an ordinary element

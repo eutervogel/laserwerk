@@ -2612,17 +2612,51 @@ class SchnittvorlageInDeckung(Grundlage):
         self.assertAlmostEqual(y1, 80.0 + self.LUFT, delta=0.6)
 
     def test_gravur_bleibt_wo_sie_hingehoert(self):
-        """Der Schnitt darf sich verschieben, die Gravur nicht."""
+        """Der Schnitt darf sich verschieben, die Gravur nicht.
+
+        Verglichen werden die Zeilen, nicht die Kennzahlen des Jobs: die
+        gelten fuer das Ganze, und das Ganze ist mit Schnitt groesser.
+        """
         self.vorlage()
         self.app.v_mode.set("schwelle")
         self.app.v_job.set("gravur")
         self.app.generate()
-        allein = (self.app.info["xmin"], self.app.info["breite"],
-                  self.app.info["hoehe"])
+        allein = list(self.app.lines)
         self.app.v_job.set("beides")
         self.app.generate()
-        i = self.app.info
-        self.assertEqual((i["xmin"], i["breite"], i["hoehe"]), allein)
+        ab = self.app.elemente[0]["ergebnis"]["schnitt_ab"]
+        self.assertIsNotNone(ab)
+        self.assertEqual(self.app.lines[:ab], allein[:ab])
+
+    def test_der_ganze_job_sagt_seine_ausdehnung(self):
+        """Nur das erste Element zu melden hiess: ein Motiv weiter rechts
+        kam in den Kennzahlen gar nicht vor."""
+        self.vorlage(20.0, 20.0, job="schnitt")
+        self.vorlage(120.0, 20.0, job="schnitt")
+        self.app.generate()
+        x0, x1, y0, y1 = J.extent(self.app.lines)
+        self.assertAlmostEqual(self.app.info["xmax"], x1, delta=0.2)
+        self.assertAlmostEqual(self.app.info["ymax"], y1, delta=0.2)
+        # x0 ist die Rueckfahrt zum Nullpunkt, nicht das Motiv.
+        self.assertAlmostEqual(self.app.info["breite"],
+                               self.app.info["xmax"] - self.app.info["xmin"],
+                               delta=0.01)
+
+    def test_anlauf_wirft_die_anderen_elemente_nicht_weg(self):
+        """Hebt der Anlauf den Versatz X an, zaehlte das als Benutzer-
+        eingabe: alle schon gerechneten Elemente flogen weg, in der Anzeige
+        stand nur noch das letzte Motiv, und generate() fiel ueber das
+        fehlende Ergebnis.
+        """
+        self.vorlage(2.0, 5.0, job="gravur")       # Versatz kleiner als
+        self.vorlage(2.0, 70.0, job="gravur")      # der Anlauf bei F1000
+        self.app.v_mode.set("schwelle")
+        self.app.generate()
+        self.assertTrue(all("ergebnis" in e for e in self.app.elemente))
+        self.assertEqual(self.app.info["befehle"], len(self.app.lines))
+        for e in self.app.elemente:               # beide Motive sind drin
+            self.assertLess(len(e["ergebnis"]["lines"]), len(self.app.lines))
+        self.assertGreater(self.app.info["ymax"], 70.0)
 
     def test_ohne_platz_davor_wird_nicht_erzeugt(self):
         """Der Schnitt laege vor dem Nullpunkt - da faehrt nichts hin."""
@@ -2710,17 +2744,42 @@ class SchnittvorlageInDeckung(Grundlage):
                 self.assertTrue(self.app.lines[idx + 1].startswith("G1 "),
                                 self.app.lines[idx + 1])
 
-    def test_umschalten_schreibt_sich_in_die_liste(self):
-        """Sonst sieht man der Liste nicht an, dass nur ein Element
-        umgestellt wurde."""
+    def test_umschalten_nimmt_die_anderen_mit(self):
+        """Wer mehrere Dateien laedt und danach einmal umschaltet, meint
+        alle. Vorher wurde nur die zuletzt geladene umgestellt - der Rest
+        lief in der falschen Betriebsart mit."""
         self.vorlage(20.0, 20.0)
         self.vorlage(120.0, 20.0)
         self.app.v_job.set("gravur")
         self.app._job_changed()
+        self.assertEqual([e["v_job"] for e in self.app.elemente],
+                         ["gravur", "gravur"])
+        self.assertIn("gravieren", self.app.lb_el.get(0))
+
+    def test_farbebenen_bleiben_wie_sie_sind(self):
+        """Bei Ebenen ist die Mischung der Zweck: rot schneiden, der Rest
+        gravieren. Die darf das Umschalten nicht einsammeln."""
+        self.vorlage(20.0, 20.0)
+        self.vorlage(120.0, 20.0)
+        # Erst nach dem Laden: _element_sichern() schreibt die Felder des
+        # gewaehlten Elements zurueck und wuerde die Ebene wieder loeschen.
+        self.app.elemente[0]["ebene"] = "#ff0000"
+        self.app.v_job.set("gravur")
+        self.app._job_changed()
         self.assertEqual(self.app.elemente[0]["v_job"], "beides")
-        self.assertEqual(self.app.elemente[1]["v_job"], "gravur")
-        self.assertIn("gravieren", self.app.lb_el.get(1))
+
+    def test_abgelehnt_bleibt_es_beim_gewaehlten(self):
+        """Die Frage ist eine Frage - wer nein sagt, behaelt die Mischung,
+        und die Liste sagt sie an."""
+        self.vorlage(20.0, 20.0)
+        self.vorlage(120.0, 20.0)
+        self.L.messagebox.askyesno = lambda t, m: False
+        self.app.v_job.set("gravur")
+        self.app._job_changed()
+        self.assertEqual([e["v_job"] for e in self.app.elemente],
+                         ["beides", "gravur"])
         self.assertIn("beides", self.app.lb_el.get(0))
+        self.assertIn("gravieren", self.app.lb_el.get(1))
 
     def test_platz_ueberlebt_den_elementwechsel(self):
         self.vorlage()

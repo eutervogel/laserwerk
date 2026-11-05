@@ -805,6 +805,15 @@ EN = {
     "gravieren": "engrave", "schneiden": "cut", "beides": "both",
     "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min":
         "{n} elements\n{b} commands, {m:.1f} m burnt\nabout {min:.0f} min",
+    "Betriebsart": "Mode",
+    "{n} weitere Element(e) sind anders eingestellt.\n\n"
+    "'{art}' auch für sie übernehmen?":
+        "{n} further element(s) are set differently.\n\n"
+        "Apply '{art}' to them as well?",
+    "{n} Element(e) auf '{art}' umgestellt.":
+        "{n} element(s) switched to '{art}'.",
+    "{n} Element(e) ohne Konturen bleiben beim Gravieren.":
+        "{n} element(s) without contours stay on engraving.",
     # ---- Farben als Ebenen
     "Farben als Ebenen": "Colours as layers",
     "Die Zeichnung hat {n} Strichfarben.\n\n"

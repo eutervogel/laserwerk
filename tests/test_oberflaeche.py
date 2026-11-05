@@ -2777,6 +2777,34 @@ class MitDerMausDrehen(Grundlage):
             self.assertAlmostEqual(b, 60.0, delta=1.0, msg="%d Grad" % grad)
             self.assertAlmostEqual(h, 60.0, delta=1.0, msg="%d Grad" % grad)
 
+    def test_vorschau_fuellt_ihren_rahmen_auch_gedreht(self):
+        """rotate(expand=True) legt weisse Zwickel um das Motiv. In einen
+        Rahmen gezogen, der genau um den Inhalt liegt, schwaemme es darin
+        mit Luft ringsum - kleiner, als es wirklich ist."""
+        from PIL import ImageDraw
+        im = Image.new("L", (400, 400), 255)
+        ImageDraw.Draw(im).rectangle((60, 120, 340, 280), fill=0)
+        p = os.path.join(tempfile.mkdtemp(), "balken.png")
+        im.save(p)
+        self.app.lade_motiv(p, fragen=False)
+        self.app.v_lock.set(True)
+        self.app.v_w.set(80.0)
+        self.app._keep_ratio("w")
+        def inhalt(bild):
+            return bild.point(lambda v: 255 if v < 245 else 0).getbbox()
+
+        gedreht = self.app.src.rotate(-45, expand=True, fillcolor=255)
+        self.assertNotEqual(inhalt(gedreht),
+                            (0, 0, gedreht.width, gedreht.height),
+                            "ohne Zwickel waere nichts zu beschneiden")
+        eng = self.app._auf_inhalt(gedreht)
+        self.assertEqual(inhalt(eng), (0, 0, eng.width, eng.height))
+        # und das Bild, das gezeichnet wird, geht durch dieselbe Stelle
+        self.app._dreh_setzen(45)
+        b, h = self.app._box()[2:]
+        self.app._live_cache = None
+        self.assertIsNotNone(self.app._live_image(b, h))
+
     def test_zeichnung_misst_ihre_kontur_auch_beim_gravieren(self):
         """Eine Zeichnung bringt ihre Kontur mit - die ist genauer als
         jedes gerenderte Bild, und sie waechst beim Drehen nur so viel,

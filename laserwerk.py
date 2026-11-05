@@ -4191,6 +4191,20 @@ class App:
             y = 2 * a - y - h
         return x, y, b, h
 
+    @staticmethod
+    def _auf_inhalt(im):
+        """Das gedrehte Bild auf seinen Inhalt zuschneiden.
+
+        rotate(expand=True) legt weisse Zwickel um das Motiv. In den Rahmen
+        gezogen, der genau um den Inhalt liegt, waere das Motiv darin zu
+        klein - es schwaemme mit Luft ringsum in seinem eigenen Kasten.
+        """
+        try:
+            kasten = im.point(lambda v: 255 if v < 245 else 0).getbbox()
+        except ValueError:            # kein Graustufenbild
+            return im
+        return im.crop(kasten) if kasten else im
+
     def _bild_von(self, e, b, h):
         """Das Motiv eines Elements als durchscheinendes Bild - fuer alle
         Elemente, nicht nur das gewaehlte. Sonst sieht man von den anderen
@@ -4210,7 +4224,7 @@ class App:
         im = im0
         rot = float(e.get("v_rot", 0) or 0)
         if rot:
-            im = im.rotate(-rot, expand=True, fillcolor=255)
+            im = self._auf_inhalt(im.rotate(-rot, expand=True, fillcolor=255))
         if e.get("v_spiegel") == "x":
             im = im.transpose(Image.FLIP_LEFT_RIGHT)
         elif e.get("v_spiegel") == "y":
@@ -4474,7 +4488,7 @@ class App:
             return self._live_cache[1]
         im = self.src
         if rot:
-            im = im.rotate(-rot, expand=True, fillcolor=255)
+            im = self._auf_inhalt(im.rotate(-rot, expand=True, fillcolor=255))
         if sp == "x":
             im = im.transpose(Image.FLIP_LEFT_RIGHT)
         elif sp == "y":

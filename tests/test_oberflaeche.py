@@ -34,6 +34,7 @@ class Grundlage(unittest.TestCase):
         self.wurzel, self.app, self.L = app_bauen()
         self._modulwerte = (J.ACCEL, J.EILGANG, J.KREUZUNG, J.WATT)
         self._cfgwerte = {k: self.app.cfg.get(k) for k in self.MASCHINE}
+        self._maschinen = self.L.P.kopie(self.app.maschinen)
         self.app.zero_ok = True
         self.gezeigt = []
         self.L.messagebox.showerror = lambda t, m: self.gezeigt.append(("!", m))
@@ -51,6 +52,8 @@ class Grundlage(unittest.TestCase):
                                 for k in self.MASCHINE} != self._cfgwerte:
             app.cfg.update(self._cfgwerte)
             self.L.P.save_config(app.cfg)
+        if app is not None and app.maschinen != self._maschinen:
+            self.L.P.save_maschinen(self._maschinen)
         if self.wurzel is not None:
             app_schliessen(self.wurzel, app)
 
@@ -2618,6 +2621,109 @@ class NurDasBild(Grundlage):
         self.app._nurbild_anwenden()
         self.assertIsNot(self.app.src, vorher)
         self.assertFalse(self.app.src_nurbild)
+
+
+@ohne_bildschirm
+class MaschinenProfile(Grundlage):
+    """Zwei Maschinen abwechselnd: Verfahrweg, Leistung, Beschleunigung,
+    Fokuskorrektur, Laufzeitmessungen und Presets gehoeren zu je einer.
+    Dieselbe Presetliste an 5,5 W und an 22 W ist eine Falle, die beim
+    ersten Brett zuschlaegt."""
+
+    VORLAGE = "Creality Falcon2 Pro 22 W"
+
+    def setUp(self):
+        super().setUp()
+        # Mit leerer Ablage anfangen: die Wegwerfdatei ueberlebt sonst von
+        # einem Test zum naechsten.
+        self.app.maschinen = {"aktiv": "", "maschinen": {}}
+        self.app.cfg.pop("maschine", None)
+        self.app.cfg.update(watt=5.5, x_max=200.0, y_max=200.0, accel=30.0)
+        self.app._maschine_einrichten()
+        self.app._maschine_zeigen()
+
+    def anlegen(self, name, umrechnen=True):
+        self.L.messagebox.askyesno = lambda t, m: umrechnen
+        self.app.v_mneu.set(name)
+        self.app.maschine_anlegen()
+
+    def test_erster_start_macht_eine_maschine(self):
+        self.assertEqual(len(self.app._maschinen_namen()), 1)
+        self.assertEqual(self.app.cfg["maschine"], self.app._maschine_name())
+        self.assertIn(self.app._maschine_name(), self.wurzel.title())
+
+    def test_vorlage_bringt_ihre_werte_mit(self):
+        self.anlegen(self.VORLAGE)
+        self.assertEqual(self.app._maschine_name(), self.VORLAGE)
+        self.assertEqual((self.app.cfg["x_max"], self.app.cfg["y_max"]),
+                         (400.0, 415.0))
+        self.assertEqual(self.app.cfg["watt"], 22.0)
+        self.assertEqual(J.ACCEL, 500.0)         # das Zeitmodell zieht mit
+        self.assertEqual(J.EILGANG, 8000.0)
+        self.assertIn(self.VORLAGE, self.wurzel.title())
+
+    def test_presets_werden_auf_die_leistung_umgerechnet(self):
+        vorher = dict(self.app.presets["Erle 3 mm (Schnitt)"])
+        self.anlegen(self.VORLAGE, umrechnen=True)
+        jetzt = self.app.presets["Erle 3 mm (Schnitt)"]
+        self.assertAlmostEqual(jetzt["schnitt_s"],
+                               vorher["schnitt_s"] * 5.5 / 22.0, delta=1)
+        self.assertIn("UNGETESTET", jetzt["notiz"])
+        self.assertEqual(jetzt["schnitt_f"], vorher["schnitt_f"])
+
+    def test_wer_nein_sagt_behaelt_die_werte(self):
+        vorher = dict(self.app.presets["Erle 3 mm (Schnitt)"])
+        self.anlegen(self.VORLAGE, umrechnen=False)
+        self.assertEqual(self.app.presets["Erle 3 mm (Schnitt)"]["schnitt_s"],
+                         vorher["schnitt_s"])
+
+    def test_zurueckwechseln_holt_alles_zurueck(self):
+        klein = self.app._maschine_name()
+        self.app.cfg["zeitmessungen"] = [1.21, 1.19, 1.2]
+        self.app.v_korr.set(4.0)
+        self.app._fokus_sichern()
+        self.anlegen(self.VORLAGE)
+        self.assertEqual(self.app.cfg.get("zeitmessungen"), [])
+        self.assertEqual(self.app.cfg.get("korrektur"), 0.0)
+        self.assertTrue(self.app.maschine_wechseln(klein, fragen=False))
+        self.assertEqual(self.app.cfg["zeitmessungen"], [1.21, 1.19, 1.2])
+        self.assertEqual(self.app.cfg["korrektur"], 4.0)
+        self.assertEqual(self.app.cfg["x_max"], 200.0)
+        self.assertEqual(J.ACCEL, 30.0)
+
+    def test_angeschlossene_maschine_wird_erkannt(self):
+        """Umgesteckt und vergessen umzuschalten - $130/$131 verraten es."""
+        klein = self.app._maschine_name()
+        self.anlegen(self.VORLAGE)
+        self.app.maschine_wechseln(klein, fragen=False)
+        self.app.grbl = Attrappe(x130=400.0, y131=415.0, app=self.app)
+        self.app._einstellungen_pruefen(self.app.grbl.settings)
+        self.assertEqual(self.app._maschine_name(), self.VORLAGE)
+
+    def test_ohne_passendes_profil_wird_nicht_gewechselt(self):
+        klein = self.app._maschine_name()
+        self.app.grbl = Attrappe(x130=400.0, y131=415.0, app=self.app)
+        self.app._einstellungen_pruefen(self.app.grbl.settings)
+        self.assertEqual(self.app._maschine_name(), klein)
+
+    def test_waehrend_eines_jobs_kein_wechsel(self):
+        klein = self.app._maschine_name()
+        self.anlegen(self.VORLAGE)
+        self.app.grbl.job_running = True
+        self.assertFalse(self.app.maschine_wechseln(klein))
+        self.assertEqual(self.app._maschine_name(), self.VORLAGE)
+
+    def test_name_doppelt_geht_nicht(self):
+        self.anlegen(self.VORLAGE)
+        self.anlegen(self.VORLAGE)
+        self.assertEqual(self.app._maschinen_namen().count(self.VORLAGE), 1)
+
+    def test_label_sagt_die_kennwerte(self):
+        self.anlegen(self.VORLAGE)
+        text = self.app.lbl_maschine.cget("text")
+        self.assertIn("400", text)
+        self.assertIn("22", text)
+        self.assertIn("500", text)
 
 
 @ohne_bildschirm

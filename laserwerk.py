@@ -32,6 +32,8 @@ class App:
         root.title("Laserwerk")
         self.cfg = P.load_config()
         self.presets = P.load_presets()
+        self.maschinen = P.load_maschinen()
+        self._maschine_einrichten()
         self.q = queue.Queue()
         self.grbl = G.Grbl(lambda k, d: self.q.put((k, d)))
         self.src = None            # Graustufenbild (zugeschnitten)
@@ -579,12 +581,49 @@ class App:
     # ---------------------------------------------------------------- Maschine
     def _build_maschine(self):
         f = self.tab_masch
+        # Maschine und Anschluss gehoeren zusammen: beide beantworten die
+        # Frage, mit wem Laserwerk gleich redet.
+        mf = ttk.LabelFrame(f, text=T("Maschine"), padding=4)
+        mf.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 4))
+        mf.columnconfigure(0, weight=1)
+        self.v_maschine = tk.StringVar(value=self._maschine_name())
+        self.cb_maschine = ttk.Combobox(mf, textvariable=self.v_maschine,
+                                        width=17, state="readonly",
+                                        values=self._maschinen_namen())
+        self.cb_maschine.grid(row=0, column=0, sticky="ew")
+        self.cb_maschine.bind("<<ComboboxSelected>>",
+                              lambda e: self.maschine_wechseln(self.v_maschine.get()))
+        # Daneben der Name einer neuen: frei eintippen oder eine bekannte
+        # Maschine aus der Liste nehmen, die bringt ihre Werte mit.
+        self.v_mneu = tk.StringVar()
+        ttk.Combobox(mf, textvariable=self.v_mneu, width=11,
+                     values=sorted(P.VORLAGEN)).grid(row=0, column=1, padx=4)
+        ttk.Button(mf, text=T("anlegen"), command=self.maschine_anlegen,
+                   width=8).grid(row=0, column=2)
         self.v_port = tk.StringVar(value=self.cfg.get("port", ""))
-        self.cb_port = ttk.Combobox(f, textvariable=self.v_port, width=22,
+        self.cb_port = ttk.Combobox(mf, textvariable=self.v_port, width=17,
                                     values=G.ports())
-        self.cb_port.grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Button(f, text=T("neu suchen"), command=lambda: self.cb_port.configure(
-            values=G.ports())).grid(row=0, column=2)
+        self.cb_port.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 0))
+        ttk.Button(mf, text=T("neu suchen"), command=lambda: self.cb_port.configure(
+            values=G.ports()), width=8).grid(row=1, column=2, pady=(3, 0))
+        # Die Leistung gehoert zur Maschine, nicht zum Verfahrweg: sie
+        # entscheidet, was dieselbe Energie je Millimeter kostet.
+        self.v_watt = tk.DoubleVar(value=float(self.cfg.get("watt", J.WATT)))
+        lw = ttk.Frame(mf)
+        lw.grid(row=2, column=0, columnspan=2, sticky="w", pady=(3, 0))
+        ttk.Label(lw, text=T("Leistung")).pack(side="left")
+        ttk.Spinbox(lw, from_=0.5, to=200.0, increment=0.5, width=5,
+                    textvariable=self.v_watt, command=self.set_watt
+                    ).pack(side="left", padx=3)
+        ttk.Label(lw, text=T("W optisch")).pack(side="left")
+        ttk.Button(mf, text=T("übernehmen"), command=self.set_watt, width=8
+                   ).grid(row=2, column=2, pady=(3, 0))
+        self.lbl_maschine = ttk.Label(mf, text="", style="Muted.TLabel")
+        self.lbl_maschine.grid(row=3, column=0, columnspan=3, sticky="w")
+        self.lbl_watt = ttk.Label(mf, text="", style="Muted.TLabel")
+        self.lbl_watt.grid(row=4, column=0, columnspan=3, sticky="w")
+        self._maschine_zeigen()
+        self._watt_zeigen()
         self.btn_conn = ttk.Button(f, text=T("Verbinden"), command=self.toggle_connect, style="Accent.TButton")
         self.btn_conn.grid(row=1, column=0, columnspan=3, sticky="ew", pady=4)
 
@@ -629,20 +668,7 @@ class App:
         ttk.Label(vw, text=T("Bestimmt die gezeichnete Arbeitsfläche und die\n"
                              "Warnung, wenn ein Job nicht hineinpasst."),
                   style="Muted.TLabel").grid(row=2, column=0, columnspan=5, sticky="w")
-        ttk.Label(vw, text=T("Leistung")).grid(row=3, column=0, sticky="w",
-                                               pady=(6, 0))
-        self.v_watt = tk.DoubleVar(value=float(self.cfg.get("watt", J.WATT)))
-        ttk.Spinbox(vw, from_=0.5, to=200.0, increment=0.5, width=6,
-                    textvariable=self.v_watt, command=self.set_watt
-                    ).grid(row=3, column=1, sticky="w", pady=(6, 0))
-        ttk.Label(vw, text=T("W optisch")).grid(row=3, column=2, sticky="w",
-                                                pady=(6, 0))
-        ttk.Button(vw, text=T("übernehmen"), command=self.set_watt
-                   ).grid(row=3, column=3, columnspan=2, sticky="ew",
-                          padx=(4, 0), pady=(6, 0))
-        self.lbl_watt = ttk.Label(vw, text="", style="Muted.TLabel")
-        self.lbl_watt.grid(row=4, column=0, columnspan=5, sticky="w")
-        self._watt_zeigen()
+
 
         # Beide Nullpunktknoepfe nebeneinander in eine Zelle - eine neue
         # Gitterzeile waere die Gelegenheit fuer genau die Ueberdeckung,
@@ -1691,6 +1717,168 @@ class App:
         self._stale()
         self._draw()
 
+    # ============================================================ Maschinen
+    # Zwei Maschinen abwechselnd: Verfahrweg, Beschleunigung, Eilgang,
+    # Leistung, Fokuskorrektur, Laufzeitmessungen UND Presets gehoeren zu
+    # je einer. config.json und presets.json bleiben der Stand der gerade
+    # gewaehlten; maschinen.json legt die anderen daneben.
+
+    def _maschine_name(self):
+        return self.cfg.get("maschine") or self.maschinen.get("aktiv") or ""
+
+    def _maschinen_namen(self):
+        return sorted(self.maschinen.get("maschinen") or {})
+
+    def _maschine_einrichten(self):
+        """Beim ersten Start aus dem vorhandenen Stand eine Maschine machen.
+
+        Wer Laserwerk bisher benutzt hat, hat genau eine - die steht in
+        config.json und presets.json. Sie bekommt einen Namen, und ab dann
+        laesst sich eine zweite daneben legen.
+        """
+        if not (self.maschinen.get("maschinen") or {}):
+            name = self.cfg.get("maschine") or T("Diodenlaser {w:.1f} W").format(
+                w=float(self.cfg.get("watt", J.WATT)))
+            self.cfg["maschine"] = name
+            P.maschine_sichern(self.maschinen, name, self.cfg, self.presets)
+            P.save_maschinen(self.maschinen)
+            P.save_config(self.cfg)
+        elif not self.cfg.get("maschine"):
+            self.cfg["maschine"] = self.maschinen.get("aktiv") or ""
+        self.root.title("Laserwerk - %s" % self._maschine_name())
+
+    def _maschine_zeigen(self):
+        """Die Kennwerte der gewaehlten Maschine unter ihrem Namen.
+
+        Steht da 22 W und 400 x 415, waehrend die kleine angeschlossen ist,
+        faellt das auf, bevor das erste Brett brennt.
+        """
+        if not hasattr(self, "lbl_maschine"):
+            return
+        self.lbl_maschine.configure(text=T(
+            "{x:.0f} x {y:.0f} mm, {w:.1f} W, {b:.0f} mm/s², Eilgang "
+            "{e:.0f} mm/min, {n} Presets").format(
+                x=float(self.cfg["x_max"]), y=float(self.cfg["y_max"]),
+                w=self._watt(), b=float(self.cfg.get("accel", J.ACCEL)),
+                e=float(self.cfg.get("eilgang", J.EILGANG)),
+                n=len(self.presets)))
+        self.cb_maschine.configure(values=self._maschinen_namen())
+        self.v_maschine.set(self._maschine_name())
+
+    def _maschine_sichern(self):
+        """Den laufenden Stand in die gewaehlte Maschine zurueckschreiben."""
+        name = self._maschine_name()
+        if not name:
+            return
+        P.maschine_sichern(self.maschinen, name, self.cfg, self.presets)
+        P.save_maschinen(self.maschinen)
+
+    def maschine_wechseln(self, name, fragen=True):
+        """Auf eine andere Maschine umschalten."""
+        if name == self._maschine_name():
+            return True
+        if self.grbl.job_running:
+            messagebox.showinfo(T("Maschine"), T("Während eines Jobs nicht möglich."))
+            self.v_maschine.set(self._maschine_name())
+            return False
+        werte, presets = P.maschine_holen(self.maschinen, name)
+        if werte is None:
+            self.v_maschine.set(self._maschine_name())
+            return False
+        if fragen and not messagebox.askokcancel(T("Maschine"), T(
+                "Auf '{n}' umschalten?\n\n"
+                "Verfahrweg, Beschleunigung, Eilgang, Leistung, "
+                "Fokuskorrektur, Laufzeitmessungen und die Presets wechseln "
+                "mit. "
+                "Der Stand von '{a}' wird vorher gesichert.").format(
+                    n=name, a=self._maschine_name())):
+            self.v_maschine.set(self._maschine_name())
+            return False
+        self._element_sichern()
+        self._maschine_sichern()          # erst die alte festhalten
+        self.cfg.update(werte)
+        self.cfg["maschine"] = name
+        self.presets = presets
+        self.maschinen["aktiv"] = name
+        P.save_config(self.cfg)
+        P.save_presets(self.presets)
+        P.save_maschinen(self.maschinen)
+        self._maschine_uebernehmen()
+        self._log(T("Maschine: {n} ({x:.0f} x {y:.0f} mm, {w:.1f} W)").format(
+            n=name, x=float(self.cfg["x_max"]), y=float(self.cfg["y_max"]),
+            w=self._watt()))
+        return True
+
+    def _maschine_uebernehmen(self):
+        """Die Oberflaeche an die gewaehlte Maschine nachziehen.
+
+        Alles, was eine Zahl aus der Konfiguration zeigt oder damit rechnet -
+        sonst stehen nach dem Wechsel die Felder der anderen Maschine da.
+        """
+        J.setze_maschine(self.cfg)
+        self.s_max = float(self.cfg.get("s_max", J.S_MAX))
+        self.area = max(float(self.cfg["x_max"]), float(self.cfg["y_max"]), 10.0)
+        self._still = True
+        try:
+            self.v_xmax.set(self.cfg["x_max"])
+            self.v_ymax.set(self.cfg["y_max"])
+            self.v_watt.set(float(self.cfg.get("watt", J.WATT)))
+            self.v_zinv.set(bool(self.cfg.get("z_invert", False)))
+            self.v_port.set(self.cfg.get("port", ""))
+            self.v_dicke.set(float(self.cfg.get("dicke", 12.0)))
+            self.v_korr.set(float(self.cfg.get("korrektur", 0.0)))
+        finally:
+            self._still = False
+        self.cb_preset.configure(values=sorted(self.presets))
+        self.v_preset.set("")
+        self.root.title("Laserwerk - %s" % self._maschine_name())
+        self._flaeche_titel()
+        self._anlauf_zeigen()
+        self._watt_zeigen()
+        self._fokus_zeigen()
+        self._maschine_zeigen()
+        self._verwerfen()
+        self._draw()
+
+    def maschine_anlegen(self):
+        """Eine zweite Maschine daneben legen - leer oder aus einer Vorlage."""
+        if self.grbl.job_running:
+            messagebox.showinfo(T("Maschine"), T("Während eines Jobs nicht möglich."))
+            return
+        name = self.v_mneu.get().strip()
+        if not name:
+            messagebox.showinfo(T("Maschine"), T(
+                "Erst einen Namen eintragen - oder eine bekannte Maschine "
+                "aus der Liste nehmen, die bringt ihre Werte mit."))
+            return
+        if not name or name in (self.maschinen.get("maschinen") or {}):
+            messagebox.showinfo(T("Maschine"),
+                                T("Diesen Namen gibt es schon."))
+            return
+        vorlage = P.VORLAGEN.get(name)
+        werte = dict({k: self.cfg[k] for k in P.MASCHINENWERTE if k in self.cfg})
+        werte.update(zeitmessungen=[])     # gemessen wird je Maschine
+        if vorlage:
+            werte.update(vorlage)
+        presets = P.kopie(self.presets)
+        alt, neu = self._watt(), float(werte.get("watt", self._watt()))
+        if abs(alt - neu) > 0.1 and messagebox.askyesno(T("Presets"), T(
+                "Die Presets sind an {a:.1f} W gemessen, die neue Maschine "
+                "hat {n:.1f} W.\n\nUmrechnen? Übertragbar ist die Energie je "
+                "Millimeter, also S mal {f:.2f}. Das ist ein Startpunkt für "
+                "einen eigenen Materialtest, kein Rezept - jeder "
+                "umgerechnete Wert bekommt den Vermerk.").format(
+                    a=alt, n=neu, f=alt / max(0.1, neu))):
+            presets = P.maschine_umrechnen(presets, alt, neu)
+        self._maschine_sichern()
+        P.maschine_sichern(self.maschinen, name,
+                           dict(self.cfg, **werte), presets)
+        P.save_maschinen(self.maschinen)
+        self._log(T("Maschine angelegt: {n}{v}").format(
+            n=name, v=T(" (aus der Vorlage)") if vorlage else ""))
+        self.v_mneu.set("")
+        self.maschine_wechseln(name, fragen=False)
+
     def _watt(self):
         """Optische Leistung der Maschine - fuer die Energie je Millimeter."""
         try:
@@ -2554,7 +2742,10 @@ class App:
         P.save_config(self.cfg)
         J.setze_maschine(self.cfg)
         self._watt_zeigen()
-        self._log(T("Leistung der Maschine: {w:.1f} W").format(w=w))
+        self._maschine_zeigen()
+        self._log(T("Leistung der Maschine: {w:.1f} W - mitgelieferte Werte "
+                    "sind an 5,5 W gemessen, dieselbe Energie braucht hier "
+                    "S/F mal {v:.2f}.").format(w=w, v=5.5 / w))
 
     def _watt_zeigen(self):
         """Was die Leistung fuer die eingestellten Werte bedeutet.
@@ -2569,12 +2760,9 @@ class App:
             s, f = int(self.v_s.get()), int(self.v_f.get())
         except (tk.TclError, AttributeError):
             s, f = 830, 1000
-        j = J.energie(s, f, 1, self._watt())
         self.lbl_watt.configure(text=T(
-            "Geht in die Energie je Millimeter ein: S{s}/F{f} = {j:.2f} J/mm.\n"
-            "Die mitgelieferten Werte sind an 5,5 W gemessen - an einer\n"
-            "stärkeren Maschine braucht dieselbe Energie S/F mal {v:.2f}."
-            ).format(s=s, f=f, j=j, v=5.5 / max(0.1, self._watt())))
+            "Gravur S{s}/F{f} = {j:.2f} J/mm").format(
+                s=s, f=f, j=J.energie(s, f, 1, self._watt())))
 
     def _flaeche_titel(self):
         self.lf_flaeche.configure(text=T(
@@ -2621,7 +2809,47 @@ class App:
             return
         self.q.put(("einstellungen", d))
 
+    def _maschine_erkennen(self, d):
+        """Passt die angeschlossene Maschine zu der, die gewaehlt ist?
+
+        Zwei Maschinen abwechselnd heisst: man steckt um und vergisst
+        umzuschalten. Dann gelten die Presets der anderen, und bei
+        vierfacher Leistung ist das das erste verbrannte Brett.
+        $130/$131 verraten es, bevor etwas laeuft.
+        """
+        x, y = d.get("130"), d.get("131")
+        if not (x and y):
+            return
+
+        def passt(werte):
+            try:
+                return (abs(float(werte.get("x_max", -1)) - x) <= 2
+                        and abs(float(werte.get("y_max", -1)) - y) <= 2)
+            except (TypeError, ValueError):
+                return False
+
+        if passt(self.cfg):
+            return
+        andere = [n for n in self._maschinen_namen()
+                  if n != self._maschine_name()
+                  and passt(P.maschine_holen(self.maschinen, n)[0] or {})]
+        if not andere:
+            return                        # sagt schon die Verfahrwegwarnung
+        if messagebox.askyesno(T("Maschine"), T(
+                "Angeschlossen ist eine Maschine mit {x:.0f} x {y:.0f} mm "
+                "Verfahrweg, gewählt ist '{n}' mit {cx:.0f} x {cy:.0f} mm.\n\n"
+                "Zu '{a}' wechseln? Dort passt der Verfahrweg - und damit "
+                "auch Leistung, Presets und Fokuskorrektur.").format(
+                    x=x, y=y, n=self._maschine_name(),
+                    cx=float(self.cfg["x_max"]), cy=float(self.cfg["y_max"]),
+                    a=andere[0])):
+            self.maschine_wechseln(andere[0], fragen=False)
+
     def _einstellungen_pruefen(self, d):
+        # Zuerst: redet Laserwerk ueberhaupt mit der Maschine, die gewaehlt
+        # ist? Sonst schreibt der naechste Abschnitt die Beschleunigung der
+        # einen in das Profil der anderen.
+        self._maschine_erkennen(d)
         hin = []
         s30 = d.get("30")
         if s30 and abs(s30 - self.s_max) > 0.5:
@@ -2789,6 +3017,9 @@ class App:
         self.cfg["z_invert"] = self.v_zinv.get()
         self._fokus_sichern()
         P.save_config(self.cfg)
+        # Der laufende Stand gehoert auch in das Profil der Maschine -
+        # sonst holt der naechste Wechsel einen alten Stand zurueck.
+        self._maschine_sichern()
 
     def _fokus_geaendert(self, *_):
         """Beschriftung sofort, Datei etwas spaeter.

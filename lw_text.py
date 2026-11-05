@@ -813,17 +813,57 @@ EN = {
         "others. Set its size and offset by hand.",
     "Originalmaß der Zeichnung: {b:.1f} x {h:.1f} mm.":
         "Drawing's own size: {b:.1f} x {h:.1f} mm.",
+    # ---- Maschinenprofile ("Maschine" steht schon oben)
+    "anlegen": "add",
+    "Presets": "Presets",
+    "Neue Maschine": "New machine",
+    "Diodenlaser {w:.1f} W": "Diode laser {w:.1f} W",
+    "Diesen Namen gibt es schon.": "That name is already taken.",
+    "Erst einen Namen eintragen - oder eine bekannte Maschine aus der "
+    "Liste nehmen, die bringt ihre Werte mit.":
+        "Type a name first - or pick a known machine from the list, which "
+        "brings its own values along.",
+    "Maschine angelegt: {n}{v}": "Machine added: {n}{v}",
+    " (aus der Vorlage)": " (from the template)",
+    "Maschine: {n} ({x:.0f} x {y:.0f} mm, {w:.1f} W)":
+        "Machine: {n} ({x:.0f} x {y:.0f} mm, {w:.1f} W)",
+    "{x:.0f} x {y:.0f} mm, {w:.1f} W, {b:.0f} mm/s², Eilgang "
+    "{e:.0f} mm/min, {n} Presets":
+        "{x:.0f} x {y:.0f} mm, {w:.1f} W, {b:.0f} mm/s², rapid "
+        "{e:.0f} mm/min, {n} presets",
+    "Auf '{n}' umschalten?\n\nVerfahrweg, Beschleunigung, Eilgang, "
+    "Leistung, Fokuskorrektur, Laufzeitmessungen und die Presets wechseln "
+    "mit. Der Stand von '{a}' wird vorher gesichert.":
+        "Switch to '{n}'?\n\nTravel, acceleration, rapid rate, power, focus "
+        "correction, runtime measurements and the presets all come with it. "
+        "The state of '{a}' is saved first.",
+    "Angeschlossen ist eine Maschine mit {x:.0f} x {y:.0f} mm Verfahrweg, "
+    "gewählt ist '{n}' mit {cx:.0f} x {cy:.0f} mm.\n\nZu '{a}' wechseln? "
+    "Dort passt der Verfahrweg - und damit auch Leistung, Presets und "
+    "Fokuskorrektur.":
+        "The connected machine reports {x:.0f} x {y:.0f} mm of travel, while "
+        "'{n}' with {cx:.0f} x {cy:.0f} mm is selected.\n\nSwitch to '{a}'? "
+        "Its travel matches - and so do its power, presets and focus "
+        "correction.",
+    "Die Presets sind an {a:.1f} W gemessen, die neue Maschine hat "
+    "{n:.1f} W.\n\nUmrechnen? Übertragbar ist die Energie je Millimeter, "
+    "also S mal {f:.2f}. Das ist ein Startpunkt für einen eigenen "
+    "Materialtest, kein Rezept - jeder umgerechnete Wert bekommt den "
+    "Vermerk.":
+        "The presets were measured at {a:.1f} W, the new machine has "
+        "{n:.1f} W.\n\nConvert them? What carries over is the energy per "
+        "millimetre, so S times {f:.2f}. That is a starting point for your "
+        "own material test, not a recipe - every converted value is marked "
+        "as such.",
     # ---- Maschinenwerte
     "Leistung": "Power",
     "W optisch": "W optical",
     "Wert zwischen 0,1 und 500 W.": "A value between 0.1 and 500 W.",
-    "Leistung der Maschine: {w:.1f} W": "Machine power: {w:.1f} W",
-    "Geht in die Energie je Millimeter ein: S{s}/F{f} = {j:.2f} J/mm.\n"
-    "Die mitgelieferten Werte sind an 5,5 W gemessen - an einer\n"
-    "stärkeren Maschine braucht dieselbe Energie S/F mal {v:.2f}.":
-        "Feeds into the energy per millimetre: S{s}/F{f} = {j:.2f} J/mm.\n"
-        "The settings shipped here were measured at 5.5 W - on a stronger\n"
-        "machine the same energy needs S/F times {v:.2f}.",
+    "Gravur S{s}/F{f} = {j:.2f} J/mm": "Engraving S{s}/F{f} = {j:.2f} J/mm",
+    "Leistung der Maschine: {w:.1f} W - mitgelieferte Werte sind an 5,5 W "
+    "gemessen, dieselbe Energie braucht hier S/F mal {v:.2f}.":
+        "Machine power: {w:.1f} W - the settings shipped here were measured "
+        "at 5.5 W, so the same energy needs S/F times {v:.2f} on this one.",
     "Von der Maschine übernommen: {b:.0f} mm/s² Beschleunigung, "
     "{e:.0f} mm/min Eilgang, $11 = {k:.3f} mm":
         "Taken from the machine: {b:.0f} mm/s² acceleration, {e:.0f} mm/min "

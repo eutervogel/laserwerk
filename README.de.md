@@ -90,6 +90,18 @@ Material ausprobieren will.
 - **Maschine fahren** — Achsen tippen, Nullpunkt setzen, Z-Referenz,
   Rahmenfahrt um das Motiv, Sichtkreuz mit schwacher Leistung („wo steht er
   gerade?"), Entsperren, einzelne G-Code-Befehle.
+- **Zwei Maschinen** — wer abwechselnd an zwei Lasern arbeitet, wählt sie
+  oben im Reiter „Maschine" aus. Verfahrweg, Beschleunigung, Eilgang,
+  Leistung, Fokuskorrektur, die Laufzeitmessungen **und die Presets**
+  wechseln mit: S/F ist an einer Leistung gemessen, und dieselbe Liste an
+  5,5 W und an 22 W wäre eine Falle, die beim ersten Brett zuschlägt. Eine
+  neue Maschine fängt mit den Werten der jetzigen an oder mit einer
+  bekannten Vorlage, und auf Wunsch rechnet Laserwerk die Presets auf die
+  neue Leistung um — jeder umgerechnete Wert bekommt den Vermerk
+  „UNGETESTET". Meldet die angeschlossene Maschine beim Verbinden einen
+  Verfahrweg, der zu einer anderen gespeicherten passt, fragt Laserwerk
+  nach: umgesteckt und vergessen umzuschalten ist sonst genau das erste
+  verbrannte Brett.
 - **Die Maschine sagt ihre Werte selbst** — beim Verbinden liest Laserwerk
   `$$` und übernimmt Beschleunigung (`$120`/`$121`), Eilgang (`$110`/`$111`)
   und Kreuzungstoleranz (`$11`) in das Zeitmodell, warnt bei `$30` ≠ 1000,

@@ -86,6 +86,16 @@ settings for a new material.
 - **Drive the machine** — jog the axes, set the origin, set a Z reference,
   trace a frame around the artwork, show where the head stands with a short
   sight cross at low power, unlock, send single G-code commands.
+- **Two machines** — anyone working on two lasers in turn picks the active
+  one at the top of the Machine tab. Travel, acceleration, rapid rate,
+  power, focus correction, the runtime measurements **and the presets** all
+  come along: S/F is measured at one power, and the same list at 5.5 W and
+  at 22 W would be a trap that springs on the first board. A new machine
+  starts from the current values or from a known template, and on request
+  Laserwerk converts the presets to the new power — every converted value
+  is marked "UNGETESTET". If the connected machine reports a travel that
+  matches a different stored machine, Laserwerk asks: swapping the cable and
+  forgetting to switch is otherwise exactly the first burnt board.
 - **The machine states its own numbers** — on connecting, Laserwerk reads
   `$$` and takes acceleration (`$120`/`$121`), rapid rate (`$110`/`$111`) and
   junction deviation (`$11`) into the timing model; it warns about `$30` ≠

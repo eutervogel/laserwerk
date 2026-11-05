@@ -24,6 +24,19 @@ import json, os
 DIR = os.path.expanduser("~/.config/laserwerk")
 PRESETS = os.path.join(DIR, "presets.json")
 CONFIG = os.path.join(DIR, "config.json")
+MASCHINEN = os.path.join(DIR, "maschinen.json")
+
+# Was zur Maschine gehoert und nicht zum Benutzer. Zwei Maschinen
+# abwechselnd zu betreiben heisst: diese Werte wechseln mit, der Rest
+# (Aussehen, Sprache, Brettchen, Einrasten) bleibt.
+#
+# Die Presets gehoeren dazu, auch wenn sie in ihrer eigenen Datei stehen:
+# S/F ist an EINER Leistung gemessen. Bei 22 W statt 5,5 W braucht dieselbe
+# Energie ein Viertel davon - dieselbe Liste an beiden Maschinen waere eine
+# Falle, die beim ersten Brett zuschlaegt.
+MASCHINENWERTE = ("port", "x_max", "y_max", "s_max", "accel", "eilgang",
+                  "kreuzung", "watt", "z_invert", "jog_feed",
+                  "dicke", "korrektur", "zeitmessungen")
 
 # Werte aus den Laeufen vom 14.-19.9.
 DEFAULTS = {
@@ -99,6 +112,86 @@ def load_presets():
 
 def save_presets(p):
     _save(PRESETS, p)
+
+
+# Bekannte Maschinen als Startpunkt. Die Werte sind nachgelesen, nicht
+# gemessen - das erste '$$' nach dem Verbinden ueberschreibt sie mit dem,
+# was die Maschine selbst sagt. Die Leistung sagt keine Maschine, die bleibt.
+VORLAGEN = {
+    "Creality Falcon2 Pro 22 W": dict(
+        x_max=400.0, y_max=415.0, s_max=1000.0, accel=500.0, eilgang=8000.0,
+        kreuzung=0.01, watt=22.0, z_invert=False, jog_feed=1000,
+        dicke=12.0, korrektur=0.0, zeitmessungen=[]),
+}
+
+
+def kopie(d):
+    """Tiefe Kopie ueber JSON - die Ablage und der laufende Stand duerfen
+    sich nicht dieselben Listen teilen."""
+    return json.loads(json.dumps(d))
+
+
+# ---------------------------------------------------------- Maschinen
+# config.json und presets.json bleiben, was sie sind: der Stand der
+# Maschine, mit der gerade gearbeitet wird. maschinen.json legt daneben die
+# anderen ab. So liest jede aeltere Fassung von Laserwerk die Dateien
+# weiter, und es gibt genau einen Ort, an dem der laufende Stand steht.
+
+
+def load_maschinen():
+    d = _load(MASCHINEN, {"aktiv": "", "maschinen": {}})
+    if not isinstance(d, dict) or not isinstance(d.get("maschinen"), dict):
+        return {"aktiv": "", "maschinen": {}}
+    d.setdefault("aktiv", "")
+    return d
+
+
+def save_maschinen(d):
+    _save(MASCHINEN, d)
+
+
+def maschine_sichern(d, name, cfg, presets):
+    """Den laufenden Stand unter 'name' ablegen. Gibt d zurueck."""
+    if not name:
+        return d
+    d.setdefault("maschinen", {})[name] = {
+        "werte": {k: cfg[k] for k in MASCHINENWERTE if k in cfg},
+        "presets": json.loads(json.dumps(presets)),
+    }
+    d["aktiv"] = name
+    return d
+
+
+def maschine_holen(d, name):
+    """(werte, presets) einer abgelegten Maschine, oder (None, None).
+
+    Zurueck kommen Kopien: wer sie veraendert, veraendert nicht die Ablage.
+    """
+    m = (d.get("maschinen") or {}).get(name)
+    if not m:
+        return None, None
+    return (dict(m.get("werte") or {}),
+            json.loads(json.dumps(m.get("presets") or DEFAULTS)))
+
+
+def maschine_umrechnen(presets, von_watt, nach_watt):
+    """Presets auf eine andere Leistung umrechnen.
+
+    Uebertragbar ist die Energie je Millimeter, nicht S: bei vierfacher
+    Leistung braucht dieselbe Energie ein Viertel von S. Das ist ein
+    Startpunkt fuer einen eigenen Materialtest, kein Rezept - deshalb steht
+    es auch in der Notiz.
+    """
+    f = float(von_watt) / max(0.1, float(nach_watt))
+    raus = {}
+    for name, d in json.loads(json.dumps(presets)).items():
+        for schluessel in ("s", "smin", "schnitt_s"):
+            if d.get(schluessel):
+                d[schluessel] = max(1, min(1000, int(round(d[schluessel] * f))))
+        d["notiz"] = (("umgerechnet von %.1f W auf %.1f W, UNGETESTET. "
+                       % (von_watt, nach_watt)) + (d.get("notiz") or "")).strip()
+        raus[name] = d
+    return raus
 
 
 def load_config():

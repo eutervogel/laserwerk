@@ -139,6 +139,67 @@ class EichungMisstSichSelbst(unittest.TestCase):
             12.0 * skala, delta=0.01)
 
 
+class WerkstueckImBild(unittest.TestCase):
+    """Damit ein Kamerabild mehr ist als eine Kontrolle, muss Laserwerk
+    sagen koennen, wo das Brettchen liegt und wie schief - sonst schiebt
+    man das Motiv weiter von Hand und schaut dabei auf ein Foto."""
+
+    def brett(self, b=120, h=60, winkel=0.0, mitte=(200, 120), unter=60,
+              drauf=210, groesse=(400, 300)):
+        """Ein helles Brettchen auf dunklem Bett, beliebig gedreht."""
+        im = Image.new("L", groesse, unter)
+        stueck = Image.new("L", (b, h), drauf)
+        if winkel:
+            stueck = stueck.rotate(winkel, expand=True, fillcolor=unter)
+        im.paste(stueck, (mitte[0] - stueck.width // 2,
+                          mitte[1] - stueck.height // 2))
+        return im.convert("RGB")
+
+    def test_findet_den_kasten_in_millimetern(self):
+        # 0,5 mm je Bildpunkt, linke untere Ecke bei (10, 20) mm
+        w = K.werkstueck(self.brett(), 10.0, 20.0, 0.5)
+        self.assertIsNotNone(w)
+        self.assertAlmostEqual(w["breite"], 120 * 0.5, delta=2.0)
+        self.assertAlmostEqual(w["hoehe"], 60 * 0.5, delta=2.0)
+        # Bildmitte (200, 120) von 400 x 300 -> x = 10 + 100, y = 20 + 90
+        self.assertAlmostEqual((w["x0"] + w["x1"]) / 2, 110.0, delta=1.0)
+        self.assertAlmostEqual((w["y0"] + w["y1"]) / 2, 110.0, delta=1.0)
+
+    def test_y_zaehlt_wie_in_der_maschine(self):
+        """Oben im Bild ist das groesste Y, nicht das kleinste."""
+        oben = K.werkstueck(self.brett(mitte=(200, 60)), 0.0, 0.0, 0.5)
+        unten = K.werkstueck(self.brett(mitte=(200, 240)), 0.0, 0.0, 0.5)
+        self.assertGreater(oben["y0"], unten["y0"])
+
+    def test_winkel_eines_schiefen_bretts(self):
+        for soll in (-30.0, -12.0, 0.0, 17.0, 35.0):
+            w = K.werkstueck(self.brett(winkel=soll), 0.0, 0.0, 0.5)
+            self.assertIsNotNone(w["winkel"], "kein Winkel bei %g" % soll)
+            self.assertAlmostEqual(w["winkel"], soll, delta=2.5,
+                                   msg="Winkel %g" % soll)
+
+    def test_quadrat_hat_keinen_winkel(self):
+        """Ein Quadrat hat keine lange Seite - dann ist None ehrlicher als
+        eine Zahl, die nur aussieht wie eine Antwort."""
+        w = K.werkstueck(self.brett(b=100, h=100), 0.0, 0.0, 0.5)
+        self.assertIsNotNone(w)
+        self.assertIsNone(w["winkel"])
+
+    def test_leeres_bett_meldet_nichts(self):
+        leer = Image.new("RGB", (400, 300), (60, 60, 60))
+        self.assertIsNone(K.werkstueck(leer, 0.0, 0.0, 0.5))
+
+    def test_kruemel_sind_kein_werkstueck(self):
+        im = self.brett(b=3, h=3)
+        self.assertIsNone(K.werkstueck(im, 0.0, 0.0, 0.5))
+
+    def test_dunkles_stueck_auf_hellem_bett_geht_auch(self):
+        im = self.brett(unter=230, drauf=40)
+        w = K.werkstueck(im, 0.0, 0.0, 0.5)
+        self.assertIsNotNone(w)
+        self.assertAlmostEqual(w["breite"], 60.0, delta=2.0)
+
+
 class Geraete(unittest.TestCase):
     def test_kameras_liefert_eine_liste(self):
         """Ohne Kamera eine leere Liste, mit Kamera Paare aus Geraet und

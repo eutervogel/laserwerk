@@ -18,6 +18,7 @@ verschoben - umso mehr, je weiter es von der Bildmitte entfernt ist. Deshalb
 merkt sich die Eichung die Materialdicke, mit der sie entstanden ist.
 """
 import glob
+import math
 import os
 import subprocess
 import tempfile
@@ -155,3 +156,58 @@ def eichung_pruefen(punkte_px, punkte_mm, mm_je_px=0.2):
         schlimmster = max(schlimmster,
                           ((u - px) ** 2 + (v - py) ** 2) ** 0.5 * mm_je_px)
     return schlimmster
+
+
+def werkstueck(bild, x0, y0, mm_je_px, schwelle=0.18, rand=4):
+    """Das Werkstueck im entzerrten Bild: Kasten und Winkel in Millimetern.
+
+    Gesucht wird, was sich vom Untergrund abhebt. Den Untergrund sagt der
+    Rand des Bildes - dort liegt das Bett oder die Wabenplatte, nicht das
+    Brettchen. Danach einmal oeffnen (schrumpfen, dann wieder aufblasen),
+    damit Krümel und Rauschen nicht als Werkstueck durchgehen.
+
+    Der Winkel kommt aus den zweiten Momenten der Flaeche: fuer ein
+    laengliches Stueck zeigt die Hauptachse entlang der langen Seite. Bei
+    einem quadratischen oder runden Stueck gibt es keine - dann steht dort
+    None statt einer Zahl, die nur so aussieht wie eine Antwort.
+
+    Zurueck kommt None, wenn sich nichts abhebt, sonst ein dict mit
+    x0, y0, x1, y1 (Millimeter, Y wie in der Maschine nach oben), breite,
+    hoehe, winkel und anteil (wie viel vom Bild bedeckt ist).
+    """
+    from PIL import ImageFilter
+
+    g = bild.convert("L")
+    a = np.asarray(g).astype(float) / 255.0
+    if a.size == 0:
+        return None
+    r = max(1, min(int(rand), min(a.shape) // 4))
+    ringe = np.concatenate([a[:r].ravel(), a[-r:].ravel(),
+                            a[:, :r].ravel(), a[:, -r:].ravel()])
+    untergrund = float(np.median(ringe))
+    maske = (np.abs(a - untergrund) > schwelle).astype(np.uint8) * 255
+    maske = np.asarray(Image.fromarray(maske)
+                       .filter(ImageFilter.MinFilter(3))
+                       .filter(ImageFilter.MaxFilter(3)))
+    ys, xs = np.nonzero(maske)
+    if len(xs) < 50:
+        return None
+    hoehe = a.shape[0]
+    # Zeile 0 ist oben, in der Maschine ist das das groesste Y.
+    mx0 = x0 + xs.min() * mm_je_px
+    mx1 = x0 + (xs.max() + 1) * mm_je_px
+    my0 = y0 + (hoehe - 1 - ys.max()) * mm_je_px
+    my1 = y0 + (hoehe - ys.min()) * mm_je_px
+    xm, ym = xs.mean(), ys.mean()
+    mu20 = ((xs - xm) ** 2).mean()
+    mu02 = ((ys - ym) ** 2).mean()
+    mu11 = ((xs - xm) * (ys - ym)).mean()
+    spur = mu20 + mu02
+    winkel = None
+    if spur > 0 and (abs(mu20 - mu02) + 2 * abs(mu11)) / spur > 0.02:
+        # Bildachse zeigt nach unten, Maschinenachse nach oben: Vorzeichen.
+        winkel = -0.5 * math.degrees(math.atan2(2 * mu11, mu20 - mu02))
+        winkel = (winkel + 45.0) % 90.0 - 45.0
+    return dict(x0=mx0, y0=my0, x1=mx1, y1=my1,
+                breite=mx1 - mx0, hoehe=my1 - my0, winkel=winkel,
+                anteil=float(len(xs)) / maske.size)

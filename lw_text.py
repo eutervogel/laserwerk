@@ -184,8 +184,8 @@ EN = {
     "Schritt": "Step",
     "Striche von links nach rechts\n= Z aufsteigend.":
         "Lines from left to right\nmean increasing Z.",
-    "Mitte des Tests: Z {z:.2f} mm\n= Dicke {d:.2f} mm, Korrektur {k:+.2f} mm":
-        "Centre of the test: Z {z:.2f} mm\n= thickness {d:.2f} mm, correction {k:+.2f} mm",
+    "Mitte des Tests: Z {z} mm\n= Dicke {d} mm, Korrektur {v}{k} mm":
+        "Centre of the test: Z {z} mm\n= thickness {d} mm, correction {v}{k} mm",
     "Fokustest starten": "Run focus test",
     "Gewählten Strich ins Material übernehmen": "Take selected line into Material",
     "Materialtest": "Material test",
@@ -274,18 +274,18 @@ EN = {
         'Y+',
     'Y-':
         'Y-',
-    'Motiv {b:.1f} x {h:.1f} mm\nX {x0:.1f} .. {x1:.1f} mm (mit Overscan)\n{n} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min\nS{s}/F{f} = S/F {sf:.2f}{warn}':
-        'Artwork {b:.1f} x {h:.1f} mm\nX {x0:.1f} .. {x1:.1f} mm (with overscan)\n{n} commands, {m:.1f} m burnt\nabout {min:.0f} min\nS{s}/F{f} = S/F {sf:.2f}{warn}',
-    'Schnitt {b:.1f} x {h:.1f} mm\n{k} Konturen, innen vor außen\nSchnittlänge {m:.2f} m x {p} Durchgang/-gänge\nLaufzeit ca. {min:.0f} min\nS{s}/F{f} x {p} = {j:.2f} J/mm{warn}':
-        'Cut {b:.1f} x {h:.1f} mm\n{k} contours, inner before outer\n{m:.2f} m of cut x {p} pass(es)\nabout {min:.0f} min\nS{s}/F{f} x {p} = {j:.2f} J/mm{warn}',
+    'Motiv {b} x {h} mm\nX {x0} .. {x1} mm (mit Overscan)\n{n} Befehle, Brennweg {m} m\nLaufzeit ca. {min} min\nS{s}/F{f} = {j} J/mm{warn}':
+        'Artwork {b} x {h} mm\nX {x0} .. {x1} mm (with overscan)\n{n} commands, {m} m burnt\nabout {min} min\nS{s}/F{f} = {j} J/mm{warn}',
+    'Schnitt {b} x {h} mm\n{k} Konturen, innen vor außen\nSchnittlänge {m} m x {p} Durchgang/-gänge\nLaufzeit ca. {min} min\nS{s}/F{f} x {p} = {j} J/mm{warn}':
+        'Cut {b} x {h} mm\n{k} contours, inner before outer\n{m} m of cut x {p} pass(es)\nabout {min} min\nS{s}/F{f} x {p} = {j} J/mm{warn}',
     '{datei}\nX {x0:.1f} .. {x1:.1f}   Y {y0:.1f} .. {y1:.1f} mm\n{n} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min':
         '{datei}\nX {x0:.1f} .. {x1:.1f}   Y {y0:.1f} .. {y1:.1f} mm\n{n} commands, {m:.1f} m burnt\nabout {min:.0f} min',
     '\nACHTUNG: größer als der Verfahrweg!':
         '\nWARNING: larger than the machine travel!',
     'RÜCKSEITE gespiegelt\n':
         'REVERSE SIDE, mirrored\n',
-    'RÜCKSEITE gespiegelt an {achse} = {mm:.1f} mm\n':
-        'REVERSE SIDE, mirrored about {achse} = {mm:.1f} mm\n',
+    'RÜCKSEITE gespiegelt an {achse} = {mm} mm\n':
+        'REVERSE SIDE, mirrored about {achse} = {mm} mm\n',
     '\nHinweis: nutzt M3 - bei Pause brennt der\nLaser weiter!':
         '\nNote: uses M3 - on pause the beam\nkeeps burning!',
     '\nHinweis: negative Koordinaten - Nullpunkt\nliegt nicht links unten!':
@@ -312,8 +312,8 @@ EN = {
         "Cannot move Z yet.\n\nUnder 'Machine': focus on material of known\nthickness and set the Z reference.",
     'Z auf {z:.2f} mm fahren?\n(Kopf muss frei über dem Material stehen)':
         'Move Z to {z:.2f} mm?\n(the head must stand clear above the material)',
-    "Z fährt auf {z:.2f} mm = Dicke {d:.2f} mm,\nKorrektur {k:+.2f} mm (Reiter Tests; gilt für\njedes Material). Dafür muss unter 'Maschine'\neine Z-Referenz gesetzt sein.":
-        "Z moves to {z:.2f} mm = thickness {d:.2f} mm,\ncorrection {k:+.2f} mm (Tests tab; it applies to\nevery material). This needs a Z reference set\nunder 'Machine'.",
+    "Z fährt auf {z} mm = Dicke {d} mm,\nKorrektur {v}{k} mm (Reiter Tests; gilt für\njedes Material). Dafür muss unter 'Maschine'\neine Z-Referenz gesetzt sein.":
+        "Z moves to {z} mm = thickness {d} mm,\ncorrection {v}{k} mm (Tests tab; it applies to\nevery material). This needs a Z reference set\nunder 'Machine'.",
     'Z -> {z:.2f}':
         'Z -> {z:.2f}',
     'Z-Referenz: aktuelle Höhe = Fokus für {0:.2f} mm':
@@ -715,8 +715,8 @@ EN = {
         "bottom, lightest tone on the left. Each\n"
         "patch gets exactly the power an engraving\n"
         "would give it at that tone.",
-    "{b:.0f} x {h:.0f} mm, Laufzeit ca. {min:.0f} min":
-        "{b:.0f} x {h:.0f} mm, about {min:.0f} min",
+    "{b} x {h} mm, Laufzeit ca. {min} min":
+        "{b} x {h} mm, about {min} min",
     "Werte prüfen.": "Check the values.",
     "Graustufentest: {n} Leistungen x {s} Stufen, {b:.0f} x {h:.0f} mm":
         "Greyscale test: {n} power levels x {s} steps, {b:.0f} x {h:.0f} mm",
@@ -810,15 +810,15 @@ EN = {
         "0 = use the values from the Material tab.\n"
         "Cutting usually needs more power and less\n"
         "feed than engraving.",
-    "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
-    "S{s}/F{f} x {p} = {j:.2f} J/mm, ca. {min:.0f} min":
-        "\n\nPlus cut: {k} contours, {m:.2f} m x {p}\n"
-        "S{s}/F{f} x {p} = {j:.2f} J/mm, about {min:.0f} min",
+    "\n\nDazu Schnitt: {k} Konturen, {m} m x {p}\n"
+    "S{s}/F{f} x {p} = {j} J/mm, ca. {min} min":
+        "\n\nPlus cut: {k} contours, {m} m x {p}\n"
+        "S{s}/F{f} x {p} = {j} J/mm, about {min} min",
     # ---- Elementliste
     "Entfernen": "Remove",
     "gravieren": "engrave", "schneiden": "cut", "beides": "both",
-    "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\nLaufzeit ca. {min:.0f} min":
-        "{n} elements\n{b} commands, {m:.1f} m burnt\nabout {min:.0f} min",
+    "{n} Elemente\n{b} Befehle, Brennweg {m} m\nLaufzeit ca. {min} min":
+        "{n} elements\n{b} commands, {m} m burnt\nabout {min} min",
     "{n}. Motiv: {b:.1f} x {h:.1f} mm bei X {x:.1f} / Y {y:.1f} mm abgelegt.":
         "Element {n}: {b:.1f} x {h:.1f} mm placed at X {x:.1f} / Y {y:.1f} mm.",
     "Kein Platz mehr auf der Fläche - das neue Motiv liegt auf den anderen. "

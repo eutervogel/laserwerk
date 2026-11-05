@@ -765,8 +765,9 @@ class FokusUeberlebtDenNeustart(Grundlage):
         self.app.v_dicke.set(12.0)
         self.app.v_korr.set(-0.3)
         for lbl in (self.app.lbl_fokus, self.app.lbl_zhoehe):
-            self.assertIn("11.70", lbl.cget("text"))
-            self.assertIn("-0.30", lbl.cget("text"))
+            # Deutsche Oberflaeche: Komma, und ein echtes Minuszeichen.
+            self.assertIn("11,70", lbl.cget("text"))
+            self.assertIn("−0,30", lbl.cget("text"))
 
     def test_von_hand_gesetzt_wird_auch_gesichert(self):
         """Ohne das bliebe ein neuer Fokustest der einzige Weg zu einem

@@ -2242,10 +2242,10 @@ class App:
             # Stuecken, soll aber nicht zweimal in der Liste stehen.
             reihe = list(dict.fromkeys(i for _, _, i in folge))
             self.lbl_info.configure(text=T(
-                "{n} Elemente\n{b} Befehle, Brennweg {m:.1f} m\n"
-                "Laufzeit ca. {min:.0f} min").format(
-                    n=len(self.elemente), b=len(zeilen), m=brennweg,
-                    min=self._min(sekunden)) + "\n\n" + "\n\n".join(
+                "{n} Elemente\n{b} Befehle, Brennweg {m} m\n"
+                "Laufzeit ca. {min} min").format(
+                    n=len(self.elemente), b=len(zeilen), m=Z(brennweg, 1),
+                    min=Z(self._min(sekunden), 0)) + "\n\n" + "\n\n".join(
                 "%d. %s\n%s" % (i + 1, self.elemente[i]["anzeige"],
                                  self.elemente[i]["ergebnis"]["text"])
                 for i in reihe))
@@ -2351,16 +2351,20 @@ class App:
         if i["xmax"] > self.cfg["x_max"] or h > self.cfg["y_max"]:
             warn = T("\nACHTUNG: größer als der Verfahrweg!")
         self.lbl_info.configure(text=(
-            (T("RÜCKSEITE gespiegelt an {achse} = {mm:.1f} mm\n").format(
-                achse="X" if sp == "x" else "Y", mm=achse) if sp != "nein" else "")
-            + T("Motiv {b:.1f} x {h:.1f} mm\n"
-                "X {x0:.1f} .. {x1:.1f} mm (mit Overscan)\n"
-                "{n} Befehle, Brennweg {m:.1f} m\n"
-                "Laufzeit ca. {min:.0f} min\n"
-                "S{s}/F{f} = S/F {sf:.2f}{warn}").format(
-                b=i["breite"], h=i["hoehe"], x0=i["xmin"], x1=i["xmax"],
-                n=i["befehle"], m=i["cut_m"], min=self._min(i["sekunden"]),
-                s=s, f=f, sf=s / f, warn=warn)))
+            (T("RÜCKSEITE gespiegelt an {achse} = {mm} mm\n").format(
+                achse="X" if sp == "x" else "Y",
+                mm=Z(achse, 1)) if sp != "nein" else "")
+            + T("Motiv {b} x {h} mm\n"
+                "X {x0} .. {x1} mm (mit Overscan)\n"
+                "{n} Befehle, Brennweg {m} m\n"
+                "Laufzeit ca. {min} min\n"
+                "S{s}/F{f} = {j} J/mm{warn}").format(
+                b=Z(i["breite"], 1), h=Z(i["hoehe"], 1),
+                x0=Z(i["xmin"], 1), x1=Z(i["xmax"], 1),
+                n=i["befehle"], m=Z(i["cut_m"], 1),
+                min=Z(self._min(i["sekunden"]), 0),
+                s=s, f=f, j=Z(J.energie(s, f, 1, self._watt()), 2),
+                warn=warn)))
         # Der Schnitt haengt sich erst hier an - vorher wuerde die Gravur
         # seinen Text mit ihrem eigenen ueberschreiben. Genau einmal: stand
         # der Aufruf auch noch vor der Beschriftung, lag der Schnitt zweimal
@@ -2467,11 +2471,11 @@ class App:
         # wo in diesen Zeilen die Gravur aufhoert.
         self.schnitt_ab = versatz
         self.lbl_info.configure(text=self.lbl_info.cget("text") + T(
-            "\n\nDazu Schnitt: {k} Konturen, {m:.2f} m x {p}\n"
-            "S{s}/F{f} x {p} = {j:.2f} J/mm, ca. {min:.0f} min").format(
-                k=ci["konturen"], m=ci["cut_m"], p=passes, s=cs, f=cf,
-                j=J.energie(cs, cf, passes, self._watt()),
-                min=max(1, self._min(ci["sekunden"]))))
+            "\n\nDazu Schnitt: {k} Konturen, {m} m x {p}\n"
+            "S{s}/F{f} x {p} = {j} J/mm, ca. {min} min").format(
+                k=ci["konturen"], m=Z(ci["cut_m"], 2), p=passes, s=cs, f=cf,
+                j=Z(J.energie(cs, cf, passes, self._watt()), 2),
+                min=Z(max(1, self._min(ci["sekunden"])), 0)))
         # Frueher stand die Gravur schon mit dem Schnitt zusammen in info,
         # als die Warnung geschrieben wurde. Jetzt kommt der Schnitt spaeter -
         # also hier noch einmal nachsehen, ob er ueber den Verfahrweg laeuft.
@@ -2499,14 +2503,15 @@ class App:
             i["xmax"] > self.cfg["x_max"] or i["hoehe"] > self.cfg["y_max"]) else ""
         self.lbl_info.configure(text=(
             (T("RÜCKSEITE gespiegelt\n") if sp != "nein" else "")
-            + T("Schnitt {b:.1f} x {h:.1f} mm\n"
+            + T("Schnitt {b} x {h} mm\n"
                 "{k} Konturen, innen vor außen\n"
-                "Schnittlänge {m:.2f} m x {p} Durchgang/-gänge\n"
-                "Laufzeit ca. {min:.0f} min\n"
-                "S{s}/F{f} x {p} = {j:.2f} J/mm{warn}").format(
-                b=i["breite"], h=i["hoehe"], k=i["konturen"], m=i["cut_m"],
-                p=passes, min=max(1, self._min(i["sekunden"])),
-                s=s, f=f, j=J.energie(s, f, passes, self._watt()),
+                "Schnittlänge {m} m x {p} Durchgang/-gänge\n"
+                "Laufzeit ca. {min} min\n"
+                "S{s}/F{f} x {p} = {j} J/mm{warn}").format(
+                b=Z(i["breite"], 1), h=Z(i["hoehe"], 1), k=i["konturen"],
+                m=Z(i["cut_m"], 2), p=passes,
+                min=Z(max(1, self._min(i["sekunden"])), 0),
+                s=s, f=f, j=Z(J.energie(s, f, passes, self._watt()), 2),
                 warn=warn)))
         self._draw()
 
@@ -3209,14 +3214,17 @@ class App:
             d, k = float(self.v_dicke.get()), float(self.v_korr.get())
         except (tk.TclError, ValueError):
             return                      # halb getippt, gleich kommt mehr
+        vor = "+" if k >= 0 else "−"
         self.lbl_fokus.configure(text=T(
-            "Mitte des Tests: Z {z:.2f} mm\n"
-            "= Dicke {d:.2f} mm, Korrektur {k:+.2f} mm").format(z=d + k, d=d, k=k))
+            "Mitte des Tests: Z {z} mm\n"
+            "= Dicke {d} mm, Korrektur {v}{k} mm").format(
+                z=Z(d + k, 2), d=Z(d, 2), v=vor, k=Z(abs(k), 2)))
         self.lbl_zhoehe.configure(text=T(
-            "Z fährt auf {z:.2f} mm = Dicke {d:.2f} mm,\n"
-            "Korrektur {k:+.2f} mm (Reiter Tests; gilt für\n"
+            "Z fährt auf {z} mm = Dicke {d} mm,\n"
+            "Korrektur {v}{k} mm (Reiter Tests; gilt für\n"
             "jedes Material). Dafür muss unter 'Maschine'\n"
-            "eine Z-Referenz gesetzt sein.").format(z=d + k, d=d, k=k))
+            "eine Z-Referenz gesetzt sein.").format(
+                z=Z(d + k, 2), d=Z(d, 2), v=vor, k=Z(abs(k), 2)))
 
     def _fokus_sichern(self):
         """Materialdicke und Fokuskorrektur in die Konfiguration schreiben.
@@ -3277,9 +3285,10 @@ class App:
             self.lbl_gt.configure(text=T("Werte prüfen."))
             return
         _, i = J.graustufentest(ps, fv, n, feld, line=self.v_line.get())
-        self.lbl_gt.configure(text=T("{b:.0f} x {h:.0f} mm, Laufzeit ca. "
-                                     "{min:.0f} min").format(
-            b=i["breite"], h=i["hoehe"], min=self._min(i["sekunden"])))
+        self.lbl_gt.configure(text=T("{b} x {h} mm, Laufzeit ca. "
+                                     "{min} min").format(
+            b=Z(i["breite"], 0), h=Z(i["hoehe"], 0),
+            min=Z(self._min(i["sekunden"]), 0)))
 
     def graustufentest(self):
         if not self._need(zero=True):

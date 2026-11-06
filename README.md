@@ -78,7 +78,8 @@ settings for a new material.
 - **Place** — enter the length and width of your workpiece, then drag the
   artwork onto it with the mouse and resize it by its corners, snapping to
   edges, corners and centre. Turn it with the mouse by the handle above its
-  top edge, about its centre and to any angle — snapping to 15° steps. The
+  top edge, about its centre and to any angle — snapping to 15° steps, and
+  clockwise just like your hand and like the angle field next to it. The
   pointer says what a click would do: move, scale, rotate.
   The distances to all four edges sit next to it as fields — readable while
   dragging and typeable when it has to be exactly 5 mm off the right edge.

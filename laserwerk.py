@@ -4370,13 +4370,21 @@ class App:
         art, ecke, (bx, by, bb, bh), (sx, sy), grad0 = self.drag
         s = self._scale()
         if art == "dreh":
-            # Winkel zwischen Mitte und Zeiger, Anfang gegen Jetzt. Der
-            # Schirm zaehlt Y nach unten, die Maschine nach oben - deshalb
-            # das Minus, sonst dreht das Motiv andersherum als die Hand.
+            # Winkel zwischen Mitte und Zeiger, Anfang gegen Jetzt.
+            #
+            # Hier stand ein Minus, begruendet damit, dass der Schirm Y nach
+            # unten zaehlt und die Maschine nach oben. Das Vorzeichen hebt
+            # sich aber zweimal auf: ein positives v_rot dreht das Motiv im
+            # Werkstueck rechtsherum (V.rotate), und weil die Zeichnung Y
+            # spiegelt, sieht man es auf dem Schirm ebenfalls rechtsherum.
+            # Der Winkel hier wird in Schirmkoordinaten gemessen, waechst
+            # also auch rechtsherum - ohne Minus folgt das Motiv der Hand.
+            # Mit Minus drehte es dagegen, und der Griff drehte andersherum
+            # als derselbe Winkel im Zahlenfeld.
             mx, my = self._mm(bx + bb / 2, by + bh / 2)
             a0 = math.degrees(math.atan2(sy - my, sx - mx))
             a1 = math.degrees(math.atan2(e.y - my, e.x - mx))
-            grad = (grad0 - (a1 - a0)) % 360
+            grad = (grad0 + (a1 - a0)) % 360
             if self.v_snap.get():
                 grad = round(grad / 15.0) * 15.0 % 360
             self.v_rot.set(grad)

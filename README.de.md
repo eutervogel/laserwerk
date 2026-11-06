@@ -81,7 +81,8 @@ Material ausprobieren will.
 - **Platzieren** — Werkstück mit Länge und Breite angeben, Motiv mit der Maus
   darauf schieben und an den Ecken skalieren, mit Einrasten auf Kanten, Ecken
   und Mitte. Drehen mit der Maus am Griff über der Oberkante, um die Mitte
-  und in beliebigen Winkeln — mit Einrasten in 15°-Schritten. Der Zeiger
+  und in beliebigen Winkeln — mit Einrasten in 15°-Schritten, im
+  Uhrzeigersinn wie die Hand und wie das Zahlenfeld daneben. Der Zeiger
   sagt dabei, was ein Klick täte: schieben, skalieren, drehen.
   Die Abstände zu den vier Kanten stehen als Felder daneben — ablesbar beim
   Schieben und eintippbar, wenn es genau 5 mm vom rechten Rand sein soll.

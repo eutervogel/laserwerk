@@ -2681,6 +2681,33 @@ class MitDerMausDrehen(Grundlage):
         self.aufbauen()
         self.app.v_snap.set(True)
         self.drehen(120, 0)                      # Griff nach rechts
+        self.assertEqual(self.app.v_rot.get() % 360, 90.0)
+
+    def test_das_motiv_folgt_der_hand(self):
+        """Der Griff steht oben. Wer ihn nach rechts zieht, dreht im
+        Uhrzeigersinn - und das Motiv muss mitkommen, nicht dagegen.
+
+        Hier stand ein Minus im Winkel, mit der Begruendung, der Schirm
+        zaehle Y andersherum als die Maschine. Das hebt sich aber zweimal
+        auf: der Griff drehte das Motiv gegen die Hand, und derselbe
+        Winkel ins Zahlenfeld getippt drehte es herum.
+        """
+        self.aufbauen()
+        self.app.v_snap.set(True)
+        self.drehen(120, 0)                      # von oben nach rechts
+        grad = self.app.v_rot.get() % 360
+        self.assertEqual(grad, 90.0)
+        # Und dieser Winkel dreht wirklich rechtsherum: ein Punkt rechts
+        # der Mitte liegt danach darunter (Y zaehlt im Werkstueck hoch).
+        x, y = L_vector.rotate(
+            [{"pts": [(10.0, 0.0)], "closed": False}], grad)[0]["pts"][0]
+        self.assertAlmostEqual(x, 0.0, delta=0.01)
+        self.assertLess(y, -9.0)
+
+    def test_linksherum_ziehen_dreht_linksherum(self):
+        self.aufbauen()
+        self.app.v_snap.set(True)
+        self.drehen(-120, 0)                     # von oben nach links
         self.assertEqual(self.app.v_rot.get() % 360, 270.0)
 
     def test_motiv_behaelt_seine_groesse_und_mitte(self):
@@ -2717,7 +2744,7 @@ class MitDerMausDrehen(Grundlage):
         self.app._dreh_setzen(0)
         self.app.v_snap.set(True)
         self.drehen(120, 0)                      # dasselbe mit der Maus
-        self.assertEqual(self.app.v_rot.get() % 360, 270.0)
+        self.assertEqual(self.app.v_rot.get() % 360, 90.0)
         self.app._dreh_setzen(90)
         self.assertEqual((round(self.app.v_w.get(), 1),
                           round(self.app.v_h.get(), 1)), ueber_knopf)

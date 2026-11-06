@@ -411,6 +411,29 @@ EN = {
         'Cross S{0} (Telegram)',
     'S{s} waeren {j:.3f} J/mm an {w:.1f} W - ab {jm:.3f} J/mm bleibt eine Spur. Gezeigt wird mit S{h}.':
         'S{s} would be {j:.3f} J/mm at {w:.1f} W - from {jm:.3f} J/mm it leaves a mark. Showing with S{h}.',
+    'Quittung ausgeblieben - Strom neu aufgesetzt nach Zeile {n} ({m}. Mal). Bis zu {p} Befehle koennen fehlen.':
+        'No acknowledgement - stream resynchronised after line {n} ({m} time(s)). Up to {p} commands may be missing.',
+    'Kamera': 'Camera',
+    'Bild holen': 'Take picture',
+    'Kamera über dem Bett': 'Camera above the bed',
+    'Bild unter die Zeichenfläche legen': 'Put picture under the drawing area',
+    'Das Bild ist dann in Maschinenkoordinaten entzerrt: was\ndarauf an einer Stelle liegt, liegt dort auch wirklich.':
+        'The picture is then rectified into machine coordinates: what\nlies somewhere on it really lies there.',
+    'Die Eichung gilt für eine Höhe. Ein dickes Brett liegt\nnäher an der Kamera und erscheint nach außen verschoben.\nMit diesem Maß rechnet Laserwerk die Materialstärke heraus.\n0 heißt: nicht herausrechnen.':
+        'The calibration holds for one height. A thick board sits\ncloser to the camera and appears shifted outwards.\nWith this measure Laserwerk takes the material thickness out.\n0 means: do not take it out.',
+    'Noch keine Eichung für diese Maschine.': 'No calibration for this machine yet.',
+    'Erst eine Kamera wählen.': 'Pick a camera first.',
+    'hole ein Bild von {g}': 'taking a picture from {g}',
+    'Bild geholt ({b}x{h}) - ohne Eichung nur ein Bild.':
+        'Picture taken ({b}x{h}) - without calibration just a picture.',
+    'Bild {rb}x{rh} entzerrt auf {bb}x{bh} für {x:.0f} x {y:.0f} mm, Materialstärke {d:.1f} mm.':
+        'Picture {rb}x{rh} rectified to {bb}x{bh} for {x:.0f} x {y:.0f} mm, material thickness {d:.1f} mm.',
+    'Die Eichung gilt für {sb}x{sh} Bildpunkte, die Kamera liefert {ib}x{ih}.\n\nDas Bild wird nicht entzerrt - die Kamera kann die geeichte Auflösung gerade nicht.':
+        'The calibration holds for {sb}x{sh} pixels, the camera delivers {ib}x{ih}.\n\nThe picture is not rectified - the camera cannot do the calibrated resolution right now.',
+    '{w:.0f} mm ist keine Kamerahöhe - gemeint ist der Abstand vom Bett bis zur Linse, bei dieser Maschine ein paar hundert Millimeter.\n\nDie Materialstärke steht im Reiter Material und wird davon getrennt gerechnet.':
+        '{w:.0f} mm is not a camera height - this is the distance from the bed to the lens, a few hundred millimetres on this machine.\n\nThe material thickness lives in the Material tab and is computed separately.',
+    'Bild {ib}x{ih} passt nicht zur Eichung ({sb}x{sh}).':
+        'Picture {ib}x{ih} does not match the calibration ({sb}x{sh}).',
     'Rahmen X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} ({b:.1f} x {h:.1f} mm)':
         'Frame X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} ({b:.1f} x {h:.1f} mm)',
     'Rahmenfahrt (Laser schwach, S{s})':

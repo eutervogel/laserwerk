@@ -12,6 +12,7 @@ from PIL import Image
 import tkinter as tk
 from tkinter import ttk
 
+import lw_kamera as KAM
 import lw_dialog as D                         # native GTK-Dialoge
 from lw_dialog import filedialog, messagebox
 import lw_style as S
@@ -35,6 +36,8 @@ class App:
         root.title("Laserwerk")
         self.cfg = P.load_config()
         self.presets = P.load_presets()
+        self.kam_roh = self.kam_bett = self.kam_tk = None
+        self._kam_groesse = None
         self.maschinen = P.load_maschinen()
         self._maschine_einrichten()
         # Erklaertexte helfen beim Lernen und stehen danach im Weg. Sie
@@ -164,10 +167,12 @@ class App:
         self.tab_mat = self._scrollbereich(nb, "Material")
         self.tab_masch = self._scrollbereich(nb, "Maschine")
         self.tab_test = self._scrollbereich(nb, "Tests")
+        self.tab_kam = self._scrollbereich(nb, "Kamera")
         self._build_motiv()
         self._build_material()
         self._build_maschine()
         self._build_tests()
+        self._build_kamera()
         for ev in ("<Button-4>", "<Button-5>", "<MouseWheel>"):
             self.root.bind_all(ev, self._rad, add="+")
         # jede Aenderung, die den G-Code beeinflusst, macht ihn ungueltig
@@ -818,6 +823,195 @@ class App:
         self._show_sf()
 
     # ---------------------------------------------------------------- Maschine
+    def _build_kamera(self):
+        """Die Kamera im Deckel: Bild holen, entzerren, unterlegen.
+
+        Die Eichung gehoert zur Maschine, nicht zum Werkstueck - die
+        Kamera ist festgeschraubt. Sie liegt deshalb im Maschinenprofil
+        und wechselt mit.
+        """
+        f = self.tab_kam
+        kf = ttk.LabelFrame(f, text=T("Kamera"), padding=4)
+        kf.grid(row=0, column=0, columnspan=3, sticky="ew")
+        kf.columnconfigure(0, weight=1)
+        self.v_kamera = tk.StringVar(value=self._kam_eichung().get("geraet", ""))
+        self.cb_kamera = ttk.Combobox(kf, textvariable=self.v_kamera, width=18,
+                                      values=[g for g, _ in self._kameras()])
+        self.cb_kamera.grid(row=0, column=0, sticky="ew")
+        ttk.Button(kf, text=T("neu suchen"), width=11,
+                   command=self._kameras_suchen).grid(row=0, column=1, padx=4)
+        ttk.Button(kf, text=T("Bild holen"), width=11, style="Accent.TButton",
+                   command=self.kamera_holen).grid(row=0, column=2)
+        self.lbl_kam = ttk.Label(kf, text="", style="Muted.TLabel", wraplength=360)
+        self.lbl_kam.grid(row=1, column=0, columnspan=3, sticky="w", pady=(3, 0))
+
+        self.v_kam_an = tk.BooleanVar(value=False)
+        ttk.Checkbutton(kf, text=T("Bild unter die Zeichenfläche legen"),
+                        variable=self.v_kam_an,
+                        command=self._kamera_zeigen).grid(
+            row=2, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self._erklaerung(ttk.Label(kf, style="Muted.TLabel", wraplength=360,
+            text=T("Das Bild ist dann in Maschinenkoordinaten entzerrt: was\n"
+                   "darauf an einer Stelle liegt, liegt dort auch wirklich.")
+            )).grid(row=3, column=0, columnspan=3, sticky="w")
+
+        hf = ttk.LabelFrame(f, text=T("Höhe"), padding=4)
+        hf.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Label(hf, text=T("Kamera über dem Bett")).grid(row=0, column=0, sticky="w")
+        self.v_kam_hoehe = tk.DoubleVar(value=self._kam_eichung().get("hoehe", 0.0))
+        # command= allein reicht nicht: das loest nur beim Klick auf die
+        # Pfeilchen aus. Wer die Zahl hineintippt und weiterklickt, haette
+        # sie sonst nirgends gespeichert - und saehe nur, dass sich nichts
+        # aendert.
+        sp_hoehe = ttk.Spinbox(hf, from_=0.0, to=1000.0, increment=5.0, width=6,
+                               textvariable=self.v_kam_hoehe,
+                               command=self._kam_hoehe_sichern)
+        sp_hoehe.grid(row=0, column=1, padx=4)
+        sp_hoehe.bind("<Return>", lambda e: self._kam_hoehe_sichern())
+        sp_hoehe.bind("<FocusOut>", lambda e: self._kam_hoehe_sichern())
+        ttk.Label(hf, text="mm").grid(row=0, column=2, sticky="w")
+        self._erklaerung(ttk.Label(hf, style="Muted.TLabel", wraplength=360,
+            text=T("Die Eichung gilt für eine Höhe. Ein dickes Brett liegt\n"
+                   "näher an der Kamera und erscheint nach außen verschoben.\n"
+                   "Mit diesem Maß rechnet Laserwerk die Materialstärke heraus.\n"
+                   "0 heißt: nicht herausrechnen."))).grid(
+            row=1, column=0, columnspan=3, sticky="w", pady=(3, 0))
+        self._kam_zeigen()
+
+    def _kameras(self):
+        try:
+            return KAM.kameras()
+        except Exception:
+            return []
+
+    def _kameras_suchen(self):
+        self.cb_kamera.configure(values=[g for g, _ in self._kameras()])
+
+    def _kam_eichung(self):
+        d = self.cfg.get("kamera")
+        return d if isinstance(d, dict) else {}
+
+    MINDESTHOEHE = 50.0        # mm - darunter ist es keine Kamerahoehe
+
+    def _kam_hoehe_sichern(self):
+        """Die Kamerahoehe uebernehmen - oder sagen, dass sie keine ist.
+
+        Das Feld will den Abstand Bett bis Linse, also einige hundert
+        Millimeter. Wer dort die Materialstaerke eintraegt, bekommt einen
+        Korrekturfaktor H/(H-d) nahe unendlich - und sieht nur, dass das
+        Bild wegrutscht, nicht warum.
+        """
+        d = self._kam_eichung()
+        if not d:
+            return
+        try:
+            wert = float(self.v_kam_hoehe.get())
+        except (tk.TclError, ValueError):
+            return
+        if 0 < wert < self.MINDESTHOEHE:
+            messagebox.showwarning(T("Kamera"), T(
+                "{w:.0f} mm ist keine Kamerahöhe - gemeint ist der Abstand "
+                "vom Bett bis zur Linse, bei dieser Maschine ein paar "
+                "hundert Millimeter.\n\nDie Materialstärke steht im Reiter "
+                "Material und wird davon getrennt gerechnet.").format(w=wert))
+            self.v_kam_hoehe.set(d.get("hoehe", 0.0))
+            return
+        d["hoehe"] = wert
+        self.cfg["kamera"] = d
+        P.save_config(self.cfg)
+        self._maschine_sichern()
+        self._kamera_zeigen()
+
+    def _kam_zeigen(self):
+        if not hasattr(self, "lbl_kam"):
+            return
+        d = self._kam_eichung()
+        self.lbl_kam.configure(text=KAM.eichung_lesbar(d) if d
+                               else T("Noch keine Eichung für diese Maschine."))
+
+    def kamera_holen(self):
+        """Ein Bild holen und, wenn eine Eichung da ist, entzerren."""
+        geraet = self.v_kamera.get().strip()
+        if not geraet:
+            messagebox.showinfo(T("Kamera"), T("Erst eine Kamera wählen."))
+            return
+        # In der Groesse, in der geeicht wurde. Die Eichung steht in
+        # Bildpunkten: holt man kleiner, zeigt jeder Koeffizient daneben.
+        b, h = self._kam_eichung().get("bild", (2592, 1944))
+        def arbeit():
+            roh = KAM.bild_holen(geraet, int(b), int(h))
+            self.q.put(("kamerabild", roh))
+        self._bg(arbeit, T("hole ein Bild von {g}").format(g=geraet))
+
+    def _kamera_uebernehmen(self, roh):
+        """Das frische Bild entzerren und merken."""
+        self.kam_roh = roh
+        self.kam_bett = None
+        d = self._kam_eichung()
+        if not d:
+            self._log(T("Bild geholt ({b}x{h}) - ohne Eichung nur ein Bild.")
+                      .format(b=roh.size[0], h=roh.size[1]))
+            return
+        try:
+            dicke = float(self.v_dicke.get())
+        except (tk.TclError, ValueError):
+            dicke = 0.0
+        soll = tuple(d.get("bild", (0, 0)))
+        if soll and tuple(roh.size) != soll:
+            # Nicht stillschweigend weiterrechnen: eine 16:9-Aufloesung ist
+            # aus einem 4:3-Sensor ein Ausschnitt, kein verkleinertes Bild.
+            # Umrechnen waere geraten, und man saehe es dem Ergebnis nicht an.
+            messagebox.showwarning(T("Kamera"), T(
+                "Die Eichung gilt für {sb}x{sh} Bildpunkte, die Kamera "
+                "liefert {ib}x{ih}.\n\nDas Bild wird nicht entzerrt - die "
+                "Kamera kann die geeichte Auflösung gerade nicht.").format(
+                    sb=soll[0], sh=soll[1], ib=roh.size[0], ih=roh.size[1]))
+            self._log(T("Bild {ib}x{ih} passt nicht zur Eichung ({sb}x{sh}).")
+                      .format(ib=roh.size[0], ih=roh.size[1],
+                              sb=soll[0], sh=soll[1]))
+            return
+        self.kam_bett = KAM.bett_bild(
+            roh, d, 0.0, 0.0, float(self.cfg["x_max"]), float(self.cfg["y_max"]),
+            px_je_mm=2.0, dicke=dicke)
+        self._log(T("Bild {rb}x{rh} entzerrt auf {bb}x{bh} für {x:.0f} x {y:.0f} mm, "
+                    "Materialstärke {d:.1f} mm.").format(
+            rb=roh.size[0], rh=roh.size[1],
+            bb=self.kam_bett.size[0], bh=self.kam_bett.size[1],
+            x=float(self.cfg["x_max"]), y=float(self.cfg["y_max"]), d=dicke))
+        if not self.v_kam_an.get():
+            self.v_kam_an.set(True)
+        self._kamera_zeigen()
+
+    def _kamera_zeigen(self):
+        self.kam_tk = None
+        self._draw()
+
+    def _kamera_unterlegen(self, x0, y0, x1, y1):
+        """Das entzerrte Bild unter das Raster legen.
+
+        Tk haelt kein Bild, auf das niemand mehr zeigt - deshalb bleibt
+        die PhotoImage in self.kam_tk stehen, sonst ist die Flaeche nach
+        dem naechsten Durchlauf wieder leer.
+        """
+        if not (getattr(self, "v_kam_an", None) and self.v_kam_an.get()):
+            return
+        bett = getattr(self, "kam_bett", None)
+        if bett is None:
+            return
+        b, h = max(1, int(round(x1 - x0))), max(1, int(round(y0 - y1)))
+        if self.kam_tk is None or self._kam_groesse != (b, h):
+            # Ueber PNG und base64 statt ueber ImageTk: das steckt in einem
+            # eigenen Paket (python3-pil.imagetk), das nicht ueberall
+            # mitkommt. Tk liest PNG seit 8.6 selbst, und der Rest von
+            # Laserwerk macht es schon genauso.
+            puffer = io.BytesIO()
+            bett.resize((b, h), Image.LANCZOS).save(puffer, format="PNG")
+            self.kam_tk = tk.PhotoImage(
+                data=base64.b64encode(puffer.getvalue()))
+            self._kam_groesse = (b, h)
+        self.cv.create_image(x0, y1, image=self.kam_tk, anchor="nw",
+                             tags="kamera")
+
     def _build_maschine(self):
         f = self.tab_masch
         # Maschine und Anschluss gehoeren zusammen: beide beantworten die
@@ -4087,6 +4281,8 @@ class App:
                 self.null_wco = tuple(d["wco"])
             self._draw_head()
             self._status_zeigen()
+        elif k == "kamerabild":
+            self._kamera_uebernehmen(d)
         elif k == "prog":
             done, tot, el, er = d
             self.prog["value"] = done * 1000 / tot
@@ -4477,6 +4673,7 @@ class App:
         x0, y0 = self._mm(0, 0)
         x1, y1 = self._mm(wx, wy)
         cv.create_rectangle(x0, y1, x1, y0, outline=S.CANVAS_EDGE)
+        self._kamera_unterlegen(x0, y0, x1, y1)
         s = self._scale()
         if s >= 6:                      # weit hineingezoomt: 1-mm-Raster dazu
             for m in range(0, int(wx) + 1):

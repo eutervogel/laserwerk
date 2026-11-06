@@ -215,3 +215,80 @@ class Geraete(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EichungRechnetBeideRichtungen(unittest.TestCase):
+    """Bild -> Maschine und zurueck, mit der echten Eichung der Falcon.
+
+    Die Zahlen hier sind nicht erfunden: k1/k2 und die Homographie kommen
+    aus elf Aufnahmen einer Punktekarte, Massstab und Versatz aus neun
+    Kreuzen, die der Kopf selbst gebrannt hat.
+    """
+
+    EICHUNG = {
+        "version": 1, "geraet": "/dev/video2", "bild": [2592, 1944],
+        "k1": -0.23393448122459237, "k2": 0.052031199040878155,
+        "mitte": [1194.6429467766807, 918.4638899070328], "mass": 1000.0,
+        "homographie": [[3.7240564485784344, -0.030451730107427005,
+                         1182.5623427582486],
+                        [-0.012538438665385381, -3.735576659393299,
+                         1094.2779460976224],
+                        [3.2004029750511467e-07, -1.9353504670839243e-05,
+                         1.0]],
+        "massstab": 1.0075305, "drehung": -0.1488,
+        "versatz": [191.2, 192.2], "hoehe": 0.0, "dicke": 0.0,
+    }
+
+    # Die neun gebrannten Kreuze: Bildpunkt und die Stelle, die der Kopf
+    # dafuer angefahren hat.
+    KREUZE = [((787.1, 1061.3), (80.0, 200.0)),
+              ((1030.8, 1065.5), (150.0, 200.0)),
+              ((1288.9, 1064.6), (220.0, 200.0)),
+              ((800.4, 1229.9), (80.0, 150.0)),
+              ((1035.9, 1241.1), (150.0, 150.0)),
+              ((1287.6, 1241.1), (220.0, 150.0)),
+              ((814.2, 1387.2), (80.0, 100.0)),
+              ((1043.7, 1400.6), (150.0, 100.0)),
+              ((1283.8, 1402.5), (220.0, 100.0))]
+
+    def test_bild_wird_zu_millimetern(self):
+        px = [p for p, _ in self.KREUZE]
+        soll = np.array([m for _, m in self.KREUZE])
+        ist = K.bild_nach_maschine(px, self.EICHUNG)
+        fehler = np.hypot(*(ist - soll).T)
+        self.assertLess(fehler.max(), 1.5, "Eichung sitzt nicht mehr")
+        self.assertLess(fehler.mean(), 0.7)
+
+    def test_der_rueckweg_trifft_wieder(self):
+        """Hin und zurueck muss am selben Punkt ankommen."""
+        px = np.array([p for p, _ in self.KREUZE])
+        mm = K.bild_nach_maschine(px, self.EICHUNG)
+        zurueck = K.maschine_nach_bild(mm, self.EICHUNG)
+        self.assertLess(np.hypot(*(zurueck - px).T).max(), 0.5)
+
+    def test_ohne_hoehe_aendert_die_dicke_nichts(self):
+        """hoehe 0 heisst 'nicht herausrechnen' - und darf nicht heimlich
+        doch etwas verschieben."""
+        mm = [(150.0, 150.0), (80.0, 200.0)]
+        a = K.maschine_nach_bild(mm, self.EICHUNG, dicke=0.0)
+        b = K.maschine_nach_bild(mm, self.EICHUNG, dicke=18.0)
+        self.assertLess(np.abs(a - b).max(), 1e-9)
+
+    def test_dickes_material_rueckt_nach_aussen(self):
+        """Mit bekannter Kamerahoehe schiebt die Dicke vom Lotpunkt weg."""
+        e = dict(self.EICHUNG, hoehe=300.0)
+        lot = K._nadir(e)
+        fern = K.bild_nach_maschine([[300.0, 1700.0]], e)[0]
+        a = K.maschine_nach_bild([fern], e, dicke=0.0)[0]
+        b = K.maschine_nach_bild([fern], e, dicke=20.0)[0]
+        mitte = K.maschine_nach_bild([K.bild_nach_maschine([e["mitte"]], e)[0]],
+                                     e, dicke=20.0)[0]
+        self.assertGreater(np.hypot(*(b - a)), 5.0)
+        # der Lotpunkt selbst bleibt stehen
+        self.assertLess(np.hypot(*(mitte - np.array(e["mitte"]))), 1.0)
+        self.assertEqual(len(lot), 2)
+
+    def test_bettbild_hat_die_verlangte_groesse(self):
+        bild = Image.new("RGB", (2592, 1944), (30, 30, 30))
+        aus = K.bett_bild(bild, self.EICHUNG, 0, 0, 300, 200, px_je_mm=2.0)
+        self.assertEqual(aus.size, (600, 400))

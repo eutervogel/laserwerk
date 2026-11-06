@@ -158,6 +158,139 @@ def eichung_pruefen(punkte_px, punkte_mm, mm_je_px=0.2):
     return schlimmster
 
 
+# ------------------------------------------------------------- Eichung
+# Die Eichung ist eine Kette aus drei Stuecken:
+#
+#   Bildpunkt --Linse--> ideales Bild --Homographie--> Bettebene (mm)
+#   Bettebene --Drehung, Versatz--> Maschinenkoordinaten
+#
+# Das erste Stueck kommt aus vielen Aufnahmen einer Punktekarte, das
+# letzte aus Kreuzen, die der Kopf selbst gebrannt hat. Beides steckt in
+# einem dict, das sich als JSON ablegen laesst.
+#
+# ACHTUNG Hoehe: Die Kette gilt fuer die Ebene, in der geeicht wurde. Ein
+# Werkstueck liegt hoeher, und die Kamera schaut schraeg - was hoeher
+# liegt, erscheint nach aussen verschoben. hoehe sagt, wie weit die
+# Kamera ueber der Eichebene steht; damit laesst sich das herausrechnen.
+
+EICHUNG_VERSION = 1
+
+
+def _dreh(winkel_grad):
+    w = math.radians(winkel_grad)
+    return np.array([[math.cos(w), -math.sin(w)],
+                     [math.sin(w), math.cos(w)]])
+
+
+def verzeichnen(punkte, eichung):
+    """Ideale Bildpunkte -> das, was die Linse daraus macht."""
+    p = np.atleast_2d(np.asarray(punkte, dtype=float))
+    mitte = np.asarray(eichung["mitte"], dtype=float)
+    mass = float(eichung.get("mass", 1000.0))
+    d = p - mitte
+    r2 = (d[:, 0] ** 2 + d[:, 1] ** 2) / mass ** 2
+    f = 1 + eichung["k1"] * r2 + eichung["k2"] * r2 ** 2
+    return mitte + d * f[:, None]
+
+
+def entzerren_punkte(punkte, eichung, runden=40):
+    """Umkehrung von verzeichnen().
+
+    Die Formel laesst sich nicht nach r aufloesen - fuenfter Grad. Statt
+    einer Naeherungsformel hier die Iteration: sie braucht ein paar
+    Durchlaeufe und ist dafuer so genau wie das Modell selbst.
+    """
+    p = np.atleast_2d(np.asarray(punkte, dtype=float))
+    mitte = np.asarray(eichung["mitte"], dtype=float)
+    mass = float(eichung.get("mass", 1000.0))
+    d = p - mitte
+    ideal = d.copy()
+    for _ in range(runden):
+        r2 = (ideal[:, 0] ** 2 + ideal[:, 1] ** 2) / mass ** 2
+        ideal = d / (1 + eichung["k1"] * r2 + eichung["k2"] * r2 ** 2)[:, None]
+    return mitte + ideal
+
+
+def _anwenden(h, p):
+    p = np.atleast_2d(np.asarray(p, dtype=float))
+    q = np.column_stack([p, np.ones(len(p))]) @ np.asarray(h, dtype=float).T
+    return q[:, :2] / q[:, 2:3]
+
+
+def bild_nach_maschine(punkte, eichung):
+    """Bildpunkte -> Maschinenkoordinaten in Millimetern."""
+    ideal = entzerren_punkte(punkte, eichung)
+    ebene = _anwenden(np.linalg.inv(np.asarray(eichung["homographie"])), ideal)
+    R = _dreh(eichung.get("drehung", 0.0))
+    return (eichung.get("massstab", 1.0) * (ebene @ R.T)
+            + np.asarray(eichung.get("versatz", (0.0, 0.0)), dtype=float))
+
+
+def _nadir(eichung):
+    """Wo die Blickachse die Eichebene trifft - der Punkt, um den sich
+    alles dreht, wenn das Werkstueck hoeher liegt."""
+    hi = np.linalg.inv(np.asarray(eichung["homographie"]))
+    return _anwenden(hi, [eichung["mitte"]])[0]
+
+
+def maschine_nach_bild(punkte, eichung, dicke=0.0):
+    """Maschinenkoordinaten -> Bildpunkte, fuer Material der Dicke 'dicke'.
+
+    Ein Punkt auf einem dicken Brett liegt naeher an der Kamera. Er
+    erscheint deshalb dort, wo ein Punkt der Eichebene laege, der weiter
+    vom Lotpunkt entfernt ist - um den Faktor H / (H - d).
+    """
+    p = np.atleast_2d(np.asarray(punkte, dtype=float))
+    R = _dreh(eichung.get("drehung", 0.0))
+    s = eichung.get("massstab", 1.0) or 1.0
+    t = np.asarray(eichung.get("versatz", (0.0, 0.0)), dtype=float)
+    ebene = ((p - t) / s) @ R
+    h = float(eichung.get("hoehe", 0.0) or 0.0)
+    if dicke and h > dicke:
+        n = _nadir(eichung)
+        ebene = n + (ebene - n) * (h / (h - dicke))
+    ideal = _anwenden(np.asarray(eichung["homographie"]), ebene)
+    return verzeichnen(ideal, eichung)
+
+
+def bett_bild(bild, eichung, x0, y0, x1, y1, px_je_mm=2.0, dicke=0.0):
+    """Das Kamerabild als Draufsicht in Maschinenkoordinaten.
+
+    Heraus kommt ein Bild, in dem ein Bildpunkt genau 1/px_je_mm
+    Millimeter ist und dessen linke untere Ecke auf (x0, y0) liegt - also
+    direkt das, was unter die Zeichenflaeche gehoert. Y zeigt in der
+    Maschine nach oben und im Bild nach unten; das dreht diese Funktion
+    mit, damit der Aufrufer nicht daran denken muss.
+
+    Gerechnet wird rueckwaerts: fuer jeden Punkt des Ergebnisses die
+    Stelle im Kamerabild. Vorwaerts bliebe das halbe Bild leer.
+    """
+    breite = max(1, int(round((x1 - x0) * px_je_mm)))
+    hoehe = max(1, int(round((y1 - y0) * px_je_mm)))
+    sx = (np.arange(breite) + 0.5) / px_je_mm + x0
+    sy = y1 - (np.arange(hoehe) + 0.5) / px_je_mm
+    gx, gy = np.meshgrid(sx, sy)
+    ziel = np.column_stack([gx.ravel(), gy.ravel()])
+    quelle = maschine_nach_bild(ziel, eichung, dicke)
+    q = np.asarray(bild.convert("RGB"))
+    H, W = q.shape[:2]
+    u = np.rint(quelle[:, 0]).astype(int)
+    v = np.rint(quelle[:, 1]).astype(int)
+    drin = (u >= 0) & (u < W) & (v >= 0) & (v < H)
+    aus = np.zeros((hoehe * breite, 3), dtype=np.uint8)
+    aus[drin] = q[np.clip(v[drin], 0, H - 1), np.clip(u[drin], 0, W - 1)]
+    return Image.fromarray(aus.reshape(hoehe, breite, 3))
+
+
+def eichung_lesbar(eichung):
+    """Eine Zeile, die sagt, was die Eichung taugt."""
+    if not eichung:
+        return ""
+    return ("%s, %d Aufnahmen, Fehler %.2f mm, geeicht bei %.0f mm Materialstärke"
+            % (eichung.get("geraet", "?"), eichung.get("aufnahmen", 0),
+               eichung.get("fehler_mm", 0.0), eichung.get("dicke", 0.0)))
+
+
 def werkstueck(bild, x0, y0, mm_je_px, schwelle=0.18, rand=4):
     """Das Werkstueck im entzerrten Bild: Kasten und Winkel in Millimetern.
 

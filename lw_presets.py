@@ -34,9 +34,12 @@ MASCHINEN = os.path.join(DIR, "maschinen.json")
 # S/F ist an EINER Leistung gemessen. Bei 22 W statt 5,5 W braucht dieselbe
 # Energie ein Viertel davon - dieselbe Liste an beiden Maschinen waere eine
 # Falle, die beim ersten Brett zuschlaegt.
+# "kamera" ist die Eichung der Kamera im Deckel. Sie gehoert zur
+# Maschine wie der Verfahrweg: die Kamera ist festgeschraubt, und beim
+# Umschalten auf die andere Maschine ist sie eine andere oder keine.
 MASCHINENWERTE = ("port", "x_max", "y_max", "s_max", "accel", "eilgang",
                   "kreuzung", "watt", "z_invert", "jog_feed",
-                  "dicke", "korrektur", "zeitmessungen")
+                  "dicke", "korrektur", "zeitmessungen", "kamera")
 
 # Werte aus den Laeufen vom 14.-19.9.
 DEFAULTS = {

@@ -2969,6 +2969,166 @@ class EineZeileSagtWoranManIst(Grundlage):
 
 
 @ohne_bildschirm
+class KameraUnterDerZeichenflaeche(Grundlage):
+    """Das entzerrte Kamerabild als Untergrund.
+
+    Die Eichung gehoert zur Maschine - die Kamera ist festgeschraubt.
+    Beim Umschalten auf die andere Maschine ist sie eine andere oder
+    keine, und dann darf kein altes Bild stehenbleiben.
+    """
+
+    EICHUNG = {
+        "version": 1, "geraet": "/dev/video2", "bild": [2592, 1944],
+        "k1": -0.2339, "k2": 0.0520,
+        "mitte": [1194.6, 918.5], "mass": 1000.0,
+        "homographie": [[3.72406, -0.03045, 1182.56],
+                        [-0.01254, -3.73558, 1094.28],
+                        [3.2004e-07, -1.93535e-05, 1.0]],
+        "massstab": 1.00753, "drehung": -0.1488,
+        "versatz": [191.2, 192.2], "hoehe": 0.0, "dicke": 0.0,
+        "aufnahmen": 11, "fehler_mm": 0.43,
+    }
+
+    def eichen(self):
+        self.app.cfg["kamera"] = dict(self.EICHUNG)
+        self.app._kam_zeigen()
+
+    def bild(self):
+        return Image.new("RGB", (2592, 1944), (90, 90, 90))
+
+    def test_ohne_eichung_sagt_er_das(self):
+        self.app.cfg.pop("kamera", None)
+        self.app._kam_zeigen()
+        self.assertIn("keine Eichung", self.app.lbl_kam.cget("text"))
+
+    def test_mit_eichung_steht_da_was_sie_taugt(self):
+        self.eichen()
+        text = self.app.lbl_kam.cget("text")
+        self.assertIn("0.43", text.replace(",", "."))
+        self.assertIn("11", text)
+
+    def test_bild_wird_entzerrt_und_gezeigt(self):
+        self.eichen()
+        self.app._kamera_uebernehmen(self.bild())
+        self.assertIsNotNone(self.app.kam_bett)
+        # 2 Bildpunkte je Millimeter ueber den ganzen Verfahrweg
+        b, h = self.app.kam_bett.size
+        self.assertAlmostEqual(b / 2.0, float(self.app.cfg["x_max"]), delta=1)
+        self.assertAlmostEqual(h / 2.0, float(self.app.cfg["y_max"]), delta=1)
+        self.assertTrue(self.app.v_kam_an.get())
+        self.assertTrue(self.app.cv.find_withtag("kamera"))
+
+    def test_falsche_aufloesung_wird_nicht_stillschweigend_gerechnet(self):
+        """Die Eichung steht in Bildpunkten.
+
+        bild_holen() hat eine Vorgabe von 1280x720, geeicht wurde bei
+        2592x1944. Einmal ohne Groesse geholt, und jeder Koeffizient zeigt
+        daneben - in X um 0,49, in Y um 0,37. Zwei Achsen, zwei Faktoren:
+        dem Ergebnis sieht man es nicht an, es sieht nur falsch aus.
+        """
+        self.eichen()
+        self.gezeigt.clear()
+        self.app._kamera_uebernehmen(Image.new("RGB", (1280, 720)))
+        self.assertIsNone(self.app.kam_bett)
+        self.assertTrue(any(art == "w" for art, _ in self.gezeigt))
+        self.assertIn("1280", "".join(m for _, m in self.gezeigt))
+
+    def test_geholt_wird_in_der_geeichten_groesse(self):
+        gerufen = {}
+        self.eichen()
+        self.app.v_kamera.set("/dev/video9")
+        echt = self.L.KAM.bild_holen
+        self.L.KAM.bild_holen = lambda g, b=0, h=0, **k: (
+            gerufen.update(g=g, b=b, h=h) or Image.new("RGB", (b, h)))
+        try:
+            self.app.kamera_holen()
+            for _ in range(200):
+                self.wurzel.update()
+                if gerufen:
+                    break
+        finally:
+            self.L.KAM.bild_holen = echt
+        self.assertEqual((gerufen.get("b"), gerufen.get("h")), (2592, 1944))
+
+    def test_die_materialstaerke_ist_keine_kamerahoehe(self):
+        """3 mm ins Hoehenfeld: der Faktor H/(H-d) ginge gegen unendlich."""
+        self.eichen()
+        self.app.v_kam_hoehe.set(3.0)
+        self.gezeigt.clear()
+        self.app._kam_hoehe_sichern()
+        self.assertTrue(any(art == "w" for art, _ in self.gezeigt))
+        self.assertEqual(self.app._kam_eichung().get("hoehe"), 0.0)
+        self.assertEqual(self.app.v_kam_hoehe.get(), 0.0)
+
+    def test_eine_echte_hoehe_wird_uebernommen(self):
+        self.eichen()
+        self.app.v_kam_hoehe.set(300.0)
+        self.gezeigt.clear()
+        self.app._kam_hoehe_sichern()
+        self.assertEqual(self.gezeigt, [])
+        self.assertEqual(self.app._kam_eichung().get("hoehe"), 300.0)
+
+    def hoehenfeld(self):
+        for rahmen in self.app.tab_kam.winfo_children():
+            for w in rahmen.winfo_children():
+                if w.winfo_class() == "TSpinbox":
+                    return w
+        return None
+
+    def test_getippte_hoehe_wird_auch_gespeichert(self):
+        """Eine Spinbox mit command= meldet nur die Pfeilchen.
+
+        Getippt und weitergeklickt hiess: nichts gespeichert, und auf dem
+        Schirm aendert sich nichts - man sucht den Fehler dann im Bild,
+        nicht im Feld. Return und der Fokuswechsel muessen es auch tun.
+
+        Geprueft wird, dass die Bindungen da sind und der Handler den
+        getippten Wert uebernimmt; ob Tk ein kuenstliches Tastenereignis
+        zustellt, ist Sache von Tk und im kopflosen X-Server ohnehin
+        nicht verlaesslich.
+        """
+        self.eichen()
+        sp = self.hoehenfeld()
+        self.assertIsNotNone(sp, "Hoehenfeld nicht gefunden")
+        gebunden = set(sp.bind())
+        self.assertIn("<Key-Return>", gebunden)
+        self.assertIn("<FocusOut>", gebunden)
+        self.app._kam_eichung()["hoehe"] = 0.0
+        self.app.v_kam_hoehe.set(260.0)
+        self.app._kam_hoehe_sichern()
+        self.assertEqual(self.app._kam_eichung().get("hoehe"), 260.0)
+
+    def test_ohne_eichung_bleibt_es_bei_einem_bild(self):
+        self.app.cfg.pop("kamera", None)
+        self.app._kamera_uebernehmen(self.bild())
+        self.assertIsNone(self.app.kam_bett)
+        self.assertFalse(self.app.cv.find_withtag("kamera"))
+
+    def test_abgeschaltet_liegt_nichts_darunter(self):
+        self.eichen()
+        self.app._kamera_uebernehmen(self.bild())
+        self.app.v_kam_an.set(False)
+        self.app._kamera_zeigen()
+        self.assertFalse(self.app.cv.find_withtag("kamera"))
+
+    def test_die_eichung_gehoert_zur_maschine(self):
+        """Umschalten heisst: andere Kamera oder keine."""
+        self.app.maschinen = {"aktiv": "", "maschinen": {}}
+        self.app.cfg.pop("maschine", None)
+        self.app.cfg["kamera"] = dict(self.EICHUNG)
+        self.app._maschine_einrichten()
+        klein = self.app._maschine_name()
+        self.L.messagebox.askyesno = lambda t, m: False
+        self.app.v_mneu.set("Creality Falcon2 Pro 22 W")
+        self.app.maschine_anlegen()
+        self.app.cfg.pop("kamera", None)
+        self.app._maschine_sichern()
+        self.assertTrue(self.app.maschine_wechseln(klein, fragen=False))
+        self.assertEqual(self.app._kam_eichung().get("massstab"),
+                         self.EICHUNG["massstab"])
+
+
+@ohne_bildschirm
 class GeladenerGcodeIstAuchGcode(Grundlage):
     """Eine geladene .nc hat kein Motiv - sie ist eines.
 

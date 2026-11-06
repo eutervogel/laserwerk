@@ -158,10 +158,15 @@ class Attrappe:
 
     def run_job(self, lines, on_progress, max_errors=50, marken=None):
         """Streamt nichts, meldet aber wie das Original."""
-        self.protokoll.append("JOB %d Zeilen" % len(lines))
+        # Erst das Ergebnis, dann die Meldung. Tests warten darauf, dass
+        # "JOB" im Protokoll steht, und lesen danach .gesendet - andersherum
+        # sehen sie die Meldung, waehrend der Job-Faden das Feld noch nicht
+        # gesetzt hat, und bekommen einen AttributeError statt eines
+        # Testergebnisses.
         self.gesendet = list(lines)
         self.marken = marken
         self.job_done = len(lines)
+        self.protokoll.append("JOB %d Zeilen" % len(lines))
         on_progress(len(lines), len(lines), 0.1, 0)
         return "fertig"
 

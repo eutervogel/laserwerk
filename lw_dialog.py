@@ -12,13 +12,24 @@ from lw_text import T
 
 ZENITY = shutil.which("zenity")
 
+# Wie viele Dialoge gerade offen sind. Ein Dialog wartet auf einen Menschen,
+# und solange steht die Oberflaeche still - das ist kein Haenger. Der
+# Wachhund in laserwerk.py sieht hier nach, bevor er bellt.
+LAEUFT = 0
+
 
 def _esc(t):
     return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _z(args):
-    r = subprocess.run([ZENITY, "--width=440"] + args, capture_output=True, text=True)
+    global LAEUFT
+    LAEUFT += 1
+    try:
+        r = subprocess.run([ZENITY, "--width=440"] + args,
+                           capture_output=True, text=True)
+    finally:
+        LAEUFT -= 1
     return r.returncode, r.stdout.strip()
 
 

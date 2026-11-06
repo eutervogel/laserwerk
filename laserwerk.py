@@ -12,7 +12,8 @@ from PIL import Image
 import tkinter as tk
 from tkinter import ttk
 
-from lw_dialog import filedialog, messagebox   # native GTK-Dialoge
+import lw_dialog as D                         # native GTK-Dialoge
+from lw_dialog import filedialog, messagebox
 import lw_style as S
 
 import lw_grbl as G
@@ -4963,6 +4964,27 @@ HAENGERDATEI = "haenger.txt"
 _haenger_f = None          # offen halten, sonst schreibt faulthandler ins Leere
 
 
+def haenger_dauer(puls, start, jetzt, dialoge=0):
+    """Wie lange die Oberflaeche schon steht. Null heisst: alles in Ordnung.
+
+    Zwei Faelle sind kein Haenger und standen trotzdem in der Datei:
+
+      * Ein Dialog wartet auf einen Menschen. Der Hauptthread steht dann
+        in subprocess.run und atmet nicht - dafuer kann er nichts.
+      * Das Programm ist gerade erst gestartet und hatte noch keinen
+        Herzschlag. Dann rechnete der Wachhund gegen die Null und meldete
+        "steht seit 1793962100 s", also seit dem 1. Januar 1970.
+
+    Ohne Puls zaehlt deshalb die Startzeit. Bleibt es danach wirklich
+    still, meldet der Wachhund das weiterhin - und dann heisst es auch
+    etwas: die Schleife, die alle hundert Millisekunden laufen soll, laeuft
+    nicht mehr.
+    """
+    if dialoge:
+        return 0.0
+    return jetzt - (puls or start)
+
+
 def haenger_spuren(app=None, grenze=20.0):
     """Spuren aller Threads sichern, wenn die Oberflaeche stehenbleibt.
 
@@ -4989,11 +5011,14 @@ def haenger_spuren(app=None, grenze=20.0):
     if app is None:
         return pfad
 
+    start = time.time()
+
     def wachen():
         gemeldet = False
         while True:
             time.sleep(5.0)
-            still = time.time() - getattr(app, "_herzschlag", 0)
+            still = haenger_dauer(getattr(app, "_herzschlag", 0), start,
+                                  time.time(), D.LAEUFT)
             if still > grenze and not gemeldet:
                 _haenger_f.write("\n==== %s: Oberflaeche steht seit %.0f s ====\n"
                                  % (time.strftime("%Y-%m-%d %H:%M:%S"), still))

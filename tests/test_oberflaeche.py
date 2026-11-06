@@ -3771,6 +3771,52 @@ class FehlerStehenImProtokoll(Grundlage):
                          self.app._fehler_melden)
 
 
+class DerWachhundBelltNurBeiEchtenHaengern(unittest.TestCase):
+    """Zwei Eintraege in der Haengerdatei waren gar keine Haenger: einer
+    entstand, waehrend ein Dateidialog auf einen Menschen wartete, der
+    andere beim Start - da hatte die Oberflaeche noch keinen Puls, und der
+    Wachhund rechnete gegen die Null: 'steht seit 1793962100 s'."""
+
+    def setUp(self):
+        import laserwerk
+        self.L = laserwerk
+
+    def test_ohne_puls_zaehlt_die_startzeit(self):
+        self.assertAlmostEqual(self.L.haenger_dauer(0, 1000.0, 1003.0), 3.0)
+
+    def test_mit_puls_zaehlt_der_puls(self):
+        self.assertAlmostEqual(self.L.haenger_dauer(1002.0, 1000.0, 1025.0), 23.0)
+
+    def test_ein_offener_dialog_ist_kein_haenger(self):
+        self.assertEqual(self.L.haenger_dauer(1002.0, 1000.0, 1900.0, dialoge=1),
+                         0.0)
+
+    def test_eine_stehende_schleife_meldet_sich_weiter(self):
+        """Die Meldung soll nicht verschwinden - sie heisst dann wirklich
+        etwas: die Schleife, die alle hundert Millisekunden laufen soll,
+        laeuft nicht mehr."""
+        self.assertGreater(self.L.haenger_dauer(1002.0, 1000.0, 1100.0), 20.0)
+
+
+class DialogeZaehlenSichSelbst(unittest.TestCase):
+    """Damit der Wachhund weiss, wann die Oberflaeche nur wartet."""
+
+    def test_waehrend_des_dialogs_hochgezaehlt(self):
+        import lw_dialog
+        echt_z, echt_zenity = lw_dialog.ZENITY, lw_dialog.subprocess.run
+        gesehen = []
+        lw_dialog.ZENITY = "/bin/true"
+        lw_dialog.subprocess.run = lambda *a, **k: (
+            gesehen.append(lw_dialog.LAEUFT)
+            or type("R", (), {"returncode": 0, "stdout": ""})())
+        try:
+            lw_dialog._z(["--info"])
+        finally:
+            lw_dialog.ZENITY, lw_dialog.subprocess.run = echt_z, echt_zenity
+        self.assertEqual(gesehen, [1])
+        self.assertEqual(lw_dialog.LAEUFT, 0)
+
+
 class SchnittvorlageInDeckung(Grundlage):
     """Bei einer Schnittvorlage liegen die Schnittlinien NEBEN dem Motiv.
 

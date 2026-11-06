@@ -342,6 +342,43 @@ class FremderGcode(unittest.TestCase):
         rechts = bild[:, -3:].min()         # die starke
         self.assertLess(rechts, unten)
 
+    def test_graustufen_werden_nicht_zerstueckelt(self):
+        """S0 mitten in der Zeile ist kein Eilweg.
+
+        In einer Graustufengravur wechseln sich S400 und S0 hunderte Male
+        je Zeile ab. Die S0-Stuecke sind ganz normale G1-Fahrten mit
+        ausgeschaltetem Strahl - die Achse faehrt durch. Gezaehlt wurden
+        sie als Eilwege, und damit zerfiel jede Rasterzeile in hunderte
+        Bahnen, die alle aus dem Stand anfahren: aus anderthalb Stunden
+        wurden zwoelf.
+        """
+        J.setze_maschine({"accel": 500.0, "eilgang": 8000.0})
+        g = ["G21", "G90", "M4 S0", "G0 X0 Y0"]
+        x = 0.0
+        for i in range(600):                 # eine Zeile, 60 mm, staendig S0/S400
+            x += 0.1
+            g.append("G1 X%.3f S%d F6000" % (x, 400 if i % 2 else 0))
+        _png, _bb, info = J.gcode_preview(g, 2.0)
+        rein = 60.0 / (6000 / 60.0)          # reine Fahrzeit der Strecke
+        self.assertLess(info["sekunden"], rein * 3,
+                        "die Zeile wird immer noch zerstueckelt")
+
+    def test_der_vorschub_gilt_je_bahn(self):
+        """Erst gravieren, dann schneiden - das sind zwei Vorschuebe.
+
+        Gerechnet wurde alles mit dem letzten F der Datei. Bei einer Datei,
+        die mit dem langsamen Schnitt endet, zog das die ganze Gravur mit
+        nach unten.
+        """
+        J.setze_maschine({"accel": 500.0, "eilgang": 8000.0})
+        schnell = ["G21", "G90", "M4 S400", "G0 X0 Y0", "G1 X200 F6000"]
+        gemischt = schnell + ["G0 X0 Y50", "G1 X10 Y50 F300"]
+        a = J.gcode_preview(schnell, 2.0)[2]["sekunden"]
+        b = J.gcode_preview(gemischt, 2.0)[2]["sekunden"]
+        # die langsame Kontur kommt oben drauf, sie faerbt nicht alles ein
+        self.assertLess(b - a, 10.0)
+        self.assertGreater(b, a)
+
     def test_vorschau_ohne_bewegung(self):
         png, bb, info = J.gcode_preview(["G21", "M5"], 10)
         self.assertIsNone(info)

@@ -581,7 +581,7 @@ def zeig_s(watt=None, feed=POINTER_FEED, j=ZEIG_J):
         return 1
 
 
-def estimate(bahnen, feed, eilwege=(), accel=None, eil=None):
+def estimate(bahnen, feed, eilwege=(), accel=None, eil=None, feeds=None):
     """Laufzeit aus den Bahnen, die die Maschine faehrt.
 
     Eine Bahn ist, was ohne Halt durchlaeuft: eine ganze Gravurzeile, eine
@@ -602,11 +602,16 @@ def estimate(bahnen, feed, eilwege=(), accel=None, eil=None):
     Richtungswechsel mit: eine nachgezeichnete Kontur bremst an jeder Ecke,
     und das ist der Unterschied zwischen "Laserwerk sagt 43 min" und einer
     Stunde.
+
+    feeds gibt je Bahn einen eigenen Vorschub. Ohne das gilt feed fuer
+    alles - und in einer Datei, die erst graviert und dann schneidet,
+    sind das zwei sehr verschiedene Zahlen. Mit dem Schnittvorschub
+    gerechnet wurden aus anderthalb Stunden Gravur zwoelf.
     """
-    v = feed / 60.0
     ve = (EILGANG if eil is None else eil) / 60.0
     t = sum(fahrzeit(w, ve, accel) for w in eilwege)
-    for b in bahnen:
+    for i, b in enumerate(bahnen):
+        v = max(1e-6, (feeds[i] if feeds and i < len(feeds) else feed) / 60.0)
         t += (bahnzeit(b, v, accel) if hasattr(b, "__len__")
               else fahrzeit(b, v, accel))
     return t
@@ -751,7 +756,14 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
         nx = (x + float(d["X"])) if rel and "X" in d else float(d.get("X", x))
         ny = (y + float(d["Y"])) if rel and "Y" in d else float(d.get("Y", y))
         on = laser and mode != 0 and s > 0
-        moves.append((x, y, nx, ny, min(1.0, s / s_max) if on else None))
+        # Zwei verschiedene Fragen: faehrt die Achse durch (G1/G2/G3),
+        # und brennt dabei etwas (Strahl an und S ueber null). Frueher
+        # entschied eine einzige Zahl beides - und weil in einer
+        # Graustufengravur staendig S0 steht, galt jede dieser Fahrten als
+        # Eilweg. Jede Rasterzeile zerfiel damit in hunderte Bahnen, die
+        # alle aus dem Stand anfahren. Zwoelf Stunden statt anderthalb.
+        moves.append((x, y, nx, ny, min(1.0, s / s_max) if on else None,
+                      feed, mode != 0))
         x, y = nx, ny
     if not moves:
         return None, (0, 0, 0, 0), None
@@ -775,20 +787,24 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     # dazwischen weiterlaeuft, ist eine. Wie viel Tempo die Ecken darin
     # durchlassen, rechnet estimate - hier wurde frueher pauschal bei
     # ueber 60 Grad angehalten und alles darunter geschenkt.
-    bahnen, eilwege = [], []
-    lauf = []
-    for a, b, c, e, p in moves:
+    bahnen, eilwege, bahnfeeds = [], [], []
+    lauf, laufeed = [], feed
+    for a, b, c, e, p, vf, faehrt in moves:
         L = ((c - a) ** 2 + (e - b) ** 2) ** 0.5
-        if p is None:
+        if not faehrt:
             if len(lauf) > 1:
                 bahnen.append(lauf)
+                bahnfeeds.append(laufeed)
             lauf = []
             eilwege.append(L)
             trav += L
             continue
         if not lauf:
             lauf.append((a, b))
+            laufeed = vf
         lauf.append((c, e))
+        if p is None:
+            continue
         cut += L
         dr.line([((a - x0) * sc, H - 1 - (b - y0) * sc),
                  ((c - x0) * sc, H - 1 - (e - y0) * sc)],
@@ -798,9 +814,10 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     im.save(buf, format="PNG")
     if len(lauf) > 1:
         bahnen.append(lauf)
+        bahnfeeds.append(laufeed)
     info = dict(breite=x1 - x0, hoehe=y1 - y0, xmin=x0, xmax=x1, ymin=y0, ymax=y1,
                 befehle=len(lines), cut_m=cut / 1000, trav_m=trav / 1000,
-                sekunden=estimate(bahnen, feed, eilwege))
+                sekunden=estimate(bahnen, feed, eilwege, feeds=bahnfeeds))
     return buf.getvalue(), (x0, y0, x1, y1), info
 
 

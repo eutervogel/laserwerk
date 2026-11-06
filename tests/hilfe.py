@@ -34,6 +34,18 @@ import lw_telegram as TG                                      # noqa: E402
 TG.DATEI = os.path.join(WEGWERF, "telegram.json")
 TG.Fern.start = lambda self: "test"       # kein Netzverkehr aus Tests
 
+import lw_dialog as D                                          # noqa: E402
+
+# Kein Dateidialog aus einem Test. Die Dialoge laufen ueber zenity, und ein
+# zenity wartet auf einen Menschen - ein Test, der einen vergessen hat zu
+# ersetzen, bleibt sonst einfach stehen, bis jemand nachsieht. Genau das ist
+# passiert, als open_image von askopenfilename auf askopenfilenames umgestellt
+# wurde: die Attrappen hingen am alten Namen, der neue oeffnete das echte
+# Fenster. Wer einen Dialog braucht, ersetzt ihn weiterhin selbst.
+D.filedialog.askopenfilename = lambda **k: ""
+D.filedialog.askopenfilenames = lambda **k: ()
+D.filedialog.asksaveasfilename = lambda **k: ""
+
 
 def bildschirm():
     """Gibt es eine Anzeige, auf der tkinter ein Fenster bauen kann?"""

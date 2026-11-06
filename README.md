@@ -71,6 +71,13 @@ settings for a new material.
   element lands next to the others instead of on top of them, and starts a
   new row once the old one is full. A drawing comes in at its own size — a
   cut blown up to the full travel is never what was meant.
+- **Several files at once** — the open dialog takes as many as you like, and
+  with tkdnd installed you can drag them straight in from the file manager.
+  They arrange themselves next to each other. A dropped file lands where you
+  let go of it — unless something is already there, in which case it joins the
+  row, because cutting the same spot twice is never what was meant. If one
+  file fails the rest still load, and a single message at the end says which
+  one was missing — not five dialogs in a row.
 - **One workpiece, one material** — power, feed, line spacing and passes
   belong to the wood underneath, not to the artwork. They therefore apply to
   every element, no matter which one you set them on — five diggers on one
@@ -208,6 +215,8 @@ instead of rows.
 - Python 3.10 or newer, with tkinter (`apt install python3-tk`)
 - `pip install -r requirements.txt` — pyserial, Pillow, numpy
 - optionally `zenity` for native GTK dialogs; without it the Tk ones are used
+- optionally `tkdnd` (`apt install tkdnd`) so files can be dragged in from the
+  file manager; without the extension only dragging is missing
 - a GRBL 1.1 controller on USB, and your user in the `dialout` group
 
 ```sh

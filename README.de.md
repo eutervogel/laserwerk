@@ -74,6 +74,14 @@ Material ausprobieren will.
   fängt eine neue Reihe an, wenn die alte voll ist. Eine Zeichnung kommt
   dabei im Originalmaß herein — ein Schnitt, der auf den Verfahrweg
   aufgeblasen wird, ist nie gemeint.
+- **Mehrere Dateien auf einmal** — im Öffnen-Dialog lassen sich beliebig
+  viele auswählen, und wer tkdnd installiert hat, zieht sie gleich aus dem
+  Dateimanager ins Fenster. Sie legen sich von selbst nebeneinander. Eine
+  fallengelassene Datei landet dort, wo man sie loslässt — es sei denn, dort
+  liegt schon etwas: dann geht sie in die Reihe, denn zweimal dieselbe Stelle
+  zu schneiden ist nie gemeint. Geht eine Datei nicht, läuft der Rest trotzdem
+  durch und eine Meldung am Ende sagt, welche fehlte — nicht fünf Dialoge
+  hintereinander.
 - **Ein Werkstück, ein Material** — Leistung, Vorschub, Zeilenabstand und
   Durchgänge gehören nicht zum Motiv, sondern zum Holz darunter. Sie gelten
   deshalb für alle Elemente gemeinsam, egal an welchem man sie einstellt —
@@ -217,6 +225,9 @@ Schneiden zählt es Konturen statt Zeilen.
 - `pip install -r requirements.txt` — pyserial, Pillow, numpy
 - optional `zenity` für native GTK-Dialoge; fehlt es, nimmt das Programm die
   Tk-eigenen
+- optional `tkdnd` (`apt install tkdnd`), damit sich Dateien aus dem
+  Dateimanager ins Fenster ziehen lassen; ohne die Erweiterung fehlt nur
+  das Ziehen
 - einen GRBL-1.1-Controller am USB-Port, Benutzer in der Gruppe `dialout`
 
 ```sh

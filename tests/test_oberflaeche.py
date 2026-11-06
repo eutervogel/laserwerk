@@ -916,7 +916,7 @@ class Projektrundlauf(Grundlage):
         quelle = os.path.join(ordner, "motiv.png")
         Image.new("L", (400, 200), 30).save(quelle)
         ziel = os.path.join(ordner, "p.lwp")
-        self.L.filedialog.askopenfilename = lambda **k: quelle
+        self.L.filedialog.askopenfilenames = lambda **k: (quelle,)
         self.L.filedialog.asksaveasfilename = lambda **k: ziel
         self.app.open_image()
         self.app.v_w.set(137.5)
@@ -1206,7 +1206,7 @@ class KonturFahren(Grundlage):
                     'height="20" viewBox="0 0 40 20">'
                     '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/>'
                     '<circle cx="20" cy="10" r="5"/></svg>')
-        self.L.filedialog.askopenfilename = lambda **k: p
+        self.L.filedialog.askopenfilenames = lambda **k: (p,)
         self.app.open_image()
 
     def test_faehrt_die_echte_kontur_nicht_den_kasten(self):
@@ -1265,7 +1265,7 @@ class GravierenUndSchneiden(Grundlage):
                     'height="20" viewBox="0 0 40 20">'
                     '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/>'
                     '<circle cx="20" cy="10" r="6" fill="black"/></svg>')
-        self.L.filedialog.askopenfilename = lambda **k: p
+        self.L.filedialog.askopenfilenames = lambda **k: (p,)
         self.app.open_image()
         self.app.v_w.set(40.0)
         self.app._keep_ratio("w")
@@ -1415,7 +1415,7 @@ class GemischterInfotext(Grundlage):
             f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
                     'height="20" viewBox="0 0 40 20">'
                     '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/></svg>')
-        self.L.filedialog.askopenfilename = lambda **k: p
+        self.L.filedialog.askopenfilenames = lambda **k: (p,)
         self.app.open_image()
         self.app.v_w.set(40.0)
         self.app._keep_ratio("w")
@@ -1448,13 +1448,13 @@ class MehrereElemente(Grundlage):
         ordner, png, svg = self.dateien()
         self.app.v_bw.set(120.0)
         self.app.v_bh.set(80.0)
-        self.L.filedialog.askopenfilename = lambda **k: png
+        self.L.filedialog.askopenfilenames = lambda **k: (png,)
         self.app.open_image()
         self.app.v_mode.set("schwelle")
         self.app.v_w.set(60.0)
         self.app._keep_ratio("w")
         self.app.center_motif()
-        self.L.filedialog.askopenfilename = lambda **k: svg
+        self.L.filedialog.askopenfilenames = lambda **k: (svg,)
         self.app.open_image()
         self.app.v_job.set("schnitt")
         self.app.v_w.set(80.0)
@@ -1713,7 +1713,7 @@ class FarbEbenen(Grundlage):
 
     def laden(self, aufteilen=True):
         self.L.messagebox.askyesno = lambda t, m: aufteilen
-        self.L.filedialog.askopenfilename = lambda **k: self.svg()
+        self.L.filedialog.askopenfilenames = lambda **k: (self.svg(),)
         self.app.open_image()
 
     def test_aufteilen_macht_zwei_elemente(self):
@@ -1764,7 +1764,7 @@ class FarbEbenen(Grundlage):
             f.write('<svg xmlns="http://www.w3.org/2000/svg" width="40" '
                     'height="20" viewBox="0 0 40 20"><rect width="40" '
                     'height="20" fill="none" stroke="black"/></svg>')
-        self.L.filedialog.askopenfilename = lambda **k: p
+        self.L.filedialog.askopenfilenames = lambda **k: (p,)
         self.app.open_image()
         self.assertEqual(gefragt, [])
         self.assertEqual(len(self.app.elemente), 1)
@@ -1866,7 +1866,7 @@ class Zeilenzaehler(Grundlage):
                     'height="20" viewBox="0 0 40 20">'
                     '<path d="M 0 0 L 40 0 L 40 20 L 0 20 Z"/>'
                     '<circle cx="20" cy="10" r="5"/></svg>')
-        self.L.filedialog.askopenfilename = lambda **k: p
+        self.L.filedialog.askopenfilenames = lambda **k: (p,)
         self.app.open_image()
         self.app.v_job.set("schnitt")
         self.app.generate()
@@ -2583,7 +2583,7 @@ class NurDasBild(Grundlage):
         p = os.path.join(tempfile.mkdtemp(), "vorlage.svg")
         with open(p, "w") as f:
             f.write("".join(teile))
-        self.L.filedialog.askopenfilename = lambda **k: p
+        self.L.filedialog.askopenfilenames = lambda **k: (p,)
         self.app.open_image()
         return p
 
@@ -3456,6 +3456,153 @@ class NeueMotiveLiegenNebeneinander(Grundlage):
 
 
 @ohne_bildschirm
+class MehrereDateienAufEinmal(Grundlage):
+    """Ein Werkstueck besteht selten aus einer Datei. Fuenf Bagger einzeln
+    zu oeffnen heisst fuenfmal denselben Dialog - und wer sie aus dem
+    Dateimanager herueberzieht, will gar keinen."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 300.0, 200.0
+        self.ordner = tempfile.mkdtemp()
+
+    def svg(self, name):
+        p = os.path.join(self.ordner, name)
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="30mm" '
+                    'height="20mm" viewBox="0 0 30 20">'
+                    '<path d="M1 1 H29 V19 H1 Z" stroke="#ff0000" '
+                    'stroke-width="0.1" fill="none"/></svg>')
+        return p
+
+    def test_drei_dateien_werden_drei_elemente(self):
+        pfade = [self.svg("a.svg"), self.svg("b.svg"), self.svg("c.svg")]
+        self.assertEqual(self.app.dateien_laden(pfade), 3)
+        self.assertEqual(len(self.app.elemente), 3)
+        self.assertEqual([e["anzeige"] for e in self.app.elemente],
+                         ["a.svg", "b.svg", "c.svg"])
+
+    def test_sie_liegen_nebeneinander(self):
+        """Sonst laegen sie deckungsgleich uebereinander - genau das, was
+        das Ablegen nebeneinander verhindern soll."""
+        self.app.dateien_laden([self.svg("a.svg"), self.svg("b.svg")])
+        a, b = (self.app._box_von(e) for e in self.app.elemente)
+        self.assertTrue(self.app._platz_frei(b[0], b[1], b[2], b[3], [a]),
+                        "zweites Motiv liegt auf dem ersten")
+
+    def test_eine_kaputte_haelt_die_anderen_nicht_auf(self):
+        kaputt = os.path.join(self.ordner, "kaputt.svg")
+        with open(kaputt, "w") as f:
+            f.write("das ist keine SVG")
+        pfade = [self.svg("a.svg"), kaputt, self.svg("c.svg")]
+        self.assertEqual(self.app.dateien_laden(pfade), 2)
+        self.assertEqual(len(self.app.elemente), 2)
+
+    def test_eine_meldung_statt_dreier(self):
+        """Drei Fehlerdialoge hintereinander wegzuklicken hilft niemandem."""
+        kaputt = []
+        for i in range(2):
+            p = os.path.join(self.ordner, "k%d.svg" % i)
+            with open(p, "w") as f:
+                f.write("kein SVG")
+            kaputt.append(p)
+        self.app.dateien_laden(kaputt + [self.svg("a.svg")])
+        fehler = [m for art, m in self.gezeigt if art == "!"]
+        self.assertEqual(len(fehler), 1)
+        self.assertIn("k0.svg", fehler[0])
+        self.assertIn("k1.svg", fehler[0])
+
+    def test_einzelne_datei_meldet_wie_bisher(self):
+        """Wer eine Datei oeffnet und sie geht nicht, soll den Grund sehen -
+        nicht eine Liste mit einem Eintrag."""
+        p = os.path.join(self.ordner, "kaputt.dxf")
+        with open(p, "w") as f:
+            f.write("keine DXF")
+        self.assertEqual(self.app.dateien_laden([p]), 0)
+        fehler = [m for art, m in self.gezeigt if art == "!"]
+        self.assertEqual(len(fehler), 1)
+        self.assertNotIn("kaputt.dxf", fehler[0])
+
+
+class DateienHereinziehen(Grundlage):
+    """Drag & Drop braucht die Tk-Erweiterung tkdnd. Was Laserwerk selbst
+    tut - die Liste lesen und die Dateien ablegen - laesst sich auch ohne
+    sie pruefen."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 300.0, 200.0
+        self.ordner = tempfile.mkdtemp()
+
+    def test_ohne_tkdnd_laeuft_es_trotzdem(self):
+        """Ein Programm, das wegen Drag & Drop nicht startet, waere
+        schlimmer als eines ohne Drag & Drop."""
+        self.assertIn(self.app._dnd_einrichten(), (True, False))
+        self.assertIn(self.app.dnd, (True, False))
+
+    def test_pfade_mit_leerzeichen(self):
+        """tkdnd schickt eine Tcl-Liste; was Leerzeichen hat, steht in
+        geschweiften Klammern."""
+        self.assertEqual(
+            self.app._dnd_dateien("{/tmp/mit Luecke.svg} /tmp/ohne.svg"),
+            ["/tmp/mit Luecke.svg", "/tmp/ohne.svg"])
+
+    def test_pfade_als_url(self):
+        self.assertEqual(
+            self.app._dnd_dateien("file:///tmp/mit%20Luecke.svg"),
+            ["/tmp/mit Luecke.svg"])
+
+    def test_url_mit_rechnernamen(self):
+        self.assertEqual(self.app._dnd_dateien("file://localhost/tmp/a.svg"),
+                         ["/tmp/a.svg"])
+
+    def test_fallengelassene_dateien_werden_geladen(self):
+        p = os.path.join(self.ordner, "a.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="30mm" '
+                    'height="20mm" viewBox="0 0 30 20">'
+                    '<path d="M1 1 H29 V19 H1 Z" stroke="#ff0000" '
+                    'stroke-width="0.1" fill="none"/></svg>')
+        self.assertEqual(self.app._dnd_fallen("{%s}" % p, 0, 0), "copy")
+        self.assertEqual(len(self.app.elemente), 1)
+
+    def test_nichts_dabei_wird_abgelehnt(self):
+        self.assertEqual(self.app._dnd_fallen("", 0, 0), "refuse_drop")
+
+    def test_es_liegt_wo_man_loslaesst(self):
+        """Sonst landet es irgendwo, und man schiebt es doch wieder von
+        Hand - dann braucht es das Ziehen gar nicht erst."""
+        self.motiv()
+        self.app.v_w.set(40.0)
+        self.app.v_h.set(30.0)
+        self.app._platz_daneben(wunsch=(150.0, 100.0))
+        self.assertAlmostEqual(self.app.v_xoff.get() + 20.0, 150.0, delta=0.1)
+        self.assertAlmostEqual(self.app.v_yoff.get() + 15.0, 100.0, delta=0.1)
+
+    def test_am_rand_bleibt_es_auf_der_flaeche(self):
+        self.motiv()
+        self.app.v_w.set(40.0)
+        self.app.v_h.set(30.0)
+        self.app._platz_daneben(wunsch=(299.0, 199.0))
+        self.assertLessEqual(self.app.v_xoff.get() + 40.0, 300.0)
+        self.assertLessEqual(self.app.v_yoff.get() + 30.0, 200.0)
+
+    def test_besetzte_stelle_weicht_aus(self):
+        """Lieber daneben als zweimal dieselbe Stelle geschnitten."""
+        self.motiv()
+        self.app.v_w.set(40.0); self.app.v_h.set(30.0)
+        self.app.v_xoff.set(100.0); self.app.v_yoff.set(100.0)
+        self.app._element_sichern()
+        self.app.elemente.append(dict(self.app.elemente[0], anzeige="zwei"))
+        self.app.aktiv = 1
+        self.app._platz_daneben(wunsch=(110.0, 110.0))
+        self.app._element_sichern()      # wie lade_motiv es auch tut
+        zwei = self.app._box_von(self.app.elemente[1])
+        self.assertTrue(self.app._platz_frei(
+            zwei[0], zwei[1], zwei[2], zwei[3],
+            [self.app._box_von(self.app.elemente[0])]))
+
+
 class SchnittvorlageInDeckung(Grundlage):
     """Bei einer Schnittvorlage liegen die Schnittlinien NEBEN dem Motiv.
 

@@ -6,6 +6,7 @@ Bild oder SVG laden, skalieren, Material waehlen, Achsen steuern,
 Nullpunkt setzen, Fokus testen, gravieren.
 """
 import base64, bisect, io, math, os, queue, re, threading, time
+import urllib.parse
 from PIL import Image
 import tkinter as tk
 from tkinter import ttk
@@ -259,7 +260,89 @@ class App:
         self.lbl_marke.grid(row=2, column=1, sticky="ew", pady=(6, 0))
         if not self.v_hilfe.get():
             self._hilfe_zeigen()
+        self._dnd_einrichten()
         self._status_zeigen()
+
+    # ------------------------------------------------ Ziehen und fallenlassen
+    def _dnd_einrichten(self):
+        """Dateien aus dem Dateimanager ins Fenster ziehen koennen.
+
+        Dafuer braucht Tk die Erweiterung tkdnd (Ubuntu: apt install
+        tkdnd); das XDND-Protokoll selbst nachzubauen waere viel Arbeit
+        fuer eine Bequemlichkeit. Fehlt sie, bleibt alles wie vorher - ein
+        Programm, das wegen Drag & Drop nicht startet, waere schlimmer.
+
+        Angemeldet wird das ganze Fenster, nicht nur die Flaeche: wer eine
+        Datei auf den Reiter fallen laesst, meint dasselbe. Wo genau sie
+        gelandet ist, entscheidet nachher der Platz.
+        """
+        self.dnd = False
+        for paket in ("tkdnd", "tkdnd2.8", "tkdnd1.0"):
+            try:
+                self.root.tk.call("package", "require", paket)
+            except tk.TclError:
+                continue
+            break
+        else:
+            self._log(T("Drag & Drop braucht tkdnd - ohne die Erweiterung "
+                        "geht es nur über 'Bild/SVG öffnen'."))
+            return False
+        try:
+            self.root.tk.call("tkdnd::drop_target", "register",
+                              self.root, "DND_Files")
+            befehl = self.root.register(self._dnd_fallen)
+            # %D sind die Dateien, %X/%Y der Punkt auf dem Schirm. Beides
+            # gibt es nur als Tcl-Ersetzung, also wird hier ein Stueck Tcl
+            # gebunden statt einer Funktion.
+            self.root.bind("<<Drop:DND_Files>>", befehl + " %D %X %Y")
+        except tk.TclError as e:
+            self._log(T("Drag & Drop nicht eingerichtet: {0}").format(e))
+            return False
+        self.dnd = True
+        self.lbl_maushilfe.configure(text=T(
+            "Motiv mit der Maus schieben, an den Ecken ziehen zum "
+            "Skalieren,\nam Griff über der Oberkante drehen. Dateien lassen "
+            "sich aus dem\nDateimanager hierher ziehen. Der Nullpunkt ist "
+            "die linke untere\nEcke des Werkstücks."))
+        return True
+
+    def _dnd_dateien(self, daten):
+        """Die Liste aus dem Drop in Pfade uebersetzen.
+
+        tkdnd liefert eine Tcl-Liste; Pfade mit Leerzeichen stehen darin in
+        geschweiften Klammern. Manche Quellen schicken stattdessen URLs.
+        """
+        try:
+            roh = self.root.tk.splitlist(daten)
+        except tk.TclError:
+            roh = str(daten).split()
+        pfade = []
+        for t in roh:
+            t = str(t)
+            if t.startswith("file://"):
+                t = urllib.parse.unquote(t[7:])
+                if not t.startswith("/") and "/" in t:
+                    t = "/" + t.split("/", 1)[1]     # file://rechner/pfad
+            if t:
+                pfade.append(t)
+        return pfade
+
+    def _dnd_fallen(self, daten, x=0, y=0):
+        """Dateien sind im Fenster gelandet."""
+        pfade = self._dnd_dateien(daten)
+        if not pfade:
+            return "refuse_drop"
+        wunsch = None
+        try:
+            px = int(x) - self.cv.winfo_rootx()
+            py = int(y) - self.cv.winfo_rooty()
+            if 0 <= px < self.cv.winfo_width() and \
+                    0 <= py < self.cv.winfo_height():
+                wunsch = self._mm_zurueck(px, py)
+        except (ValueError, TypeError, tk.TclError):
+            wunsch = None
+        self.dateien_laden(pfade, wunsch=wunsch)
+        return "copy"
 
     def _scrollbereich(self, nb, titel):
         """Reiterinhalt in einen scrollbaren Bereich packen - die Spalte ist
@@ -418,12 +501,12 @@ class App:
                 row=4, column=0, columnspan=5, sticky="w", pady=(4, 0))
         ttk.Button(wk, text=T("Motiv mittig setzen"), command=self.center_motif
                    ).grid(row=5, column=0, columnspan=5, sticky="ew", pady=(6, 0))
-        self._erklaerung(ttk.Label(wk, text=T(
+        self.lbl_maushilfe = self._erklaerung(ttk.Label(wk, text=T(
             "Motiv mit der Maus schieben, an den Ecken ziehen zum "
             "Skalieren,\nam Griff über der Oberkante drehen. Der Nullpunkt "
             "ist die linke\nuntere Ecke des Werkstücks."),
-            style="Muted.TLabel")).grid(row=6, column=0, columnspan=5,
-                                        sticky="w")
+            style="Muted.TLabel"))
+        self.lbl_maushilfe.grid(row=6, column=0, columnspan=5, sticky="w")
 
         box = ttk.LabelFrame(f, text=T("Größe und Lage"), padding=4)
         box.grid(row=7, column=0, columnspan=3, sticky="ew", pady=6)
@@ -942,15 +1025,46 @@ class App:
 
     # ================================================================ Motiv
     def open_image(self):
-        p = filedialog.askopenfilename(
-            title=T("Bild oder SVG"), initialdir=os.path.expanduser("~/Downloads"),
+        pfade = filedialog.askopenfilenames(
+            title=T("Bilder, SVG oder DXF"),
+            initialdir=os.path.expanduser("~/Downloads"),
             filetypes=[(T("Bilder, SVG, DXF"),
                         "*.png *.jpg *.jpeg *.webp *.bmp *.svg *.dxf"),
                        (T("alle"), "*")])
-        if p:
-            self.lade_motiv(p)
+        if pfade:
+            self.dateien_laden(pfade)
 
-    def lade_motiv(self, p, anzeige=None, fragen=True):
+    def dateien_laden(self, pfade, wunsch=None):
+        """Mehrere Dateien hintereinander als Elemente laden.
+
+        Ein Werkstueck besteht selten aus einer Datei - fuenf Bagger sind
+        fuenf SVGs, und die einzeln zu oeffnen heisst fuenfmal denselben
+        Dialog. Sie legen sich von selbst nebeneinander (_platz_daneben).
+
+        Geht eine davon nicht, laeuft der Rest trotzdem durch: fuenf
+        Fehlerdialoge hintereinander wegzuklicken hilft niemandem, eine
+        Meldung am Ende sagt dasselbe.
+        """
+        pfade = [p for p in pfade if p]
+        if not pfade:
+            return 0
+        schief = []
+        for i, p in enumerate(pfade):
+            if not self.lade_motiv(p, melden=len(pfade) == 1,
+                                   wunsch=wunsch if i == 0 else None):
+                schief.append(os.path.basename(p))
+        geladen = len(pfade) - len(schief)
+        if len(pfade) > 1:
+            self._log(T("{n} von {m} Dateien geladen.").format(
+                n=geladen, m=len(pfade)))
+        if schief and len(pfade) > 1:
+            messagebox.showerror(T("Laden fehlgeschlagen"), T(
+                "Diese Dateien gingen nicht:\n\n{liste}").format(
+                    liste="\n".join(schief)))
+        return geladen
+
+    def lade_motiv(self, p, anzeige=None, fragen=True, melden=True,
+                   wunsch=None):
         """Datei einlesen und als Motiv setzen. 'anzeige' ueberschreibt den
         Namen im Fenster - ein Projekt zeigt den urspruenglichen, nicht den
         der ausgepackten Kopie."""
@@ -1003,7 +1117,10 @@ class App:
                 if bildlinien and kasten:
                     bild_bb = V.bild_in_blatt(p, roh.size, kasten)
         except Exception as e:
-            messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
+            if melden:
+                messagebox.showerror(T("Laden fehlgeschlagen"), str(e))
+            self._log(T("{name}: {fehler}").format(
+                name=os.path.basename(p), fehler=e))
             return False
         if self.grbl.job_running:
             messagebox.showinfo(T("Motiv"), T("Während eines Jobs nicht möglich."))
@@ -1047,7 +1164,7 @@ class App:
         self.aktiv = len(self.elemente) - 1
         self._neu_gekoppelt()
         self.fit()                       # setzt Groesse, sichert gleich mit
-        self._platz_daneben()
+        self._platz_daneben(wunsch)
         self._element_sichern()
         self._liste_auffrischen()
         self._gen_knopf()
@@ -2369,7 +2486,13 @@ class App:
 
     LUECKE = 5.0        # mm Luft zwischen zwei Motiven
 
-    def _platz_daneben(self):
+    @staticmethod
+    def _platz_frei(x, y, b, h, belegt):
+        """Liegt dieser Kasten auf keinem der anderen?"""
+        return all(x + b <= bx or bx + bb <= x or y + h <= by or by + bh <= y
+                   for bx, by, bb, bh in belegt)
+
+    def _platz_daneben(self, wunsch=None):
         """Ein neu geladenes Motiv neben die vorhandenen legen statt darauf.
 
         Jedes neue Element bekam denselben Versatz und wurde auf das
@@ -2383,6 +2506,11 @@ class App:
         waere weg. Ein Bild hat kein Mass in Millimetern; es behaelt sein
         eingepasstes und wird nur verkleinert, wenn der Platz sonst nicht
         reicht. Von Hand eingetippte Masse fasst niemand mehr an.
+
+        'wunsch' ist die Stelle, an der die Datei fallen gelassen wurde.
+        Dort soll sie auch liegen - aber nicht auf einem anderen Motiv.
+        Ist die Stelle besetzt, gilt wieder die Reihe: lieber daneben als
+        doppelt auf derselben Stelle geschnitten.
         """
         xm, ym = float(self.cfg["x_max"]), float(self.cfg["y_max"])
         if self.vec:
@@ -2396,13 +2524,25 @@ class App:
         belegt = [k for k in (self._box_von(e)
                               for i, e in enumerate(self.elemente)
                               if i != self.aktiv) if k]
-        if not belegt:
-            return                          # das erste Motiv liegt schon gut
         try:
             b, h = float(self.v_w.get()), float(self.v_h.get())
         except tk.TclError:
             return
         x0 = self._xmin()
+        if wunsch and b <= xm and h <= ym:
+            # Die Mitte des Motivs kommt unter den Zeiger, aber nicht ueber
+            # den Rand hinaus.
+            wx = min(max(x0, wunsch[0] - b / 2), xm - b)
+            wy = min(max(0.0, wunsch[1] - h / 2), ym - h)
+            if self._platz_frei(wx, wy, b, h, belegt):
+                self.v_xoff.set(round(wx, 2))
+                self.v_yoff.set(round(wy, 2))
+                self._log(T("{n}. Motiv: {b:.1f} x {h:.1f} mm bei X {x:.1f} / "
+                            "Y {y:.1f} mm abgelegt.").format(
+                                n=self.aktiv + 1, b=b, h=h, x=wx, y=wy))
+                return
+        if not belegt:
+            return                          # das erste Motiv liegt schon gut
         # Erst rechts daneben, in der Reihe des untersten Motivs.
         x = max(xx + bb for xx, _, bb, _ in belegt) + self.LUECKE
         y = min(yy for _, yy, _, _ in belegt)
@@ -4179,6 +4319,12 @@ class App:
     def _mm(self, x, y):
         s = self._scale()
         return self.ox + x * s, self.oy - y * s
+
+    def _mm_zurueck(self, x, y):
+        """Bildpunkt auf der Flaeche zurueck in Millimeter - Gegenstueck
+        zu _mm."""
+        s = self._scale()
+        return (x - self.ox) / s, (self.oy - y) / s
 
     def _wheel(self, e):
         """Mausrad: zoomen, wobei der Punkt unter dem Zeiger stehen bleibt."""

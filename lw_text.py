@@ -79,7 +79,26 @@ EN = {
     # ---- Reiter Motiv
     "Datei öffnen …": "Open file …",
     "Motiv entfernen": "Remove artwork",
-    "Bild oder SVG": "Image or SVG",
+    "Bilder, SVG oder DXF": "Images, SVG or DXF",
+    "Dateien öffnen": "Open files",
+    "{n} von {m} Dateien geladen.": "{n} of {m} files loaded.",
+    "Diese Dateien gingen nicht:\n\n{liste}":
+        "These files did not work:\n\n{liste}",
+    "{name}: {fehler}": "{name}: {fehler}",
+    "Drag & Drop braucht tkdnd - ohne die Erweiterung geht es nur über "
+    "'Bild/SVG öffnen'.":
+        "Drag and drop needs tkdnd - without that extension it only works "
+        "through 'Open image/SVG'.",
+    "Drag & Drop nicht eingerichtet: {0}":
+        "Drag and drop not set up: {0}",
+    "Motiv mit der Maus schieben, an den Ecken ziehen zum Skalieren,\n"
+    "am Griff über der Oberkante drehen. Dateien lassen sich aus dem\n"
+    "Dateimanager hierher ziehen. Der Nullpunkt ist die linke untere\n"
+    "Ecke des Werkstücks.":
+        "Drag the artwork with the mouse, resize it by its corners,\n"
+        "turn it by the handle above its top edge. Files can be dragged\n"
+        "in from the file manager. Zero is the bottom left corner of\n"
+        "the workpiece.",
     "Bilder, SVG, DXF": "Images, SVG, DXF",
     "alle": "all",
     "Breite": "Width",

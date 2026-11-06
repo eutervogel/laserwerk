@@ -763,6 +763,13 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     H = max(2, int((y1 - y0) * sc) + 2)
     im = Image.new("L", (W, H), 255)
     dr = ImageDraw.Draw(im)
+    # Die Vorschau soll zeigen, WO die Maschine faehrt, nicht wie dunkel es
+    # nachher wird. Die Graustufe lag frueher an der absoluten Leistung:
+    # eine Rahmenfahrt mit S40 wurde mit 246 von 255 gezeichnet, also
+    # weiss auf weiss. Geladen, Kasten da, Inhalt unsichtbar. Jetzt zaehlt
+    # die Leistung im Verhaeltnis zur staerksten der Datei, und auch die
+    # schwaechste Bahn bleibt sichtbar.
+    stark = max([m[4] for m in moves if m[4] is not None] or [1.0])
     cut = trav = 0.0
     # Fremder G-Code sagt nicht, wo eine Bahn aufhoert: alles, was ohne G0
     # dazwischen weiterlaeuft, ist eine. Wie viel Tempo die Ecken darin
@@ -785,7 +792,7 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
         cut += L
         dr.line([((a - x0) * sc, H - 1 - (b - y0) * sc),
                  ((c - x0) * sc, H - 1 - (e - y0) * sc)],
-                fill=int(255 * (1 - 0.9 * p)), width=max(1, super_))
+                fill=int(255 * (0.65 - 0.55 * p / stark)), width=max(1, super_))
     im = im.resize((max(1, W // super_), max(1, H // super_)), Image.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, format="PNG")

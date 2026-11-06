@@ -313,6 +313,35 @@ class FremderGcode(unittest.TestCase):
         self.assertAlmostEqual(x1, 5.0 + 4.0 + 1.5, delta=0.3)
         self.assertGreater(info["befehle"], 0)
 
+    def test_vorschau_zeigt_auch_schwache_fahrten(self):
+        """Eine Rahmenfahrt mit S40 ist kein leeres Blatt.
+
+        Die Graustufe hing an der absoluten Leistung: S40 von S1000 ergab
+        246 von 255, also weiss auf weiss. In Laserwerk sah man dann den
+        Kasten und darin nichts - ausgerechnet bei den Dateien, die man
+        vor dem Start noch einmal ansehen will.
+        """
+        import io as _io
+        from PIL import Image as _Image
+        g = ["G21", "G90", "M4 S40",
+             "G1 X10 Y0 F1000", "G1 X10 Y10", "G1 X0 Y10", "G1 X0 Y0", "M5"]
+        png, _bb, info = J.gcode_preview(g, 10)
+        bild = np.asarray(_Image.open(_io.BytesIO(png)).convert("L"))
+        self.assertLess(bild.min(), 120, "schwache Bahnen bleiben unsichtbar")
+
+    def test_vorschau_haelt_die_abstufung(self):
+        """Dunkler heisst immer noch staerker - nur eben im Verhaeltnis."""
+        import io as _io
+        from PIL import Image as _Image
+        g = ["G21", "G90",
+             "M4 S100", "G1 X20 Y0 F1000",
+             "M4 S900", "G1 X20 Y20", "M5"]
+        png, _bb, _i = J.gcode_preview(g, 10)
+        bild = np.asarray(_Image.open(_io.BytesIO(png)).convert("L"))
+        unten = bild[-3:, :].min()          # die schwache Bahn
+        rechts = bild[:, -3:].min()         # die starke
+        self.assertLess(rechts, unten)
+
     def test_vorschau_ohne_bewegung(self):
         png, bb, info = J.gcode_preview(["G21", "M5"], 10)
         self.assertIsNone(info)

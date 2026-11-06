@@ -74,6 +74,15 @@ Material ausprobieren will.
   fängt eine neue Reihe an, wenn die alte voll ist. Eine Zeichnung kommt
   dabei im Originalmaß herein — ein Schnitt, der auf den Verfahrweg
   aufgeblasen wird, ist nie gemeint.
+- **Ein Werkstück, ein Material** — Leistung, Vorschub, Zeilenabstand und
+  Durchgänge gehören nicht zum Motiv, sondern zum Holz darunter. Sie gelten
+  deshalb für alle Elemente gemeinsam, egal an welchem man sie einstellt —
+  fünf Bagger auf einem Brett hießen sonst fünfmal dieselben Zahlen eintippen,
+  und wer eines vergaß, ritzte es nur an. Soll ein Element doch abweichen,
+  nimmt der Haken „Eigene Werte" es aus der Gruppe; in der Elementliste steht
+  dann, welche das sind. Wer den Haken wieder wegnimmt, bekommt die
+  gemeinsamen Werte zurück. Gravur und Schnitt kommen sich dabei nicht in die
+  Quere: graviert wird mit S und F, geschnitten mit Schnitt-S und Schnitt-F.
 - **Formen zeichnen** — ein Rechteck mit Maßen und Eckradius, oder gleich ein
   Rahmen um das gewählte Motiv mit einem Abstand ringsum. Braucht keine
   Zeichensoftware für den einfachen Fall und steht danach als ganz normales

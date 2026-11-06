@@ -175,6 +175,9 @@ class App:
                   self.v_hell, self.v_kontrast, self.v_schaerfe,
                   self.v_nurbild):
             v.trace_add("write", lambda *a: self._stale())
+        for name in self.GEMEINSAM:
+            getattr(self, name).trace_add(
+                "write", lambda *a: self._werte_koppeln())
         for v in (self.v_f, self.v_over):
             v.trace_add("write", lambda *a: self._anlauf_zeigen())
         self._anlauf_zeigen()
@@ -580,6 +583,18 @@ class App:
                              "Schneiden braucht meist mehr Leistung und\n"
                              "weniger Vorschub als Gravieren."),
                   style="Muted.TLabel")).grid(row=5, column=0, columnspan=4, sticky="w")
+        self.v_eigen = tk.BooleanVar(value=False)
+        self.chk_eigen = ttk.Checkbutton(
+            jb, text=T("Eigene Werte für dieses Element"),
+            variable=self.v_eigen, command=self._eigen_geaendert)
+        self.chk_eigen.grid(row=6, column=0, columnspan=4, sticky="w",
+                            pady=(8, 0))
+        self._erklaerung(ttk.Label(jb, text=T(
+            "Ohne Haken gelten Leistung, Vorschub, Zeilenabstand und\n"
+            "Durchgänge für alle Elemente gemeinsam - ein Werkstück ist\n"
+            "aus einem Stück Holz. Egal, an welchem Element man sie\n"
+            "einstellt."), style="Muted.TLabel")).grid(
+                row=7, column=0, columnspan=4, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
                    ).grid(row=19, column=0, columnspan=3, sticky="ew", pady=(10, 2))
@@ -628,35 +643,43 @@ class App:
                             "zwischen diesen beiden Werten verteilt statt zwischen\n"
                             "30 % und S. Für Strichgrafik ohne Bedeutung."),
                   style="Muted.TLabel")).grid(row=6, column=0, columnspan=3, sticky="w")
+        # Die Werte hier gelten fuer das Material, nicht fuer das Motiv -
+        # und damit fuer alle Elemente, die kein eigenes Material haben.
+        # Ohne diese Zeile sieht man im Reiter Material nicht, wen man
+        # gerade mitverstellt.
+        self.lbl_gemeinsam = ttk.Label(f, text="", style="Muted.TLabel",
+                                       wraplength=240, justify="left")
+        self.lbl_gemeinsam.grid(row=7, column=0, columnspan=3, sticky="w",
+                                pady=(4, 0))
         self.lbl_sf = ttk.Label(f, text="")
-        self.lbl_sf.grid(row=7, column=0, columnspan=3, sticky="w", pady=4)
+        self.lbl_sf.grid(row=8, column=0, columnspan=3, sticky="w", pady=4)
         for v in (self.v_s, self.v_f, self.v_smin):
             v.trace_add("write", lambda *a: self._show_sf())
         self.v_notiz = tk.StringVar()
-        ttk.Label(f, text=T("Notiz")).grid(row=8, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=9, column=0, columnspan=3, sticky="ew")
+        ttk.Label(f, text=T("Notiz")).grid(row=9, column=0, sticky="w")
+        ttk.Entry(f, textvariable=self.v_notiz, width=32).grid(row=10, column=0, columnspan=3, sticky="ew")
 
         ttk.Button(f, text=T("Übernehmen + Z-Höhe anfahren"),
                    command=self.apply_preset
-                   ).grid(row=10, column=0, columnspan=3, sticky="ew", pady=(10, 2))
-        ttk.Separator(f).grid(row=11, column=0, columnspan=3, sticky="ew", pady=8)
+                   ).grid(row=11, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+        ttk.Separator(f).grid(row=12, column=0, columnspan=3, sticky="ew", pady=8)
         self.v_pname = tk.StringVar()
-        ttk.Label(f, text=T("Speichern als")).grid(row=12, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.v_pname, width=20).grid(row=12, column=1, columnspan=2, sticky="w")
+        ttk.Label(f, text=T("Speichern als")).grid(row=13, column=0, sticky="w")
+        ttk.Entry(f, textvariable=self.v_pname, width=20).grid(row=13, column=1, columnspan=2, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=13, column=0, columnspan=3, sticky="ew", pady=4)
+        bb.grid(row=14, column=0, columnspan=3, sticky="ew", pady=4)
         ttk.Button(bb, text=T("Speichern"), command=self.save_preset).pack(side="left")
         ttk.Button(bb, text=T("Löschen"), command=self.delete_preset).pack(side="left", padx=4)
         # Die Hoehe ist ein Wert, der Rest ist eine Erklaerung - und nur
         # der Rest verschwindet, wenn man sie abschaltet.
         self.lbl_zhoehe = ttk.Label(f, text="", style="Muted.TLabel")
-        self.lbl_zhoehe.grid(row=14, column=0, columnspan=3, sticky="w",
+        self.lbl_zhoehe.grid(row=15, column=0, columnspan=3, sticky="w",
                              pady=(8, 0))
         self._erklaerung(ttk.Label(f, text=T(
             "Die Korrektur steht im Reiter Tests und gilt für jedes\n"
             "Material. Dafür muss unter 'Maschine' eine Z-Referenz\n"
             "gesetzt sein."), style="Muted.TLabel")).grid(
-                row=15, column=0, columnspan=3, sticky="w", pady=(0, 8))
+                row=16, column=0, columnspan=3, sticky="w", pady=(0, 8))
         self._show_sf()
 
     # ---------------------------------------------------------------- Maschine
@@ -1022,6 +1045,7 @@ class App:
                               "bild_bb": bild_bb,
                               "pfad": p, "quelle": p})
         self.aktiv = len(self.elemente) - 1
+        self._neu_gekoppelt()
         self.fit()                       # setzt Groesse, sichert gleich mit
         self._platz_daneben()
         self._element_sichern()
@@ -1102,6 +1126,7 @@ class App:
                               "vec_voll": polys, "vec_bb": self.vec_bb,
                               "pfad": None, "quelle": None, "form": dict(form)})
         self.aktiv = len(self.elemente) - 1
+        self._neu_gekoppelt()
         # 1:1, nicht einpassen: ein Rechteck von 80 x 50 soll 80 x 50 sein.
         self.v_w.set(round(float(form["b"]), 2))
         self.v_h.set(round(float(form["h"]), 2))
@@ -1284,7 +1309,16 @@ class App:
         "v_xoff", "v_yoff", "v_over", "v_spiegel", "v_achse",
         "v_job", "v_passes", "v_cs", "v_cf",
         "v_s", "v_smin", "v_f", "v_line",
+        "v_eigen",
     )
+
+    # Werte, die zum MATERIAL gehoeren und nicht zum Motiv. Ein Werkstueck
+    # ist aus einem Stueck Holz: Leistung, Vorschub, Zeilenabstand und
+    # Durchgaenge sind fuer alle Motive darauf dieselben. Sie stehen
+    # trotzdem je Element, damit ein einzelnes abweichen kann - der Haken
+    # "Eigene Werte" nimmt es aus der Gruppe.
+    GEMEINSAM = ("v_s", "v_smin", "v_f", "v_line",
+                 "v_passes", "v_cs", "v_cf")
 
     def _element_sichern(self):
         """Die Eingabefelder in das gerade gewaehlte Element zurueckschreiben."""
@@ -1349,10 +1383,13 @@ class App:
         self.lb_el.delete(0, "end")
         for i, e in enumerate(self.elemente):
             art = self._artname(e.get("v_job", "gravur"))
+            if e.get("v_eigen"):
+                art += ", " + T("eigene Werte")
             self.lb_el.insert("end", "%d. %s  (%s)" % (i + 1, e["anzeige"], art))
         if 0 <= self.aktiv < len(self.elemente):
             self.lb_el.selection_clear(0, "end")
             self.lb_el.selection_set(self.aktiv)
+        self._koppel_zeigen()
 
     def _element_gewaehlt(self, _=None):
         wahl = self.lb_el.curselection()
@@ -1502,6 +1539,7 @@ class App:
                     getattr(self, feld).set(d["werte"][schluessel])
                 except tk.TclError:
                     pass
+        self._koppelung_pruefen()
         gewaehlt = d["werte"].get("gewaehlt", 0)
         if self.elemente:
             self._element_laden(min(max(0, gewaehlt), len(self.elemente) - 1),
@@ -1624,17 +1662,146 @@ class App:
             return
         if not messagebox.askyesno(T("Betriebsart"), T(
                 "{n} weitere Element(e) sind anders eingestellt.\n\n"
-                "'{art}' auch für sie übernehmen?").format(
+                "'{art}' auch für sie übernehmen?\n\n"
+                "Leistung, Vorschub und Durchgänge gelten dann ebenfalls "
+                "für alle - es ist dasselbe Material.").format(
                     n=len(geht), art=self._artname(art))):
             return
+        # Dieselbe Betriebsart und dann verschiedene Werte: genau das war der
+        # Fall mit den fuenf Baggern. Vier wurden angeritzt, einer
+        # geschnitten. Wer hier "ja" sagt, meint denselben Auftrag.
+        aktiv = self.elemente[self.aktiv] if 0 <= self.aktiv < len(
+            self.elemente) else {}
+        werte = {k: aktiv[k] for k in self.GEMEINSAM if k in aktiv}
         for e in geht:
             e["v_job"] = art
+            e["v_eigen"] = False
+            e.update(werte)
             e.pop("ergebnis", None)
         if len(andere) > len(geht):
             self._log(T("{n} Element(e) ohne Konturen bleiben beim "
                         "Gravieren.").format(n=len(andere) - len(geht)))
         self._log(T("{n} Element(e) auf '{art}' umgestellt.").format(
             n=len(geht), art=self._artname(art)))
+
+    # ------------------------------------------------ Gemeinsame Werte
+    # Leistung, Vorschub, Zeilenabstand und Durchgaenge gehoeren zum
+    # Material, nicht zum Motiv. Sie stehen je Element, weil ein einzelnes
+    # abweichen darf - aber der Normalfall ist ein Werkstueck aus einem
+    # Stueck Holz, auf dem alles gleich geschnitten wird. Vorher musste man
+    # sie an jedem Element einzeln eintragen, und wer eines vergass, ritzte
+    # es nur an.
+    def _gruppe(self):
+        """Die anderen Elemente mit gemeinsamen Werten."""
+        return [e for k, e in enumerate(self.elemente)
+                if k != self.aktiv and not e.get("v_eigen")]
+
+    def _werte_koppeln(self, *_):
+        """Die Werte des gewaehlten Elements auf die Gruppe uebertragen.
+
+        Haengt an einer Spur auf jedem der Felder: egal, an welchem Element
+        man etwas einstellt, die anderen haben es dann auch.
+        """
+        if getattr(self, "_still", False) or self._am_erzeugen:
+            return
+        if self.v_eigen.get() or not (0 <= self.aktiv < len(self.elemente)):
+            return
+        werte = {}
+        for name in self.GEMEINSAM:
+            try:
+                werte[name] = getattr(self, name).get()
+            except tk.TclError:
+                return            # halb getippte Zahl - beim naechsten Mal
+        for e in self._gruppe():
+            if all(e.get(k) == v for k, v in werte.items()):
+                continue
+            e.update(werte)
+            e.pop("ergebnis", None)
+
+    def _gruppe_lesen(self):
+        """Die Werte der Gruppe in die Felder holen.
+
+        Wer den Haken wegnimmt, will dieselben Werte wie der Rest - nicht
+        die abweichenden, die er gerade hatte. Sonst heisst "gemeinsam" nur,
+        dass die naechste Aenderung alle anderen ueberschreibt.
+        """
+        gruppe = self._gruppe()
+        if not gruppe:
+            return False
+        self._still = True
+        try:
+            for name in self.GEMEINSAM:
+                if name in gruppe[0]:
+                    try:
+                        getattr(self, name).set(gruppe[0][name])
+                    except tk.TclError:
+                        pass
+        finally:
+            self._still = False
+        self._show_sf()
+        return True
+
+    def _eigen_geaendert(self):
+        """Haken umgelegt: raus aus der Gruppe oder zurueck hinein."""
+        if not (0 <= self.aktiv < len(self.elemente)):
+            return
+        name = self.elemente[self.aktiv].get("anzeige", "?")
+        if self.v_eigen.get():
+            self._log(T("'{name}' hat jetzt eigene Werte.").format(name=name))
+        else:
+            if self._gruppe_lesen():
+                self._log(T("'{name}' nimmt wieder die gemeinsamen "
+                            "Werte.").format(name=name))
+            self._werte_koppeln()
+        self._element_sichern()
+        self._stale()
+        self._liste_auffrischen()
+
+    def _neu_gekoppelt(self):
+        """Ein neues Element gehoert zur Gruppe.
+
+        Sonst erbte es Haken und Werte des Elements, das gerade davor
+        gewaehlt war - also davon, was man zuletzt angeklickt hat.
+        """
+        if self.v_eigen.get():
+            self.v_eigen.set(False)
+        self._gruppe_lesen()
+
+    def _koppelung_pruefen(self):
+        """Nach dem Laden: wer von der Gruppe abweicht, bekommt den Haken.
+
+        Projekte aus der Zeit vor den gemeinsamen Werten haben je Element
+        eigene Zahlen. Sie stillschweigend als gemeinsam zu fuehren hiesse,
+        dass die erste Aenderung irgendwo alle anderen ueberschreibt - mit
+        den Werten des Elements, das man zufaellig angeklickt hat.
+        """
+        offen = [e for e in self.elemente if not e.get("v_eigen")]
+        if len(offen) < 2:
+            return
+        erste = offen[0]
+        anders = [e for e in offen[1:]
+                  if any(e.get(k) != erste.get(k) for k in self.GEMEINSAM)]
+        for e in anders:
+            e["v_eigen"] = True
+        if anders:
+            self._log(T("{n} Element(e) haben abweichende Werte und behalten "
+                        "sie - der Haken 'Eigene Werte' sagt, welche.").format(
+                            n=len(anders)))
+
+    def _koppel_zeigen(self):
+        """Am Material sagen, fuer wie viele Elemente seine Werte gelten."""
+        if not hasattr(self, "lbl_gemeinsam"):
+            return
+        if not self.elemente:
+            text = ""
+        elif self.v_eigen.get():
+            text = T("Nur für dieses Element - im Reiter Motiv steht der "
+                     "Haken 'Eigene Werte'.")
+        else:
+            n = len(self._gruppe()) + 1
+            text = (T("Gilt für alle {n} Elemente.").format(n=n) if n > 1
+                    else "")
+        self.lbl_gemeinsam.configure(text=text)
 
     def _vec_dreh_bb(self, grad=None):
         """Ausdehnung der GEDREHTEN Konturen. Das gedrehte Rechteck um eine
@@ -2191,7 +2358,7 @@ class App:
         if antwort:
             for i, _j, _s, _f, _n in liste:
                 self.elemente[i].update(v_cs=stark[2], v_cf=stark[3],
-                                        v_passes=stark[4])
+                                        v_passes=stark[4], v_eigen=False)
                 self.elemente[i].pop("ergebnis", None)
             self._element_laden(self.aktiv, zeichnen=False)
             self._log(T("{n} schneidende Elemente auf S{s}/F{f} x {p} = "

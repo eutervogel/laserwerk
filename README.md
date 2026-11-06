@@ -71,6 +71,15 @@ settings for a new material.
   element lands next to the others instead of on top of them, and starts a
   new row once the old one is full. A drawing comes in at its own size — a
   cut blown up to the full travel is never what was meant.
+- **One workpiece, one material** — power, feed, line spacing and passes
+  belong to the wood underneath, not to the artwork. They therefore apply to
+  every element, no matter which one you set them on — five diggers on one
+  board used to mean typing the same numbers five times, and forgetting one
+  only scored it. If an element really should differ, the "own settings" box
+  takes it out of the group, and the element list says which ones those are.
+  Untick it again and the shared settings come back. Engraving and cutting
+  do not get in each other's way: engraving uses S and F, cutting uses cut-S
+  and cut-F.
 - **Draw shapes** — a rectangle with its measurements and corner radius, or a
   frame around the selected artwork with a margin all round. No drawing
   program needed for the simple case, and the result is an ordinary element

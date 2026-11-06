@@ -938,9 +938,34 @@ EN = {
         "{n} cutting elements switched to S{s}/F{f} x {p} = {j:.2f} J/mm.",
     "Betriebsart": "Mode",
     "{n} weitere Element(e) sind anders eingestellt.\n\n"
-    "'{art}' auch für sie übernehmen?":
+    "'{art}' auch für sie übernehmen?\n\n"
+    "Leistung, Vorschub und Durchgänge gelten dann ebenfalls für alle - "
+    "es ist dasselbe Material.":
         "{n} further element(s) are set differently.\n\n"
-        "Apply '{art}' to them as well?",
+        "Apply '{art}' to them as well?\n\n"
+        "Power, feed and passes then apply to all of them too - it is the "
+        "same material.",
+    # ---- Gemeinsame Werte
+    "Eigene Werte für dieses Element": "Own settings for this element",
+    "Ohne Haken gelten Leistung, Vorschub, Zeilenabstand und\n"
+    "Durchgänge für alle Elemente gemeinsam - ein Werkstück ist\n"
+    "aus einem Stück Holz. Egal, an welchem Element man sie\n"
+    "einstellt.":
+        "Unticked, power, feed, line spacing and passes apply to\n"
+        "every element - one workpiece is one piece of wood. No\n"
+        "matter which element you set them on.",
+    "eigene Werte": "own settings",
+    "'{name}' hat jetzt eigene Werte.": "'{name}' now has its own settings.",
+    "'{name}' nimmt wieder die gemeinsamen Werte.":
+        "'{name}' is back on the shared settings.",
+    "{n} Element(e) haben abweichende Werte und behalten sie - der Haken "
+    "'Eigene Werte' sagt, welche.":
+        "{n} element(s) differ in their settings and keep them - the 'Own "
+        "settings' box shows which.",
+    "Nur für dieses Element - im Reiter Motiv steht der Haken "
+    "'Eigene Werte'.":
+        "For this element only - 'Own settings' is ticked on the Motif tab.",
+    "Gilt für alle {n} Elemente.": "Applies to all {n} elements.",
     "{n} Element(e) auf '{art}' umgestellt.":
         "{n} element(s) switched to '{art}'.",
     "{n} Element(e) ohne Konturen bleiben beim Gravieren.":

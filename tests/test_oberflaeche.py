@@ -3122,7 +3122,12 @@ class SchnittwerteGeltenJeElement(Grundlage):
     Element, und 0 heisst dort "nimm die Gravurwerte". In einem Projekt mit
     fuenf Baggern stand das an einem Element - das wurde geschnitten, die
     anderen vier mit S830/F1000 nur angeritzt. In der Liste steht die
-    Betriebsart, die Werte dahinter nicht."""
+    Betriebsart, die Werte dahinter nicht.
+
+    Von Hand bekommt man solche Unterschiede nur noch mit dem Haken
+    "Eigene Werte" hin - ohne ihn gelten die Werte fuer alle Elemente
+    (siehe WerteGeltenFuersGanzeWerkstueck). Aus alten Projekten kommen
+    sie aber weiter herein, und dann muss die Nachfrage stehen."""
 
     def setUp(self):
         super().setUp()
@@ -3145,6 +3150,9 @@ class SchnittwerteGeltenJeElement(Grundlage):
                     'stroke-width="0.1" fill="none"/></svg>')
         self.app.lade_motiv(p, fragen=False)
         self.app.v_job.set("schnitt")
+        # Haken zuerst: ohne ihn wuerden die Werte auf die anderen
+        # Elemente durchschlagen, und dann gaebe es nichts zu pruefen.
+        self.app.v_eigen.set(True)
         self.app.v_cs.set(cs)
         self.app.v_cf.set(cf)
         self.app.v_passes.set(passes)
@@ -3212,6 +3220,167 @@ class SchnittwerteGeltenJeElement(Grundlage):
 
 
 @ohne_bildschirm
+class WerteGeltenFuersGanzeWerkstueck(Grundlage):
+    """Leistung, Vorschub, Zeilenabstand und Durchgaenge standen je Element.
+    Bei fuenf Baggern auf einem Brett hiess das: fuenfmal dieselben Zahlen
+    eintippen, und wer eines vergass, ritzte es nur an. Ein Werkstueck ist
+    aber aus einem Stueck Holz - die Werte gehoeren zum Material."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 300.0, 300.0
+        self.ordner = tempfile.mkdtemp()
+
+    def svg(self, name=None):
+        p = os.path.join(self.ordner,
+                         name or "s%d.svg" % len(self.app.elemente))
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="30mm" '
+                    'height="20mm" viewBox="0 0 30 20">'
+                    '<path d="M1 1 H29 V19 H1 Z" stroke="#ff0000" '
+                    'stroke-width="0.1" fill="none"/></svg>')
+        self.assertTrue(self.app.lade_motiv(p, fragen=False))
+        return self.app.elemente[-1]
+
+    def werte(self, e):
+        return (e.get("v_cs"), e.get("v_cf"), e.get("v_passes"),
+                e.get("v_s"), e.get("v_f"))
+
+    def test_eingestellt_an_einem_gilt_fuer_alle(self):
+        eins, zwei = self.svg(), self.svg()
+        self.app.v_cs.set(950)
+        self.app.v_cf.set(300)
+        self.app.v_passes.set(4)
+        self.assertEqual((eins["v_cs"], eins["v_cf"], eins["v_passes"]),
+                         (950, 300, 4))
+
+    def test_auch_rueckwaerts_vom_ersten_element(self):
+        """Nicht nur vom gerade geladenen aus: an jedem Element."""
+        self.svg()
+        zwei = self.svg()
+        self.app._element_sichern()
+        self.app._element_laden(0, zeichnen=False)
+        self.app.v_cf.set(420)
+        self.assertEqual(zwei["v_cf"], 420)
+
+    def test_materialwerte_gehoeren_dazu(self):
+        """Dasselbe Material heisst dieselbe Leistung und denselben
+        Vorschub - auch die aus dem Reiter Material."""
+        eins = self.svg()
+        self.svg()
+        self.app.v_s.set(700)
+        self.app.v_f.set(1400)
+        self.app.v_line.set(0.08)
+        self.assertEqual((eins["v_s"], eins["v_f"], round(eins["v_line"], 3)),
+                         (700, 1400, 0.08))
+
+    def test_haken_nimmt_ein_element_heraus(self):
+        eins = self.svg()
+        self.svg()
+        self.app.v_eigen.set(True)
+        self.app._eigen_geaendert()
+        self.app.v_cs.set(1000)
+        self.app.v_passes.set(6)
+        self.assertNotEqual(eins["v_cs"], 1000)
+        self.assertEqual(eins["v_passes"], 1)
+        self.assertTrue(self.app.elemente[1]["v_eigen"])
+
+    def test_haken_weg_holt_die_gemeinsamen_werte(self):
+        """Sonst hiesse 'gemeinsam' nur, dass die naechste Aenderung alle
+        anderen mit den abweichenden Werten ueberschreibt."""
+        eins = self.svg()
+        self.app.v_cs.set(880)
+        self.app.v_cf.set(360)
+        self.svg()
+        self.app.v_eigen.set(True)
+        self.app._eigen_geaendert()
+        self.app.v_cs.set(200)
+        self.app.v_eigen.set(False)
+        self.app._eigen_geaendert()
+        self.assertEqual((self.app.v_cs.get(), self.app.v_cf.get()),
+                         (880, 360))
+        self.assertEqual(eins["v_cs"], 880)
+
+    def test_neues_element_kommt_in_die_gruppe(self):
+        """Ein neu geladenes Motiv erbte Haken und Werte des Elements, das
+        gerade davor gewaehlt war - also davon, was man zuletzt anklickte."""
+        eins = self.svg()
+        self.app.v_cs.set(900)
+        self.app.v_cf.set(350)
+        self.svg()
+        self.app.v_eigen.set(True)
+        self.app._eigen_geaendert()
+        self.app.v_cs.set(120)
+        drei = self.svg()
+        self.assertFalse(drei.get("v_eigen"))
+        self.assertEqual((drei["v_cs"], drei["v_cf"]), (900, 350))
+        self.assertEqual(eins["v_cs"], 900)
+
+    def test_liste_zeigt_die_abweichung(self):
+        self.svg()
+        self.svg()
+        self.app.v_eigen.set(True)
+        self.app._eigen_geaendert()
+        zeilen = self.app.lb_el.get(0, "end")
+        self.assertNotIn("eigene Werte", zeilen[0])
+        self.assertIn("eigene Werte", zeilen[1])
+
+    def test_material_sagt_fuer_wen_es_gilt(self):
+        self.svg()
+        self.svg()
+        self.assertIn("2", self.app.lbl_gemeinsam.cget("text"))
+        self.app.v_eigen.set(True)
+        self.app._eigen_geaendert()
+        self.assertIn("Eigene Werte", self.app.lbl_gemeinsam.cget("text"))
+
+    def test_betriebsart_fuer_alle_nimmt_die_werte_mit(self):
+        """Wer die Frage nach der Betriebsart mit ja beantwortet, meint
+        denselben Auftrag - nicht dieselbe Art mit anderen Werten."""
+        eins = self.svg()
+        self.app.v_eigen.set(True)
+        self.app.v_job.set("gravur")
+        self.app.v_cs.set(0)
+        self.app.v_passes.set(1)
+        self.app._element_sichern()
+        self.svg()
+        self.app.v_eigen.set(False)
+        self.app.v_cs.set(980)
+        self.app.v_cf.set(320)
+        self.app.v_passes.set(5)
+        self.app.v_job.set("schnitt")
+        self.app._job_changed()          # fragt - askyesno sagt ja
+        self.assertEqual(eins["v_job"], "schnitt")
+        self.assertEqual((eins["v_cs"], eins["v_cf"], eins["v_passes"]),
+                         (980, 320, 5))
+        self.assertFalse(eins["v_eigen"])
+
+    def test_altes_projekt_behaelt_seine_abweichungen(self):
+        """Projekte ohne den Haken haben je Element eigene Zahlen. Sie
+        stillschweigend als gemeinsam zu fuehren hiesse, dass die erste
+        Aenderung irgendwo alle anderen ueberschreibt."""
+        eins, zwei = self.svg(), self.svg()
+        eins.update(v_cs=0, v_passes=1, v_eigen=False)
+        zwei.update(v_cs=1000, v_passes=6, v_eigen=False)
+        self.app._koppelung_pruefen()
+        self.assertFalse(eins["v_eigen"])
+        self.assertTrue(zwei["v_eigen"])
+
+    def test_gleiche_werte_bleiben_gemeinsam(self):
+        eins, zwei = self.svg(), self.svg()
+        self.app._koppelung_pruefen()
+        self.assertFalse(eins.get("v_eigen"))
+        self.assertFalse(zwei.get("v_eigen"))
+
+    def test_halb_getippte_zahl_wirft_nichts_weg(self):
+        """Ein leeres Feld beim Tippen darf die anderen Elemente nicht auf
+        null stellen - und erst recht nicht abstuerzen."""
+        eins = self.svg()
+        self.app.v_cf.set(900)
+        self.svg()
+        self.app.v_cf._root.globalsetvar(str(self.app.v_cf), "")
+        self.assertEqual(eins["v_cf"], 900)
+
+
 class NeueMotiveLiegenNebeneinander(Grundlage):
     """Jedes neu geladene Element wurde auf das Hoechstmass eingepasst und
     bekam denselben Versatz: fuenf Dateien hintereinander lagen deckungs-

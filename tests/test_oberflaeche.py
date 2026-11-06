@@ -3543,6 +3543,14 @@ class DateienHereinziehen(Grundlage):
                     'stroke-width="0.1" fill="none"/></svg>')
         return p
 
+    def warten(self, sekunden=3.0):
+        """Den Zeitgeber durchlassen, der nach dem Fallenlassen laedt."""
+        ende = time.time() + sekunden
+        while time.time() < ende and not self.app.elemente:
+            self.wurzel.update()
+            time.sleep(0.02)
+        self.wurzel.update()
+
     def test_ohne_tkdnd_laeuft_es_trotzdem(self):
         """Ein Programm, das wegen Drag & Drop nicht startet, waere
         schlimmer als eines ohne Drag & Drop."""
@@ -3567,7 +3575,7 @@ class DateienHereinziehen(Grundlage):
 
     def test_fallengelassene_dateien_werden_geladen(self):
         self.assertEqual(self.app._dnd_fallen("{%s}" % self.svg()), "copy")
-        self.wurzel.update()
+        self.warten()
         self.assertEqual(len(self.app.elemente), 1)
 
     def test_geladen_wird_erst_nach_der_antwort(self):
@@ -3576,7 +3584,7 @@ class DateienHereinziehen(Grundlage):
         die Frage nach den Farbebenen wartet auf einen Menschen."""
         self.app._dnd_fallen("{%s}" % self.svg())
         self.assertEqual(self.app.elemente, [], "mitten im Griff geladen")
-        self.wurzel.update()
+        self.warten()
         self.assertEqual(len(self.app.elemente), 1)
 
     def test_jedes_fenster_nimmt_dateien_an(self):
@@ -3622,7 +3630,7 @@ class DateienHereinziehen(Grundlage):
         antwort = self.wurzel.tk.eval(
             skript.replace("%D", "[list {%s}]" % self.svg()))
         self.assertEqual(antwort, "copy")
-        self.wurzel.update()
+        self.warten()
         self.assertEqual(len(self.app.elemente), 1)
 
     def test_nichts_dabei_wird_abgelehnt(self):

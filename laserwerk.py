@@ -5,7 +5,7 @@ Laserwerk - Oberflaeche fuer GRBL-Diodenlaser.
 Bild oder SVG laden, skalieren, Material waehlen, Achsen steuern,
 Nullpunkt setzen, Fokus testen, gravieren.
 """
-import base64, bisect, io, math, os, queue, re, threading, time
+import base64, bisect, io, math, os, queue, re, sys, threading, time
 import traceback
 import urllib.parse
 from PIL import Image
@@ -384,12 +384,16 @@ class App:
         bekommt weder dem Dateimanager noch dem Fenster.
         """
         pfade = self._dnd_dateien(daten)
+        spur("Drop: %d Datei(en) %s" % (len(pfade), pfade))
         if not pfade:
             return "refuse_drop"
         wunsch = self._dnd_punkt
         self._dnd_punkt = None
-        self.root.after_idle(
-            lambda: self.dateien_laden(pfade, wunsch=wunsch))
+        # Nicht after_idle: Leerlaufarbeiten kann Tk auch noch waehrend des
+        # Drops abarbeiten, wenn die C-Seite zwischendurch Ereignisse
+        # verteilt. Ein Zeitgeber feuert nur aus der normalen Schleife, und
+        # eine Fuenftelsekunde merkt niemand.
+        self.root.after(200, lambda: self.dateien_laden(pfade, wunsch=wunsch))
         return "copy"
 
     def _scrollbereich(self, nb, titel):
@@ -1098,9 +1102,11 @@ class App:
             return 0
         schief = []
         for i, p in enumerate(pfade):
+            spur("lade %s" % p)
             if not self.lade_motiv(p, melden=len(pfade) == 1,
                                    wunsch=wunsch if i == 0 else None):
                 schief.append(os.path.basename(p))
+            spur("fertig mit %s" % os.path.basename(p))
         geladen = len(pfade) - len(schief)
         if len(pfade) > 1:
             self._log(T("{n} von {m} Dateien geladen.").format(
@@ -4964,6 +4970,22 @@ HAENGERDATEI = "haenger.txt"
 _haenger_f = None          # offen halten, sonst schreibt faulthandler ins Leere
 
 
+def spur(text):
+    """Eine Zeile sofort in die Haengerdatei.
+
+    Fuer Schritte, die ein Absturz nicht ueberleben soll. Das Protokoll
+    im Fenster ist dann weg, die Datei nicht - und bei einem Absturz ohne
+    Signal und ohne Spur ist die letzte geschriebene Zeile die einzige
+    Auskunft darueber, wie weit es gekommen ist.
+    """
+    if _haenger_f is None:
+        return
+    try:
+        _haenger_f.write("%s %s\n" % (time.strftime("%H:%M:%S"), text))
+    except (OSError, ValueError):
+        pass
+
+
 def haenger_dauer(puls, start, jetzt, dialoge=0):
     """Wie lange die Oberflaeche schon steht. Null heisst: alles in Ordnung.
 
@@ -5009,7 +5031,18 @@ def haenger_spuren(app=None, grenze=20.0):
     except OSError:
         return None
     if app is None:
-        return pfad
+        return pfad        # nur die Datei anlegen, sonst nichts anfassen
+    # Auch alles, was Tk und die C-Seite auf die Fehlerausgabe schreiben.
+    # Ein X-Fehler beendet Tk mit einer Zeile auf stderr und ohne Signal:
+    # kein Faulthandler, kein Abbild, nichts - und wer das Programm aus dem
+    # Menue startet, hat gar keine Fehlerausgabe. Deshalb auf der Ebene des
+    # Dateizeigers umlenken, nicht nur sys.stderr. Im Terminal bleibt alles,
+    # wie es war.
+    try:
+        if not sys.stderr.isatty():
+            os.dup2(_haenger_f.fileno(), 2)
+    except (OSError, ValueError, AttributeError):
+        pass
 
     start = time.time()
 

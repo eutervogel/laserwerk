@@ -1168,6 +1168,13 @@ class App:
         self._element_sichern()
         self._liste_auffrischen()
         self._gen_knopf()
+        # fit() hat zuletzt gezeichnet - danach hat _platz_daneben Groesse
+        # und Lage nochmal angefasst. Ohne diesen Strich stand das Motiv in
+        # der eingepassten Groesse auf dem Schirm, waehrend die Felder schon
+        # das Originalmass trugen: es sah zu gross aus, liess sich nicht
+        # anfassen (der Griff sucht am richtigen Kasten), und erst ein Klick
+        # in Breite oder Hoehe rueckte es zurecht.
+        self._draw()
         if vec and fragen:
             self._ebenen_anbieten()
         return True

@@ -3623,6 +3623,65 @@ class DateienHereinziehen(Grundlage):
             [self.app._box_von(self.app.elemente[0])]))
 
 
+class WasManSiehtIstWasDaSteht(Grundlage):
+    """Nach dem Laden hat zuletzt fit() gezeichnet - danach hat
+    _platz_daneben Groesse und Lage nochmal angefasst. Eine Zeichnung kommt
+    im Originalmass herein, war aber vorher auf das Hoechstmass eingepasst:
+    auf dem Schirm stand der grosse Kasten, in den Feldern das kleine Mass.
+    Anfassen ging nicht (der Griff sucht am richtigen Kasten), und erst ein
+    Klick in Breite oder Hoehe rueckte es zurecht."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 295.0, 180.0
+        self.ordner = tempfile.mkdtemp()
+
+    def svg(self, b=60, h=40):
+        p = os.path.join(self.ordner, "s.svg")
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="%dmm" '
+                    'height="%dmm" viewBox="0 0 %d %d">'
+                    '<path d="M1 1 H%d V%d H1 Z" stroke="#ff0000" '
+                    'stroke-width="0.2" fill="none"/></svg>'
+                    % (b, h, b, h, b - 1, h - 1))
+        return p
+
+    def rahmen(self):
+        """Der gestrichelte Kasten um das Motiv, in Bildpunkten."""
+        for i in self.app.cv.find_all():
+            if self.app.cv.type(i) != "rectangle":
+                continue
+            if self.app.cv.itemcget(i, "outline") != self.L.S.ACCENT:
+                continue
+            c = self.app.cv.coords(i)
+            if abs(c[2] - c[0]) > 12:          # nicht der Drehgriff
+                return c
+        return None
+
+    def test_frisch_geladen_steht_der_rahmen_am_motiv(self):
+        self.app.lade_motiv(self.svg(), fragen=False)
+        x, y, b, h = self.app._box()
+        self.assertAlmostEqual(b, 58.0, delta=0.5)      # Originalmass, 1:1
+        ax, ay = self.app._mm(x, y + h)
+        cx, cy = self.app._mm(x + b, y)
+        gezeichnet = self.rahmen()
+        self.assertIsNotNone(gezeichnet, "kein Rahmen gezeichnet")
+        for soll, ist in zip((ax, ay, cx, cy), gezeichnet):
+            self.assertAlmostEqual(ist, soll, delta=2.0,
+                                   msg="Rahmen %s, Kasten %s"
+                                   % (gezeichnet, (ax, ay, cx, cy)))
+
+    def test_es_laesst_sich_gleich_anfassen(self):
+        """Der Griff sucht am richtigen Kasten - solange der gezeichnete
+        groesser war, klickte man daneben."""
+        self.app.lade_motiv(self.svg(), fragen=False)
+        gezeichnet = self.rahmen()
+        mitte = type("E", (), {})()
+        mitte.x = int((gezeichnet[0] + gezeichnet[2]) / 2)
+        mitte.y = int((gezeichnet[1] + gezeichnet[3]) / 2)
+        self.assertEqual(self.app._griff_unter(mitte)[0], "move")
+
+
 class SchnittvorlageInDeckung(Grundlage):
     """Bei einer Schnittvorlage liegen die Schnittlinien NEBEN dem Motiv.
 

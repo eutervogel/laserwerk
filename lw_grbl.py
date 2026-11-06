@@ -21,6 +21,13 @@ from lw_text import T
 
 RX_BUF = 127
 
+# Wie oft ein Job eine verlorene Quittung verkraftet, bevor abgebrochen
+# wird. Einzelne kommen vor - bei Millionen Zeilen ist das Statistik, und
+# jede kostet hoechstens ein paar Zehntelmillimeter Strich. Haeufen sie
+# sich, stimmt etwas mit der Verbindung nicht, und dann ist Weitermachen
+# keine gute Idee.
+MAX_RESYNC = 20
+
 
 def ports():
     """Serielle Ports, stabile by-id-Namen zuerst."""
@@ -53,6 +60,7 @@ class Grbl:
         self.job_errors = 0          # Uebertragungsfehler im letzten Job
         self.job_done = 0            # quittierte Befehle im letzten Job
         self.reset_seen = 0          # zaehlt Neustarts des Controllers
+        self.job_resyncs = 0         # verlorene Quittungen, neu aufgesetzt
 
     # ---------- Verbindung ----------
     def connect(self, port, baud=115200):
@@ -165,6 +173,10 @@ class Grbl:
                 st["wpos"] = nums
             elif k == "FS":
                 st["fs"] = nums
+            elif k == "Bf":
+                # Planerbloecke und freier Empfangspuffer. Daran erkennt
+                # man, ob die Maschine wirklich alles abgearbeitet hat.
+                st["bf"] = nums
         if "MPos" in t:
             m, w = st["mpos"], st["wco"]
             st["wpos"] = tuple(a - b for a, b in zip(m, w))
@@ -279,6 +291,8 @@ class Grbl:
         self._stop = False
         self._pause_ende = False
         self.pausiert = False
+        self._still_seit = None
+        self.job_resyncs = 0
         self.job_errors = self.job_done = 0
         self.alarm = None
         while not self.oks.empty():
@@ -312,6 +326,26 @@ class Grbl:
                 try:
                     r = self.oks.get(timeout=0.5)
                 except queue.Empty:
+                    # Keine Quittung. Entweder arbeitet die Maschine noch,
+                    # oder eine ist unterwegs verlorengegangen - ein Byte
+                    # auf der USB-Leitung reicht. Frueher wurde hier
+                    # einfach weitergewartet, und zwar endlos: der Job
+                    # stand, die Maschine lief leer, und Laserwerk hielt
+                    # ihn weiter fuer laufend.
+                    if self._strom_steht(sent, done):
+                        self.job_resyncs += 1
+                        on_event = self.on_event
+                        on_event("msg", T(
+                            "Quittung ausgeblieben - Strom neu aufgesetzt "
+                            "nach Zeile {n} ({m}. Mal). Bis zu {p} Befehle "
+                            "koennen fehlen.").format(
+                                n=done, m=self.job_resyncs, p=len(pend)))
+                        if self.job_resyncs > MAX_RESYNC:
+                            self._halt()
+                            return "verbindung"
+                        done += len(pend)
+                        self.job_done = done
+                        pend = []
                     continue
                 if pend:
                     pend.pop(0)
@@ -334,6 +368,38 @@ class Grbl:
             self.job_running = False
             self.pausiert = False
             self._pause_ende = False
+
+    STILL_SEKUNDEN = 3.0        # so lange muss es ruhig sein
+
+    def _strom_steht(self, sent, done):
+        """Steht der Strom wirklich, oder arbeitet die Maschine noch?
+
+        Verlassen wird sich auf zwei Dinge, die beide stimmen muessen:
+        die Maschine meldet Idle, und ihr Empfangspuffer ist leer. Dann
+        hat sie alles bekommene ausgefuehrt, und was wir noch als
+        unterwegs fuehren, kommt nicht mehr. Waehrend sie faehrt oder im
+        Hold steht, ist Warten dagegen genau richtig - deshalb zaehlt
+        hier nur der Leerlauf.
+        """
+        if sent <= done:
+            return False
+        if not self.status.get("state", "").startswith("Idle"):
+            self._still_seit = None
+            return False
+        bf = self.status.get("bf") or ()
+        if len(bf) > 1 and bf[0] < 1:
+            # Planer noch voll: sie faehrt noch, auch wenn der Zustand
+            # gerade Idle meldet.
+            self._still_seit = None
+            return False
+        jetzt = time.time()
+        if not getattr(self, "_still_seit", None):
+            self._still_seit = jetzt
+            return False
+        if jetzt - self._still_seit < self.STILL_SEKUNDEN:
+            return False
+        self._still_seit = None
+        return True
 
     @staticmethod
     def _naechste_marke(marken, sent):

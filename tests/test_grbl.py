@@ -239,3 +239,72 @@ class Marken(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EineVerloreneQuittungHaeltDenJobNichtAn(unittest.TestCase):
+    """Ein Byte auf der Leitung darf keinen Job toeten.
+
+    Der Sendefaden hat bis zu 127 Bytes unterwegs und darf erst
+    nachschicken, wenn eine Quittung zurueckkommt. Bleibt eine aus,
+    wartete er frueher endlos: der Job stand, die Maschine lief ihren
+    Puffer leer und meldete Idle, und Laserwerk hielt den Job weiter fuer
+    laufend. Gesehen am 6.11.2026 mitten in einer Gravur mit 2,3
+    Millionen Zeilen.
+    """
+
+    class Leitung:
+        """Eine Verbindung, die genau eine Quittung verschluckt."""
+
+        def __init__(self, verliere_bei=5):
+            self.verliere_bei = verliere_bei
+            self.gesendet = []
+            self.quittiert = 0
+
+        def schreibe(self, g, zeile):
+            self.gesendet.append(zeile)
+            self.quittiert += 1
+            if self.quittiert == self.verliere_bei:
+                return            # diese eine kommt nie an
+            g.oks.put("ok")
+
+    def bauen(self, verliere_bei=5):
+        import lw_grbl as G
+        g = G.Grbl(lambda *a: None)
+        g.alive = True
+        g.s = object()
+        g.STILL_SEKUNDEN = 0.05          # im Test nicht drei Sekunden warten
+        g.status = {"state": "Idle", "bf": (15, 127), "mpos": (0, 0, 0),
+                    "wco": (0, 0, 0), "wpos": (0, 0, 0), "fs": (0, 0)}
+        leitung = self.Leitung(verliere_bei)
+        g.write = lambda daten: leitung.schreibe(g, daten.decode().strip())
+        return g, leitung
+
+    def test_der_job_laeuft_trotzdem_zu_ende(self):
+        g, leitung = self.bauen(verliere_bei=5)
+        zeilen = ["G1 X%d" % i for i in range(40)]
+        erg = g.run_job(zeilen, lambda *a: None)
+        self.assertEqual(erg, "fertig")
+        self.assertEqual(leitung.gesendet, zeilen)
+        self.assertGreaterEqual(g.job_resyncs, 1)
+
+    def test_ohne_verlust_wird_nicht_aufgesetzt(self):
+        g, leitung = self.bauen(verliere_bei=10**9)
+        erg = g.run_job(["G1 X%d" % i for i in range(40)], lambda *a: None)
+        self.assertEqual(erg, "fertig")
+        self.assertEqual(g.job_resyncs, 0)
+
+    def test_waehrend_sie_faehrt_wird_gewartet(self):
+        """Run heisst arbeiten, nicht haengen - da darf nichts aufgesetzt
+        werden."""
+        g, _ = self.bauen()
+        g.status["state"] = "Run"
+        self.assertFalse(g._strom_steht(sent=10, done=5))
+
+    def test_voller_planer_zaehlt_als_arbeitend(self):
+        g, _ = self.bauen()
+        g.status["bf"] = (0, 127)        # kein freier Planerblock
+        self.assertFalse(g._strom_steht(sent=10, done=5))
+
+    def test_ohne_ausstand_nichts_zu_tun(self):
+        g, _ = self.bauen()
+        self.assertFalse(g._strom_steht(sent=5, done=5))

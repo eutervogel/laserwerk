@@ -12,6 +12,7 @@ from PIL import Image
 import tkinter as tk
 from tkinter import ttk
 
+import materialtest as MT
 import lw_kamera as KAM
 import lw_dialog as D                         # native GTK-Dialoge
 from lw_dialog import filedialog, messagebox
@@ -36,6 +37,7 @@ class App:
         root.title("Laserwerk")
         self.cfg = P.load_config()
         self.presets = P.load_presets()
+        self.test = None            # Parameter eines Materialtest-Elements
         self.kam_roh = self.kam_bett = self.kam_tk = None
         self._kam_groesse = None
         self.maschinen = P.load_maschinen()
@@ -1238,12 +1240,25 @@ class App:
         mb.grid(row=1, column=0, sticky="ew", pady=8)
         self.v_mt_s = tk.StringVar(value="200,400,600,830,1000")
         self.v_mt_f = tk.StringVar(value="600,1000")
+        self.v_mt_b = tk.DoubleVar(value=80.0)
+        self.v_mt_h = tk.DoubleVar(value=40.0)
         self._row(mb, 0, "Leistungen", self.v_mt_s, width=20)
         self._row(mb, 1, "Vorschübe", self.v_mt_f, width=20)
-        ttk.Button(mb, text=T("Materialtest starten"), command=self.materialtest
-                   ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=4)
-        self._erklaerung(ttk.Label(mb, text=T("Spalten = Leistung, Zeilen = Vorschub,\n"
-                             "unten links beginnend. Felder 6 mm."), style="Muted.TLabel")).grid(row=3, column=0, columnspan=3, sticky="w")
+        self._row(mb, 2, "Breite", self.v_mt_b, unit="mm")
+        self._row(mb, 3, "Höhe", self.v_mt_h, unit="mm")
+        ttk.Button(mb, text=T("Materialtest anlegen"),
+                   command=self.materialtest_anlegen).grid(
+            row=4, column=0, columnspan=3, sticky="ew", pady=4)
+        # Frueher fuhr der Knopf sofort los, ab dem Nullpunkt, mit festen
+        # 6-mm-Feldern. Einen Test will man aber auf das Reststueck legen,
+        # das man gerade in der Hand hat - deshalb kommt er jetzt als
+        # Element auf die Flaeche und laesst sich schieben wie ein Motiv.
+        self._erklaerung(ttk.Label(mb, style="Muted.TLabel", wraplength=360,
+            text=T("Kommt als Element auf die Fläche - schieb es dorthin,\n"
+                   "wo dein Reststück liegt, dann Erzeugen und Start.\n"
+                   "Links die Leistung, unten der Vorschub, beide werden\n"
+                   "mitgraviert."))).grid(row=5, column=0, columnspan=3,
+                                          sticky="w")
 
         gb = ttk.LabelFrame(f, text=T("Graustufentest"), padding=6)
         gb.grid(row=2, column=0, sticky="ew", pady=(0, 8))
@@ -1721,6 +1736,7 @@ class App:
         self.bild_bb = e.get("bild_bb")
         self.vec_voll = e.get("vec_voll") or e["vec"]
         self.ebene = e.get("ebene")
+        self.test = e.get("test")
         self.bildlinien = e.get("bildlinien", False)
         self.src_nurbild = e.get("src_nurbild", False)
         self.quelle_pfad = e.get("quelle") or e["pfad"]
@@ -2936,6 +2952,8 @@ class App:
         return zeilen, marken, i
 
     def _erzeuge_eines(self):
+        if self.test:
+            return self._erzeuge_materialtest()
         if self.src is None:
             return
         try:
@@ -3047,6 +3065,89 @@ class App:
         self._gen_knopf()
         self._draw()
 
+
+    def materialtest_anlegen(self):
+        """Ein Materialtest-Element anlegen - schiebbar wie ein Motiv."""
+        try:
+            ss = [int(v) for v in self.v_mt_s.get().replace(";", ",").split(",")
+                  if v.strip()]
+            ff = [int(v) for v in self.v_mt_f.get().replace(";", ",").split(",")
+                  if v.strip()]
+            b, h = float(self.v_mt_b.get()), float(self.v_mt_h.get())
+        except (tk.TclError, ValueError):
+            messagebox.showerror(T("Materialtest"),
+                                 T("Leistungen und Vorschübe als Zahlen, "
+                                   "durch Komma getrennt."))
+            return
+        if len(ss) < 2 or len(ff) < 2 or b <= 0 or h <= 0:
+            messagebox.showinfo(T("Materialtest"), T(
+                "Mindestens zwei Leistungen und zwei Vorschübe, und eine "
+                "Größe über null."))
+            return
+        test = {"ss": ss, "ff": ff, "zeile": float(self.v_line.get() or 0.1)}
+        self._element_sichern()
+        e = {"anzeige": T("Materialtest {a}x{b}").format(a=len(ss), b=len(ff)),
+             "src": MT.vorschau(ss, ff, b, h, self.s_max),
+             "vec": None, "vec_bb": None, "pfad": None, "quelle": None,
+             "test": test, "v_w": b, "v_h": h, "v_lock": False,
+             "v_job": "gravur", "v_eigen": True}
+        self.elemente.append(e)
+        self.aktiv = len(self.elemente) - 1
+        self._element_laden(self.aktiv, zeichnen=False)
+        self._platz_daneben()
+        self._element_sichern()
+        self._liste_auffrischen()
+        self._gen_knopf()
+        self._draw()
+        self._log(T("Materialtest angelegt: {n} Felder, {b:.0f} x {h:.0f} mm")
+                  .format(n=len(ss) * len(ff), b=b, h=h))
+
+    def _erzeuge_materialtest(self):
+        """Das Testraster dort erzeugen, wo das Element gerade liegt.
+
+        Ein Materialtest mit festen Koordinaten in einer Datei ist das
+        Gegenteil von brauchbar: man will ihn auf dem Reststueck
+        hinschieben, das man gerade in der Hand hat. Deshalb ist er ein
+        Element wie jedes andere - Groesse und Versatz kommen aus den
+        Feldern, die Werte je Feld aus dem Parametersatz.
+        """
+        try:
+            w, h = self.v_w.get(), self.v_h.get()
+            x, y = self.v_xoff.get(), self.v_yoff.get()
+        except tk.TclError:
+            messagebox.showerror(T("Eingabe"), T("Zahlenfeld ungültig."))
+            return
+        d = self.test
+        g, info = MT.gitter(d["ss"], d["ff"], x, y, w, h,
+                            zeile=d.get("zeile", 0.1), smax=self.s_max,
+                            schrift_s=self._s(self._test_schrift_s()))
+        if g is None:
+            messagebox.showinfo(T("Materialtest"), T(
+                "So klein geht das Raster nicht auf - zieh es größer."))
+            return
+        self.cut_polys = self.schnitt_ab = None
+        self.lines, self.info = g, info
+        self.preview_pil = MT.vorschau(d["ss"], d["ff"], w, h, self.s_max)
+        self.preview_pos = (x, y + h)
+        self.lbl_info.configure(text=T(
+            "Materialtest {n} Felder zu {b:.1f} x {h:.1f} mm\n"
+            "S {s}\nF {f}\nca. {min:.0f} min").format(
+                n=info["felder"], b=info["feld_b"], h=info["feld_h"],
+                s=", ".join(str(v) for v in d["ss"]),
+                f=", ".join(str(v) for v in d["ff"]),
+                min=max(1, self._min(info["sekunden"]))))
+        return
+
+    def _test_schrift_s(self):
+        """Leistung fuer die Beschriftung: sichtbar, nicht tief.
+
+        Ein fester Anteil der Skala taugt nicht - an 22 W waeren 5 %
+        nur 0,011 J/mm und auf Holz nicht zu sehen. Gerechnet wird aus
+        einer Zielenergie, dann stimmt es an jeder Maschine.
+        """
+        f = max(self.test["ff"])
+        return max(1, min(1000, int(round(
+            MT.SCHRIFT_J * J.S_MAX * (f / 60.0) / max(0.1, self._watt())))))
     def _schnitt_polys(self, w, h, melden=True):
         """Konturen an ihrer endgueltigen Stelle - fuer das Schneiden und
         fuer das Abfahren mit schwachem Strahl."""
@@ -4022,18 +4123,6 @@ class App:
                                                    b=i["breite"], h=i["hoehe"]))
         self._draw()
         self._run(g, T("Graustufentest"), confirm=True)
-
-    def materialtest(self):
-        if not self._need(zero=True):
-            return
-        try:
-            ps = [int(x) for x in self.v_mt_s.get().split(",")]
-            fs = [int(x) for x in self.v_mt_f.get().split(",")]
-        except ValueError:
-            messagebox.showerror(T("Materialtest"), T("Werte mit Komma trennen, z.B. 200,400,600"))
-            return
-        self._run(J.materialtest([self._s(p) for p in ps], fs),
-                  T("Materialtest {a}x{b}").format(a=len(ps), b=len(fs)), confirm=True)
 
     # ================================================================ Job
     def frame(self):

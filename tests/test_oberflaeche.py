@@ -9,6 +9,7 @@ waeren; Beschriftungen, die sich gegenseitig verdeckten.
 Ohne Anzeige werden diese Tests uebersprungen.
 """
 import os
+import re
 import tempfile
 import time
 import unittest
@@ -2966,6 +2967,86 @@ class EineZeileSagtWoranManIst(Grundlage):
         # Deutsche Oberflaeche: Komma, nicht Punkt.
         self.assertIn("12,00", self.app.lbl_marke.cget("text"))
         self.assertIn("Idle", self.zeile())
+
+
+@ohne_bildschirm
+class MaterialtestZumSchieben(Grundlage):
+    """Ein Test gehoert auf das Reststueck, das man in der Hand hat.
+
+    Frueher fuhr der Knopf sofort los, ab dem Nullpunkt, mit festen
+    6-mm-Feldern. Jetzt kommt der Test als Element auf die Flaeche und
+    laesst sich schieben und ziehen wie ein Motiv - die Werte je Feld
+    bleiben dabei dieselben.
+    """
+
+    def anlegen(self, s="200,400,600", f="600,1000", b=80.0, h=40.0):
+        self.app.v_mt_s.set(s)
+        self.app.v_mt_f.set(f)
+        self.app.v_mt_b.set(b)
+        self.app.v_mt_h.set(h)
+        self.app.materialtest_anlegen()
+        self.app._element_laden(len(self.app.elemente) - 1)
+
+    def erste_fahrt(self):
+        self.app._erzeuge_eines()
+        return [z for z in self.app.lines if z.startswith("G0")][0]
+
+    def test_er_wird_ein_element(self):
+        self.anlegen()
+        e = self.app.elemente[-1]
+        self.assertIn("Materialtest", e["anzeige"])
+        self.assertEqual((e["v_w"], e["v_h"]), (80.0, 40.0))
+        self.assertIsNotNone(e["src"], "ohne Bild laesst er sich nicht zeichnen")
+        self.assertTrue(e["v_eigen"], "er bringt eigene Werte mit")
+
+    def test_schieben_verschiebt_den_gcode(self):
+        self.anlegen()
+        self.app.v_xoff.set(10.0)
+        self.app.v_yoff.set(10.0)
+        a = self.erste_fahrt()
+        self.app.v_xoff.set(110.0)
+        self.app.v_yoff.set(60.0)
+        b = self.erste_fahrt()
+        ax = float(re.search(r"X(-?[\d.]+)", a).group(1))
+        bx = float(re.search(r"X(-?[\d.]+)", b).group(1))
+        ay = float(re.search(r"Y(-?[\d.]+)", a).group(1))
+        by = float(re.search(r"Y(-?[\d.]+)", b).group(1))
+        self.assertAlmostEqual(bx - ax, 100.0, delta=0.01)
+        self.assertAlmostEqual(by - ay, 50.0, delta=0.01)
+
+    def test_jedes_feld_bekommt_seine_werte(self):
+        self.anlegen(s="200,400", f="600,1000")
+        self.app._erzeuge_eines()
+        text = "\n".join(self.app.lines)
+        for sv in (200, 400):
+            for fv in (600, 1000):
+                self.assertIn("S%d F%d" % (sv, fv), text)
+
+    def test_ziehen_aendert_die_feldgroesse_nicht_die_werte(self):
+        self.anlegen()
+        self.app._erzeuge_eines()
+        gross = self.app.info["feld_b"]
+        self.app.v_w.set(40.0)
+        self.app._erzeuge_eines()
+        self.assertLess(self.app.info["feld_b"], gross)
+        self.assertIn("S600 F1000", "\n".join(self.app.lines))
+
+    def test_zu_klein_sagt_er_statt_unsinn_zu_bauen(self):
+        self.anlegen(b=6.0, h=4.0)
+        self.gezeigt.clear()
+        self.app._erzeuge_eines()
+        self.assertTrue(self.gezeigt)
+
+    def test_unsinnige_eingaben_werden_abgefangen(self):
+        for sv, fv in (("", "600"), ("200", ""), ("200,x", "600")):
+            self.gezeigt.clear()
+            vorher = len(self.app.elemente)
+            self.app.v_mt_s.set(sv)
+            self.app.v_mt_f.set(fv)
+            self.app.materialtest_anlegen()
+            self.assertEqual(len(self.app.elemente), vorher)
+            self.assertTrue(self.gezeigt, "%r/%r kam stillschweigend durch"
+                            % (sv, fv))
 
 
 @ohne_bildschirm

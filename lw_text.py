@@ -415,6 +415,19 @@ EN = {
         'No acknowledgement - stream resynchronised after line {n} ({m} time(s)). Up to {p} commands may be missing.',
     '{m:.2f} m doppelt gezeichnete Schnittlinie übersprungen ({p:.0f} % der Strecke) - sonst wäre jede zweimal gefahren.':
         '{m:.2f} m of doubled cut line skipped ({p:.0f} % of the path) - otherwise each would be cut twice.',
+    'Materialtest anlegen': 'Create material test',
+    'Kommt als Element auf die Fläche - schieb es dorthin,\nwo dein Reststück liegt, dann Erzeugen und Start.\nLinks die Leistung, unten der Vorschub, beide werden\nmitgraviert.':
+        'Appears as an element on the area - drag it to where your\noffcut lies, then Generate and Start. Power on the left,\nfeed rate at the bottom, both are engraved with it.',
+    'Leistungen und Vorschübe als Zahlen, durch Komma getrennt.':
+        'Powers and feed rates as numbers, separated by commas.',
+    'Mindestens zwei Leistungen und zwei Vorschübe, und eine Größe über null.':
+        'At least two powers and two feed rates, and a size above zero.',
+    'So klein geht das Raster nicht auf - zieh es größer.':
+        'The grid does not fit at that size - drag it bigger.',
+    'Materialtest angelegt: {n} Felder, {b:.0f} x {h:.0f} mm':
+        'Material test created: {n} patches, {b:.0f} x {h:.0f} mm',
+    'Materialtest {n} Felder zu {b:.1f} x {h:.1f} mm\nS {s}\nF {f}\nca. {min:.0f} min':
+        'Material test {n} patches of {b:.1f} x {h:.1f} mm\nS {s}\nF {f}\nabout {min:.0f} min',
     'Kamera': 'Camera',
     'Bild holen': 'Take picture',
     'Kamera über dem Bett': 'Camera above the bed',

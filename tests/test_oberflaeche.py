@@ -3534,6 +3534,15 @@ class DateienHereinziehen(Grundlage):
         self.app.cfg["x_max"], self.app.cfg["y_max"] = 300.0, 200.0
         self.ordner = tempfile.mkdtemp()
 
+    def svg(self, name="a.svg"):
+        p = os.path.join(self.ordner, name)
+        with open(p, "w") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="30mm" '
+                    'height="20mm" viewBox="0 0 30 20">'
+                    '<path d="M1 1 H29 V19 H1 Z" stroke="#ff0000" '
+                    'stroke-width="0.1" fill="none"/></svg>')
+        return p
+
     def test_ohne_tkdnd_laeuft_es_trotzdem(self):
         """Ein Programm, das wegen Drag & Drop nicht startet, waere
         schlimmer als eines ohne Drag & Drop."""
@@ -3557,13 +3566,24 @@ class DateienHereinziehen(Grundlage):
                          ["/tmp/a.svg"])
 
     def test_fallengelassene_dateien_werden_geladen(self):
-        p = os.path.join(self.ordner, "a.svg")
-        with open(p, "w") as f:
-            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="30mm" '
-                    'height="20mm" viewBox="0 0 30 20">'
-                    '<path d="M1 1 H29 V19 H1 Z" stroke="#ff0000" '
-                    'stroke-width="0.1" fill="none"/></svg>')
-        self.assertEqual(self.app._dnd_fallen("{%s}" % p, 0, 0), "copy")
+        self.assertEqual(self.app._dnd_fallen("{%s}" % self.svg(), 0, 0),
+                         "copy")
+        self.assertEqual(len(self.app.elemente), 1)
+
+    def test_mit_tkdnd_haengt_es_am_fenster(self):
+        """Mit der Erweiterung laesst sich der ganze Weg gehen: anmelden,
+        genau das Stueck Tcl ausfuehren, das tkdnd beim Fallenlassen
+        ausfuehrt, und nachsehen, ob die Datei da ist. Ohne tkdnd gibt es
+        hier nichts zu pruefen - das deckt test_ohne_tkdnd_laeuft_es_
+        trotzdem ab."""
+        if not self.app._dnd_einrichten():
+            self.skipTest("tkdnd ist nicht installiert")
+        skript = self.wurzel.bind("<<Drop:DND_Files>>")
+        self.assertTrue(skript, "kein Stueck Tcl am Fenster")
+        antwort = self.wurzel.tk.eval(
+            skript.replace("%D", "[list {%s}]" % self.svg())
+            .replace("%X", "0").replace("%Y", "0"))
+        self.assertEqual(antwort, "copy")
         self.assertEqual(len(self.app.elemente), 1)
 
     def test_nichts_dabei_wird_abgelehnt(self):

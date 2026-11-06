@@ -25,9 +25,19 @@ if WURZEL not in sys.path:
 import lw_presets as P                                        # noqa: E402
 
 WEGWERF = tempfile.mkdtemp(prefix="laserwerk-test-")
+
+# Nicht einzeln umbiegen, sondern alles, was im echten Verzeichnis liegt.
+# Namentlich aufgezaehlt wurden PRESETS und CONFIG - MASCHINEN kam spaeter
+# dazu und fehlte. Die Folge stand nicht im Testlauf, sondern in der
+# Konfiguration des Benutzers: maschine_anlegen() rechnet die Presets auf
+# die neue Leistung um, und jeder Testlauf tat das noch einmal auf dem
+# Ergebnis des vorigen. Nach sieben Laeufen stand ueberall S1.
+ECHT = P.DIR
+for _name in dir(P):
+    _wert = getattr(P, _name)
+    if isinstance(_wert, str) and _wert.startswith(ECHT):
+        setattr(P, _name, os.path.join(WEGWERF, os.path.relpath(_wert, ECHT)))
 P.DIR = WEGWERF
-P.PRESETS = os.path.join(WEGWERF, "presets.json")
-P.CONFIG = os.path.join(WEGWERF, "config.json")
 
 import lw_telegram as TG                                      # noqa: E402
 

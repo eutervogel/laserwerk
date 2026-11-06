@@ -80,6 +80,8 @@ EN = {
     "Datei öffnen …": "Open file …",
     "Motiv entfernen": "Remove artwork",
     "Bilder, SVG oder DXF": "Images, SVG or DXF",
+    "Fehler: {0}: {1}": "Error: {0}: {1}",
+    "Ganze Spur in {0}": "Full trace in {0}",
     "Dateien öffnen": "Open files",
     "{n} von {m} Dateien geladen.": "{n} of {m} files loaded.",
     "Diese Dateien gingen nicht:\n\n{liste}":

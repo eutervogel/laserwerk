@@ -3708,6 +3708,39 @@ class WasManSiehtIstWasDaSteht(Grundlage):
         self.assertEqual(self.app._griff_unter(mitte)[0], "move")
 
 
+class FehlerStehenImProtokoll(Grundlage):
+    """tkinter schreibt einen Fehler in der Oberflaeche auf die
+    Standardfehlerausgabe - die es nicht gibt, wenn das Programm aus dem
+    Menue gestartet wurde. Das Fenster steht dann da, als waere nichts
+    gewesen, und die Haelfte eines Vorgangs ist nicht passiert."""
+
+    def ausloesen(self):
+        import sys
+        try:
+            raise ValueError("Probe")
+        except ValueError:
+            self.app._fehler_melden(*sys.exc_info())
+
+    def test_im_protokoll_steht_was_los_war(self):
+        self.ausloesen()
+        text = self.app.log.get("1.0", "end")
+        self.assertIn("ValueError", text)
+        self.assertIn("Probe", text)
+
+    def test_die_ganze_spur_steht_in_der_datei(self):
+        self.ausloesen()
+        pfad = os.path.join(self.L.P.DIR, self.L.HAENGERDATEI)
+        with open(pfad) as f:
+            inhalt = f.read()
+        self.assertIn("Fehler in der Oberflaeche", inhalt)
+        self.assertIn("ausloesen", inhalt)
+
+    def test_tkinter_ruft_wirklich_hier_an(self):
+        """Der Haken muss am Fenster haengen, sonst nuetzt er nichts."""
+        self.assertEqual(self.wurzel.report_callback_exception,
+                         self.app._fehler_melden)
+
+
 class SchnittvorlageInDeckung(Grundlage):
     """Bei einer Schnittvorlage liegen die Schnittlinien NEBEN dem Motiv.
 

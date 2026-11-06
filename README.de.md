@@ -82,6 +82,13 @@ Material ausprobieren will.
   zu schneiden ist nie gemeint. Geht eine Datei nicht, läuft der Rest trotzdem
   durch und eine Meldung am Ende sagt, welche fehlte — nicht fünf Dialoge
   hintereinander.
+- **Fehler verschwinden nicht** — was in der Oberfläche schiefgeht, stand
+  bisher auf der Standardfehlerausgabe, und die gibt es nicht, wenn das
+  Programm aus dem Menü gestartet wurde: das Fenster stand da, als wäre
+  nichts gewesen, und die Hälfte eines Vorgangs war nicht passiert. Jetzt
+  steht die Meldung im Protokoll und die ganze Spur in
+  `~/.config/laserwerk/haenger.txt` — derselben Datei, in die der Wachhund
+  schreibt, wenn die Oberfläche stehenbleibt.
 - **Ein Werkstück, ein Material** — Leistung, Vorschub, Zeilenabstand und
   Durchgänge gehören nicht zum Motiv, sondern zum Holz darunter. Sie gelten
   deshalb für alle Elemente gemeinsam, egal an welchem man sie einstellt —

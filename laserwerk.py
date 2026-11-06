@@ -6,6 +6,7 @@ Bild oder SVG laden, skalieren, Material waehlen, Achsen steuern,
 Nullpunkt setzen, Fokus testen, gravieren.
 """
 import base64, bisect, io, math, os, queue, re, threading, time
+import traceback
 import urllib.parse
 from PIL import Image
 import tkinter as tk
@@ -104,6 +105,7 @@ class App:
         self.job_t0 = None
         self.job_schaetzung = None  # Modellzeit des laufenden Jobs
         self._fokus_job = None      # verzoegertes Sichern von Dicke/Korrektur
+        self.root.report_callback_exception = self._fehler_melden
         self._build()
         self._poll_id = self.root.after(100, self._poll)
         self.root.protocol("WM_DELETE_WINDOW", self.beenden)
@@ -4314,6 +4316,31 @@ class App:
                               else T("Bot starten"))
 
     LOGZEILEN = 2000
+
+    def _fehler_melden(self, art, wert, spur):
+        """Ein Fehler in der Oberflaeche - sichtbar statt spurlos.
+
+        tkinter schreibt ihn sonst auf die Standardfehlerausgabe. Die gibt
+        es nicht, wenn das Programm aus dem Menue gestartet wurde: das
+        Fenster steht da, als waere nichts gewesen, und die Haelfte eines
+        Vorgangs ist einfach nicht passiert. Jetzt steht die Spur im
+        Protokoll und vollstaendig in derselben Datei wie die Haenger.
+        """
+        text = "".join(traceback.format_exception(art, wert, spur))
+        try:
+            with open(os.path.join(P.DIR, HAENGERDATEI), "a") as f:
+                f.write("\n==== %s: Fehler in der Oberflaeche ====\n%s"
+                        % (time.strftime("%Y-%m-%d %H:%M:%S"), text))
+        except OSError:
+            pass
+        if not hasattr(self, "log"):
+            traceback.print_exception(art, wert, spur)
+            return
+        self._log(T("Fehler: {0}: {1}").format(art.__name__, wert))
+        for zeile in text.rstrip().splitlines()[1:-1][-4:]:
+            self._log("    " + zeile.strip())
+        self._log(T("Ganze Spur in {0}").format(
+            os.path.join(P.DIR, HAENGERDATEI)))
 
     def _log(self, t):
         self.log.insert("end", f"{time.strftime('%H:%M:%S')} {t}\n")

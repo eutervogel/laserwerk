@@ -78,6 +78,12 @@ settings for a new material.
   row, because cutting the same spot twice is never what was meant. If one
   file fails the rest still load, and a single message at the end says which
   one was missing — not five dialogs in a row.
+- **Errors do not vanish** — anything that went wrong in the interface used
+  to go to standard error, which does not exist when the program was started
+  from a menu: the window just sat there as if nothing had happened, with half
+  of an operation missing. The message now goes to the log and the full trace
+  to `~/.config/laserwerk/haenger.txt` — the same file the watchdog writes to
+  when the interface stops responding.
 - **One workpiece, one material** — power, feed, line spacing and passes
   belong to the wood underneath, not to the artwork. They therefore apply to
   every element, no matter which one you set them on — five diggers on one

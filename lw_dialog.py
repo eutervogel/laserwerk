@@ -36,6 +36,26 @@ class _FileDialog:
         rc, out = _z(args)
         return out if rc == 0 else ""
 
+    def askopenfilenames(self, title=None, initialdir=None, filetypes=None,
+                         **kw):
+        """Mehrere Dateien auf einmal. Gibt immer ein Tupel zurueck, auch
+        wenn der Benutzer abbricht - dann ein leeres."""
+        title = title or T("Dateien öffnen")
+        if not ZENITY:
+            return tuple(_tkf.askopenfilenames(
+                title=title, initialdir=initialdir,
+                filetypes=filetypes or [(T("alle"), "*")]) or ())
+        args = ["--file-selection", "--multiple", "--separator=\n",
+                f"--title={title}"]
+        if initialdir:
+            args.append(f"--filename={os.path.join(initialdir, '')}")
+        for name, pat in (filetypes or []):
+            args.append(f"--file-filter={name} | {pat}")
+        rc, out = _z(args)
+        if rc != 0:
+            return ()
+        return tuple(z for z in out.splitlines() if z)
+
     def asksaveasfilename(self, title=None, initialdir=None,
                           initialfile="", defaultextension="", **kw):
         title = title or T("Speichern unter")
@@ -81,6 +101,26 @@ class _MessageBox:
 
     def askokcancel(self, title, text, **kw):
         return self._ask(title, text, "OK", "Abbrechen", _tkm.askokcancel)
+
+    def askyesnocancel(self, title, text, **kw):
+        """Drei Antworten: ja, nein, abbrechen.
+
+        Die gab es hier nicht, obwohl laserwerk danach fragt - das endete
+        mitten in der Warnung vor ungleichen Schnittwerten in einem
+        AttributeError, also genau dort, wo sie am noetigsten ist.
+
+        zenity kennt nur zwei Knoepfe. Ein dritter geht als --extra-button,
+        und der meldet sich nicht ueber den Rueckgabewert, sondern ueber
+        seine Beschriftung auf der Ausgabe.
+        """
+        if not ZENITY:
+            return _tkm.askyesnocancel(title, text)
+        rc, out = _z(["--question", f"--title={title}", f"--text={_esc(text)}",
+                      "--ok-label=Ja", "--cancel-label=Abbrechen",
+                      "--extra-button=Nein"])
+        if rc == 0:
+            return True
+        return False if out == "Nein" else None
 
 
 filedialog = _FileDialog()

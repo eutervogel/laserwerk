@@ -89,7 +89,7 @@ class App:
         # Geraets, auf dem Laserwerk entstanden ist.
         J.setze_maschine(self.cfg)
         self.area = max(float(self.cfg["x_max"]), float(self.cfg["y_max"]), 10.0)
-        self.v_zeig_s = tk.IntVar(value=50)     # Leistung Sichtkreuz/Rahmen
+        self.v_zeig_s = tk.IntVar(value=J.zeig_s())   # Sichtkreuz/Rahmen
         self.v_zeig_a = tk.DoubleVar(value=3.0)  # Armlaenge des Kreuzes
         self.v_frame_laser = tk.BooleanVar(value=True)
         self.v_pause_ende = tk.BooleanVar(value=True)   # Pause am Zeilenende
@@ -2432,6 +2432,10 @@ class App:
             self.v_port.set(self.cfg.get("port", ""))
             self.v_dicke.set(float(self.cfg.get("dicke", 12.0)))
             self.v_korr.set(float(self.cfg.get("korrektur", 0.0)))
+            # Zeigen heisst an jeder Maschine etwas anderes: dieselbe S/F
+            # bringt an 22 W das Vierfache. Also mitziehen, sonst steht im
+            # Feld die Zahl der vorigen Maschine.
+            self.v_zeig_s.set(J.zeig_s(self._watt()))
         finally:
             self._still = False
         self.cb_preset.configure(values=sorted(self.presets))
@@ -3541,6 +3545,34 @@ class App:
                 self._log(z)
             messagebox.showwarning(T("Maschineneinstellungen"), "\n\n".join(hin))
 
+    def _zeig_s(self):
+        """Leistung fuers Zeigen, gedeckelt auf das, was diese Maschine
+        vertraegt.
+
+        Sichtkreuz, Rahmen und Kontur sollen zeigen, wo etwas hinkommt,
+        und nichts hinterlassen. Die Grenze dafuer ist Energie je
+        Millimeter, nicht S/F: die feste 120 im Quelltext war die Grenze
+        genau einer Maschine. An 22 W ist dasselbe S/F das Vierfache -
+        S50/F600 zeigt an der kleinen und brennt an der Falcon ein.
+
+        Gedeckelt wird, nicht abgebrochen: wer zeigen will, soll etwas
+        sehen und nicht einen Dialog. Dass heruntergeregelt wurde, steht
+        im Protokoll - sonst wundert sich jemand, warum der Punkt an der
+        grossen Maschine blasser ist.
+        """
+        try:
+            wunsch = max(1, int(self.v_zeig_s.get()))
+        except (tk.TclError, ValueError):
+            wunsch = J.zeig_s(self._watt())
+        hoechst = J.zeig_s(self._watt(), j=J.ZEIG_J_MAX)
+        if wunsch <= hoechst:
+            return wunsch
+        self._log(T("S{s} waeren {j:.3f} J/mm an {w:.1f} W - ab {jm:.3f} J/mm "
+                    "bleibt eine Spur. Gezeigt wird mit S{h}.").format(
+            s=wunsch, w=self._watt(), jm=J.ZEIG_J_MAX, h=hoechst,
+            j=J.energie(wunsch, J.POINTER_FEED, 1, self._watt())))
+        return hoechst
+
     def _s(self, wert):
         """Leistung von der Skala 0..1000 auf die der Maschine ($30) bringen."""
         try:
@@ -3613,14 +3645,8 @@ class App:
         """Sichtkreuz: im Lasermodus geht Licht nur waehrend einer Fahrt."""
         if not self._need():
             return
-        sv = max(1, min(int(self.v_zeig_s.get()), 120))
+        sv = self._zeig_s()
         arm = max(0.5, min(float(self.v_zeig_a.get()), 8.0))
-        if sv / J.POINTER_FEED > 0.20:
-            messagebox.showwarning(T("Position zeigen"),
-                T("S{s} bei F{f} ist S/F {sf:.2f}.\n"
-                  "Ueber 0,20 brennt es sichtbar ein - bitte weniger."
-                  ).format(s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED))
-            return
         g = J.kreuz_lines(self._s(sv), J.POINTER_FEED, arm)
         self._log(T("Kreuz {mm:.1f} mm bei S{s}/F{f} (S/F {sf:.2f})").format(
             mm=2 * arm, s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED))
@@ -3796,7 +3822,7 @@ class App:
         if not self.lines:
             messagebox.showinfo(T("Rahmen"), T("Erst G-Code erzeugen oder laden."))
             return
-        sv = max(1, min(int(self.v_zeig_s.get()), 120)) if self.v_frame_laser.get() else 0
+        sv = self._zeig_s() if self.v_frame_laser.get() else 0
         name = (T("Rahmenfahrt (Laser schwach, S{s})").format(s=sv) if sv
                 else T("Rahmenfahrt (Laser aus)"))
         x0, x1, y0, y1 = J.brenn_extent(self.lines)
@@ -3826,13 +3852,7 @@ class App:
         polys = self._schnitt_polys(w, h)
         if polys is None:
             return
-        sv = max(1, min(int(self.v_zeig_s.get()), 120))
-        if sv / J.POINTER_FEED > 0.20:
-            messagebox.showwarning(T("Kontur fahren"),
-                T("S{s} bei F{f} ist S/F {sf:.2f}.\n"
-                  "Ueber 0,20 brennt es sichtbar ein - bitte weniger."
-                  ).format(s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED))
-            return
+        sv = self._zeig_s()
         g, i = V.cut_gcode(polys, self._s(sv), J.POINTER_FEED, 1)
         self._log(T("Kontur fahren: {k} Konturen, {m:.2f} m, ca. {min:.0f} min, "
                     "S{s}/F{f}").format(k=i["konturen"], m=i["cut_m"],
@@ -4265,12 +4285,8 @@ class App:
             g.jog(dx, dy, dz, feed=self.cfg.get("jog_feed", 1000))
             return ""                 # leer: der Bot meldet danach die Position
         if aktion == "kreuz":
-            sv = max(1, min(int(self.v_zeig_s.get()), 120))
+            sv = self._zeig_s()
             arm = max(0.5, min(float(self.v_zeig_a.get()), 8.0))
-            if sv / J.POINTER_FEED > 0.20:
-                return T("S{s} bei F{f} ist S/F {sf:.2f} - ueber 0,20 brennt es "
-                         "ein. Am Rechner kleiner stellen.").format(
-                    s=sv, f=J.POINTER_FEED, sf=sv / J.POINTER_FEED)
             self._log(T('Kreuz S{0} (Telegram)').format(sv))
             self._bg(lambda: [g.cmd(c) for c in
                               J.kreuz_lines(self._s(sv), J.POINTER_FEED, arm)], None)

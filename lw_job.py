@@ -16,6 +16,14 @@ from PIL import Image, ImageFilter
 S_MAX = 1000          # $30
 POINTER_FEED = 600    # Vorschub fuer Sichtkreuz und sichtbaren Rahmen
 
+# Zeigen, nicht brennen. Die Grenze dafuer ist Energie je Millimeter und
+# nicht S/F: S50/F600 ist an 5,5 W ein gut sichtbarer Punkt und an 22 W
+# das Vierfache davon - ein Brandfleck. Die beiden Zahlen hier sind an der
+# 5,5-W-Maschine gemessen (S50 zeigt, ab S120 brennt es ein) und gelten
+# ueber zeig_s() fuer jede Leistung.
+ZEIG_J = 0.026        # J/mm - so hell, dass man den Punkt findet
+ZEIG_J_MAX = 0.066    # J/mm - darueber bleibt eine Spur im Holz
+
 # Werte der Maschine. Die Vorgaben sind die des Geraets, auf dem Laserwerk
 # entstanden ist (450 nm, 5,5 W, GRBL 1.1f) - setze_maschine() holt sie aus
 # der Konfiguration, wo sie nach dem ersten '$$' der angeschlossenen
@@ -555,6 +563,22 @@ def energie(s, f, passes=1, watt=None):
         return watt * (float(s) / S_MAX) / (float(f) / 60.0) * max(1, int(passes))
     except (TypeError, ValueError, ZeroDivisionError):
         return 0.0
+
+
+def zeig_s(watt=None, feed=POINTER_FEED, j=ZEIG_J):
+    """Leistung fuers Zeigen, die an dieser Maschine j J/mm ergibt.
+
+    Umgekehrte Richtung von energie(): nicht "was kommt bei S heraus",
+    sondern "welches S brauche ich fuer diese Helligkeit". An 5,5 W kommt
+    das heraus, was bisher fest im Quelltext stand - S47 zum Zeigen, S120
+    als Grenze -, an 22 W ein Viertel davon.
+    """
+    try:
+        watt = WATT if watt is None else watt
+        return max(1, int(round(j * S_MAX * (float(feed) / 60.0)
+                                / max(0.1, float(watt)))))
+    except (TypeError, ValueError, ZeroDivisionError):
+        return 1
 
 
 def estimate(bahnen, feed, eilwege=(), accel=None, eil=None):

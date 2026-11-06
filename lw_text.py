@@ -409,10 +409,8 @@ EN = {
         'Cross {mm:.1f} mm at S{s}',
     'Kreuz S{0} (Telegram)':
         'Cross S{0} (Telegram)',
-    'S{s} bei F{f} ist S/F {sf:.2f}.\nUeber 0,20 brennt es sichtbar ein - bitte weniger.':
-        'S{s} at F{f} is S/F {sf:.2f}.\nAbove 0.20 it burns visibly - please use less.',
-    'S{s} bei F{f} ist S/F {sf:.2f} - ueber 0,20 brennt es ein. Am Rechner kleiner stellen.':
-        'S{s} at F{f} is S/F {sf:.2f} - above 0.20 it burns in. Lower it at the computer.',
+    'S{s} waeren {j:.3f} J/mm an {w:.1f} W - ab {jm:.3f} J/mm bleibt eine Spur. Gezeigt wird mit S{h}.':
+        'S{s} would be {j:.3f} J/mm at {w:.1f} W - from {jm:.3f} J/mm it leaves a mark. Showing with S{h}.',
     'Rahmen X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} ({b:.1f} x {h:.1f} mm)':
         'Frame X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} ({b:.1f} x {h:.1f} mm)',
     'Rahmenfahrt (Laser schwach, S{s})':

@@ -2969,6 +2969,80 @@ class EineZeileSagtWoranManIst(Grundlage):
 
 
 @ohne_bildschirm
+class ZeigenHeisstNichtBrennen(Grundlage):
+    """Sichtkreuz, Rahmen und Kontur sollen zeigen, wo etwas hinkommt.
+
+    Die Grenze dafuer stand als feste 0,20 im Quelltext - S/F, nicht
+    Energie. Das war die Grenze genau einer Maschine. An 22 W ist dasselbe
+    S/F das Vierfache: der Rahmen, mit dem man ausrichtet, wird zur Spur
+    auf dem Brett.
+    """
+
+    def watt(self, w):
+        self.app.cfg["watt"] = w
+        J.setze_maschine(self.app.cfg)
+
+    def test_an_der_kleinen_bleibt_alles_wie_es_war(self):
+        """Die alten festen Zahlen sind kein Zufall, sondern gemessen."""
+        self.assertEqual(J.zeig_s(5.5, j=J.ZEIG_J_MAX), 120)
+        self.assertAlmostEqual(J.zeig_s(5.5, j=J.ZEIG_J_MAX) / J.POINTER_FEED,
+                               0.20, places=2)
+        self.assertEqual(J.zeig_s(5.5), 47)
+
+    def test_viermal_so_stark_heisst_ein_viertel(self):
+        self.assertEqual(J.zeig_s(22.0), 12)
+        self.assertEqual(J.zeig_s(22.0, j=J.ZEIG_J_MAX), 30)
+
+    def test_dieselbe_zahl_wird_an_der_grossen_gedeckelt(self):
+        self.watt(5.5)
+        self.app.v_zeig_s.set(50)
+        self.assertEqual(self.app._zeig_s(), 50)
+        self.watt(22.0)
+        self.assertEqual(self.app._zeig_s(), 30)
+
+    def test_gedeckelt_wird_nicht_heimlich(self):
+        self.watt(22.0)
+        self.app.v_zeig_s.set(50)
+        self.app._zeig_s()
+        self.assertIn("S30", self.app.log.get("1.0", "end"))
+
+    def test_erlaubtes_bleibt_unangetastet(self):
+        self.watt(22.0)
+        self.app.v_zeig_s.set(J.zeig_s(22.0))
+        self.assertEqual(self.app._zeig_s(), J.zeig_s(22.0))
+
+    def test_die_rahmenfahrt_deckelt_auch(self):
+        """Die hatte als einzige gar keine eigene Grenze - und faehrt am
+        weitesten."""
+        import re
+        self.watt(22.0)
+        self.app.v_zeig_s.set(50)
+        self.app.v_frame_laser.set(True)
+        self.app.lines = ["G0 X0 Y0", "G1 X10 Y10 S100"]
+        self.app.frame()
+        werte = {int(m.group(1)) for z in self.app.grbl.gesendet
+                 for m in [re.search(r"S(\d+)", z)] if m}
+        self.assertTrue(werte)
+        self.assertLessEqual(max(werte), 30)
+
+    def test_der_maschinenwechsel_zieht_die_vorgabe_mit(self):
+        # Mit leerer Ablage anfangen: die Wegwerfdatei ueberlebt von einem
+        # Test zum naechsten, und dann gibt es den Namen schon.
+        self.app.maschinen = {"aktiv": "", "maschinen": {}}
+        self.app.cfg.pop("maschine", None)
+        self.app.cfg["watt"] = 5.5
+        self.app._maschine_einrichten()
+        klein = self.app._maschine_name()
+        self.app.v_zeig_s.set(50)
+        self.L.messagebox.askyesno = lambda t, m: False   # nicht umrechnen
+        self.app.v_mneu.set("Creality Falcon2 Pro 22 W")
+        self.app.maschine_anlegen()
+        self.assertEqual(self.app.v_zeig_s.get(), J.zeig_s(22.0))
+        self.app.maschine_wechseln(klein, fragen=False)
+        self.assertEqual(self.app.v_zeig_s.get(), J.zeig_s(5.5))
+
+
+@ohne_bildschirm
 class MaschinenProfile(Grundlage):
     """Zwei Maschinen abwechselnd: Verfahrweg, Leistung, Beschleunigung,
     Fokuskorrektur, Laufzeitmessungen und Presets gehoeren zu je einer.

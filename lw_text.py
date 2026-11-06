@@ -413,6 +413,8 @@ EN = {
         'S{s} would be {j:.3f} J/mm at {w:.1f} W - from {jm:.3f} J/mm it leaves a mark. Showing with S{h}.',
     'Quittung ausgeblieben - Strom neu aufgesetzt nach Zeile {n} ({m}. Mal). Bis zu {p} Befehle koennen fehlen.':
         'No acknowledgement - stream resynchronised after line {n} ({m} time(s)). Up to {p} commands may be missing.',
+    '{m:.2f} m doppelt gezeichnete Schnittlinie übersprungen ({p:.0f} % der Strecke) - sonst wäre jede zweimal gefahren.':
+        '{m:.2f} m of doubled cut line skipped ({p:.0f} % of the path) - otherwise each would be cut twice.',
     'Kamera': 'Camera',
     'Bild holen': 'Take picture',
     'Kamera über dem Bett': 'Camera above the bed',

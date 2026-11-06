@@ -3101,6 +3101,23 @@ class App:
             return None
         return V.order(polys)
 
+    def _doppelte_melden(self, ci):
+        """Sagen, wenn die Zeichnung Schnittlinien doppelt fuehrt.
+
+        Stillschweigend die Haelfte wegzulassen waere unheimlich: wer die
+        Schnittzeit kennt, soll wissen, warum sie sich halbiert hat. Und
+        wer sein SVG kennt, erfaehrt hier, dass darin Striche als duenne
+        Flaechen liegen.
+        """
+        mm = ci.get("doppelt_mm") or 0.0
+        if mm < 1.0:
+            return
+        gesamt = ci.get("cut_m", 0.0) * 1000 + mm
+        self._log(T("{m:.2f} m doppelt gezeichnete Schnittlinie übersprungen "
+                    "({p:.0f} % der Strecke) - sonst wäre jede zweimal "
+                    "gefahren.").format(m=mm / 1000,
+                                        p=100 * mm / gesamt if gesamt else 0))
+
     def _schnitt_anhaengen(self, w, h):
         """An die fertige Gravur den Schnitt haengen - in dieser Reihenfolge,
         sonst faellt das Teil heraus, bevor es graviert ist."""
@@ -3112,6 +3129,7 @@ class App:
         passes = max(1, self.v_passes.get())
         g, ci = V.cut_gcode(polys, self._s(cs), cf, passes,
                             kommentar=self._quellname())
+        self._doppelte_melden(ci)
         # Die Rueckfahrt am Ende der Gravur faellt weg, der Schnitt faengt
         # ohnehin mit einer eigenen Anfahrt an.
         if self.lines and self.lines[-1].startswith("G0 X0 Y0"):
@@ -3167,6 +3185,7 @@ class App:
         passes = max(1, self.v_passes.get())
         self.lines, self.info = V.cut_gcode(polys, self._s(s), f, passes,
                                             kommentar=self._quellname())
+        self._doppelte_melden(self.info)
         self.cut_polys = polys
         self.preview_img = None
         self._gen_knopf()

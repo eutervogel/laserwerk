@@ -333,3 +333,112 @@ class BlattUndBild(unittest.TestCase):
         self.assertAlmostEqual(x1, 150.0, places=2)
         self.assertAlmostEqual(y0, -190.0, places=2)
         self.assertAlmostEqual(y1, -10.0, places=2)
+
+
+class JedeLinieNurEinmalSchneiden(unittest.TestCase):
+    """Manche Zeichnungen fuehren jede Schnittlinie zweimal.
+
+    Wer einen Strich als duenne gefuellte Flaeche zeichnet, bekommt einen
+    geschlossenen Umriss - und der laeuft hin und auf derselben Stelle
+    zurueck. Fuer den Laser sind das zwei Schnitte uebereinander: die
+    doppelte Energie und die doppelte Zeit, ohne dass jemand es
+    eingestellt haette. Bei einem Puzzle mit 60 Teilen waren es 5,19 von
+    10,36 Metern.
+    """
+
+    def test_hin_und_zurueck_wird_einmal_gefahren(self):
+        pl = [{"pts": [(0, 0), (50, 0), (50, 0), (0, 0)], "closed": True}]
+        g, i = V.cut_gcode(pl, 1000, 550)
+        self.assertAlmostEqual(i["cut_m"] * 1000, 50.0, delta=0.1)
+        self.assertAlmostEqual(i["doppelt_mm"], 50.0, delta=0.1)
+
+    def test_echte_durchgaenge_bleiben(self):
+        """Zwei Durchgaenge heissen zwei Durchgaenge - nur innerhalb eines
+        wird nicht doppelt gefahren."""
+        pl = [{"pts": [(0, 0), (50, 0)], "closed": False}]
+        _g, ein = V.cut_gcode(pl, 1000, 550, passes=1)
+        _g, zwei = V.cut_gcode(pl, 1000, 550, passes=2)
+        self.assertAlmostEqual(zwei["cut_m"], 2 * ein["cut_m"], places=6)
+        self.assertEqual(zwei["doppelt_mm"], 0.0)
+
+    def test_eine_saubere_zeichnung_bleibt_unangetastet(self):
+        pl = [{"pts": [(0, 0), (40, 0), (40, 30), (0, 30)], "closed": True}]
+        g, i = V.cut_gcode(pl, 1000, 550)
+        self.assertEqual(i["doppelt_mm"], 0.0)
+        self.assertAlmostEqual(i["cut_m"] * 1000, 140.0, delta=0.1)
+        self.assertEqual(i["konturen"], 1)
+
+    def test_teilweise_doppelt_bricht_die_kontur(self):
+        """Faellt ein Stueck heraus, wird aus einer Kontur mehr als eine -
+        jede mit eigener Anfahrt."""
+        polys = [{"pts": [(0, 0), (10, 0), (20, 0)], "closed": False},
+                 {"pts": [(0, 0), (10, 0)], "closed": False}]
+        raus = V.ohne_doppelte(polys)
+        self.assertEqual(len(raus), 1)
+        self.assertEqual(raus[0]["pts"], [(0, 0), (10, 0), (20, 0)])
+
+    def test_nullstrecken_stoeren_nicht(self):
+        pl = [{"pts": [(0, 0), (0, 0), (10, 0)], "closed": False}]
+        raus = V.ohne_doppelte(pl)
+        self.assertEqual(len(raus), 1)
+
+
+class AussenZuletztSchneiden(unittest.TestCase):
+    """Solange die Aussenlinie steht, haelt das Brett alles zusammen.
+
+    Am 6.11.2026 ging ein Puzzle so verloren: erst die waagerechten
+    Linien, dann der Aussenrand - und die Streifen kippten durch die
+    Schienen der Wabenplatte, bevor die senkrechten an der Reihe waren.
+    Was herausgefallen ist, laesst sich nicht mehr schneiden.
+    """
+
+    RAHMEN = {"pts": [(0, 0), (100, 0), (100, 60), (0, 60)], "closed": True}
+
+    def innen(self, y=30):
+        return {"pts": [(10, y), (90, y)], "closed": False}
+
+    def erste_anfahrten(self, polys):
+        g, _i = V.cut_gcode(polys, 1000, 550)
+        return [z for z in g if z.startswith("G0 X")]
+
+    def test_der_rahmen_kommt_zuletzt(self):
+        for reihe in ([self.RAHMEN, self.innen()],
+                      [self.innen(), self.RAHMEN],
+                      [self.innen(20), self.RAHMEN, self.innen(40)]):
+            sortiert = V.innen_zuerst(reihe)
+            self.assertTrue(sortiert[-1]["closed"])
+            self.assertEqual(len(sortiert[-1]["pts"]), 4)
+
+    def test_im_gcode_steht_er_auch_hinten(self):
+        # Die letzte Anfahrt ist die Heimfahrt am Dateiende, nicht der
+        # Rahmen - deshalb die vorletzte.
+        anfahrten = self.erste_anfahrten([self.RAHMEN, self.innen()])
+        self.assertEqual(len(anfahrten), 3)
+        self.assertIn("X10.000", anfahrten[0])    # erst die innere Linie
+        self.assertIn("X0.000", anfahrten[1])     # dann der Rahmen
+        self.assertEqual(anfahrten[2], "G0 X0 Y0")
+
+    def test_gleichrangiges_behaelt_seine_reihenfolge(self):
+        """Sonst springt der Kopf unnoetig durch die Flaeche."""
+        a, b, c = self.innen(10), self.innen(20), self.innen(30)
+        self.assertEqual([p["pts"][0][1] for p in V.innen_zuerst([a, b, c])],
+                         [10, 20, 30])
+
+    def test_zwei_teile_nebeneinander(self):
+        """Zwei Rahmen, jeder mit eigener Linie: beide Rahmen nach hinten."""
+        rechts = {"pts": [(200, 0), (300, 0), (300, 60), (200, 60)],
+                  "closed": True}
+        drin = {"pts": [(210, 30), (290, 30)], "closed": False}
+        sortiert = V.innen_zuerst([self.RAHMEN, self.innen(), rechts, drin])
+        self.assertFalse(sortiert[0]["closed"])
+        self.assertFalse(sortiert[1]["closed"])
+        self.assertTrue(sortiert[2]["closed"])
+        self.assertTrue(sortiert[3]["closed"])
+
+    def test_ein_punkt_im_loch_zaehlt_nicht_als_drin(self):
+        """Das Strahlverfahren muss auch mit Einbuchtungen stimmen - ein
+        Puzzlerand hat reichlich davon."""
+        u = {"pts": [(0, 0), (100, 0), (100, 60), (60, 60),
+                     (60, 20), (40, 20), (40, 60), (0, 60)], "closed": True}
+        self.assertTrue(V._liegt_drin((50, 10), u["pts"]))
+        self.assertFalse(V._liegt_drin((50, 40), u["pts"]))

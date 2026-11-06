@@ -729,11 +729,123 @@ def order(polys):
     return out
 
 
+def ohne_doppelte(polys, stellen=3):
+    """Strecken weglassen, die in dieser Runde schon gefahren wurden.
+
+    Manche Zeichnungen fuehren jede Schnittlinie zweimal: wer einen
+    Strich als duenne gefuellte Flaeche zeichnet, bekommt einen
+    geschlossenen Umriss, und der laeuft hin und auf derselben Stelle
+    zurueck. Fuer den Laser sind das zwei Schnitte uebereinander - die
+    doppelte Energie und die doppelte Zeit, ohne dass jemand es
+    eingestellt haette. Bei einem Puzzle mit 60 Teilen waren das 5,19 von
+    10,36 Metern.
+
+    Gemeint ist ausdruecklich nur dasselbe INNERHALB einer Runde. Echte
+    Durchgaenge bleiben, wie sie sind - die will man ja.
+
+    Wo eine Strecke herausfaellt, bricht die Kontur. Aus einer werden
+    dann mehrere, jede mit eigener Anfahrt. Geschlossen ist danach keine
+    mehr, ausser sie ist vollstaendig geblieben.
+    """
+    gesehen = set()
+    raus = []
+    for pl in polys:
+        pts = list(pl["pts"])
+        if pl.get("closed") and len(pts) > 1 and math.dist(pts[-1], pts[0]) > 1e-9:
+            pts.append(pts[0])
+        lauf = []
+        ganz = True
+        for a, b in zip(pts, pts[1:]):
+            schluessel = tuple(sorted((tuple(round(c, stellen) for c in a),
+                                       tuple(round(c, stellen) for c in b))))
+            if schluessel[0] == schluessel[1]:
+                continue
+            if schluessel in gesehen:
+                ganz = False
+                if len(lauf) > 1:
+                    raus.append({"pts": lauf, "closed": False})
+                lauf = []
+                continue
+            gesehen.add(schluessel)
+            if not lauf:
+                lauf.append(a)
+            lauf.append(b)
+        if len(lauf) > 1:
+            if ganz and pl.get("closed"):
+                raus.append({"pts": lauf[:-1], "closed": True})
+            else:
+                raus.append({"pts": lauf, "closed": False})
+    return raus
+
+
+def _liegt_drin(punkt, pts):
+    """Punkt in Polygon, Strahlverfahren.
+
+    Ein Strahl nach rechts schneidet den Rand einer geschlossenen Kontur
+    ungerade oft, wenn der Punkt drinliegt. Das gilt auch fuer Formen mit
+    Loechern und Einbuchtungen - und ein Puzzlerand hat davon reichlich.
+    """
+    x, y = punkt
+    drin = False
+    for (ax, ay), (bx, by) in zip(pts, list(pts[1:]) + [pts[0]]):
+        if (ay > y) != (by > y):
+            schnitt = ax + (y - ay) * (bx - ax) / (by - ay)
+            if schnitt > x:
+                drin = not drin
+    return drin
+
+
+def innen_zuerst(polys):
+    """Konturen ordnen: was andere umschliesst, kommt zuletzt.
+
+    Solange die Aussenlinie steht, haelt das Brett alles zusammen.
+    Schneidet man sie zuerst oder mittendrin, faellt das Teil heraus,
+    bevor die restlichen Linien gefahren sind - und was herausgefallen
+    ist, laesst sich nicht mehr schneiden. Genau so ist am 6.11.2026 ein
+    Puzzle verlorengegangen: erst die waagerechten Linien, dann der
+    Aussenrand, und die Streifen kippten durch die Schienen, bevor die
+    senkrechten an der Reihe waren.
+
+    Sortiert wird danach, wie viele andere Konturen eine umschliesst -
+    wenige zuerst, viele zuletzt. Bei gleichem Rang bleibt die
+    urspruengliche Reihenfolge stehen, damit die Wege kurz bleiben.
+    """
+    kasten = []
+    for pl in polys:
+        xs = [q[0] for q in pl["pts"]]
+        ys = [q[1] for q in pl["pts"]]
+        kasten.append((min(xs), min(ys), max(xs), max(ys)))
+    rang = []
+    for i, pl in enumerate(polys):
+        n = 0
+        if pl.get("closed") and len(pl["pts"]) > 2:
+            x0, y0, x1, y1 = kasten[i]
+            for j, andere in enumerate(polys):
+                if i == j:
+                    continue
+                a = andere["pts"][0]
+                # Erst der Kasten, dann die genaue Frage - das spart bei
+                # vielen Konturen die meisten Tests.
+                if not (x0 <= a[0] <= x1 and y0 <= a[1] <= y1):
+                    continue
+                if _liegt_drin(a, pl["pts"]):
+                    n += 1
+        rang.append(n)
+    return [pl for _, _, pl in sorted(
+        ((rang[i], i, pl) for i, pl in enumerate(polys)),
+        key=lambda t: (t[0], t[1]))]
+
+
 def cut_gcode(polys, s, feed, passes=1, kommentar=""):
     """Polylinien -> G-Code. Rueckgabe (zeilen, info)."""
     g = [f"; Laserwerk Schnitt {kommentar}".rstrip(),
          f"; S{s}/F{feed} = S/F {s/feed:.2f}, {passes} Durchgang/Durchgaenge",
          "; origin = bottom left corner", "G21", "G90", "G94", "M4 S0"]
+    vorher = sum(math.dist(a, b) for pl in polys
+                 for a, b in zip(pl["pts"], pl["pts"][1:]))
+    polys = innen_zuerst(ohne_doppelte(polys))
+    nachher = sum(math.dist(a, b) for pl in polys
+                  for a, b in zip(pl["pts"], pl["pts"][1:]))
     cut = trav = 0.0
     # Eine Kontur ist eine Bahn: die Achse faehrt sie durch, ohne fuer die
     # Punkte dazwischen anzuhalten. Angefahren wird sie im Eilgang.
@@ -769,5 +881,6 @@ def cut_gcode(polys, s, feed, passes=1, kommentar=""):
     info = dict(befehle=len(g), cut_m=cut/1000, trav_m=trav/1000,
                 konturen=len(polys), breite=x1 - x0, hoehe=y1 - y0,
                 xmin=x0, xmax=x1, ymin=y0, ymax=y1, marken=marken,
+                doppelt_mm=max(0.0, vorher - nachher),
                 sekunden=estimate(bahnen, feed, eilwege))
     return g, info

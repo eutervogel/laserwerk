@@ -291,8 +291,6 @@ class App:
                         "geht es nur über 'Bild/SVG öffnen'."))
             return False
         try:
-            self.root.tk.call("tkdnd::drop_target", "register",
-                              self.root, "DND_Files")
             # %D sind die Dateien, %X/%Y der Punkt auf dem Schirm. Beides
             # gibt es nur als Tcl-Ersetzung, also wird hier ein Stueck Tcl
             # gebunden statt einer Funktion.
@@ -301,10 +299,9 @@ class App:
             # tkdnd_unix.tcl setzt in _HandleXdndDrop rootX und rootY fest
             # auf 0, dort ist %X/%Y also immer der linke obere Bildschirm-
             # rand. Waehrend des Ziehens stimmen sie.
-            self.root.bind("<<DropPosition>>",
-                           self.root.register(self._dnd_lage) + " %X %Y")
-            self.root.bind("<<Drop:DND_Files>>",
-                           self.root.register(self._dnd_fallen) + " %D")
+            self._dnd_lage_tcl = self.root.register(self._dnd_lage) + " %X %Y"
+            self._dnd_fall_tcl = self.root.register(self._dnd_fallen) + " %D"
+            self._dnd_anmelden(self.root)
         except tk.TclError as e:
             self._log(T("Drag & Drop nicht eingerichtet: {0}").format(e))
             return False
@@ -336,6 +333,27 @@ class App:
             if t:
                 pfade.append(t)
         return pfade
+
+    def _dnd_anmelden(self, w):
+        """Jedes Fenster anmelden, nicht nur das aeussere.
+
+        tkdnd fragt genau das Widget unter dem Zeiger, ob es Dateien nimmt
+        (bind $w <<DropTargetTypes>>, tkdnd_unix.tcl in
+        _HandleXdndPosition), und geht dafuer NICHT die Elternkette hoch.
+        Nur das Fenster anzumelden hiess deshalb: ueber der Flaeche, ueber
+        den Reitern, ueber jedem Feld kam 'refuse_drop' zurueck. Der Zug
+        sah aus, als wuerde er angenommen, und beim Loslassen passierte
+        nichts - das Fenster selbst liegt ja nirgends frei.
+        """
+        try:
+            self.root.tk.call("tkdnd::drop_target", "register", w,
+                              "DND_Files")
+            w.bind("<<DropPosition>>", self._dnd_lage_tcl)
+            w.bind("<<Drop:DND_Files>>", self._dnd_fall_tcl)
+        except tk.TclError:
+            pass          # eines, das nicht mag, haelt die anderen nicht auf
+        for kind in w.winfo_children():
+            self._dnd_anmelden(kind)
 
     def _dnd_lage(self, x=0, y=0):
         """Wo der Zeiger waehrend des Ziehens steht, in Millimetern.

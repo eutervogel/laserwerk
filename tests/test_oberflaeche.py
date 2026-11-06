@@ -3579,6 +3579,36 @@ class DateienHereinziehen(Grundlage):
         self.wurzel.update()
         self.assertEqual(len(self.app.elemente), 1)
 
+    def test_jedes_fenster_nimmt_dateien_an(self):
+        """tkdnd fragt genau das Widget unter dem Zeiger, ob es Dateien
+        nimmt, und geht dafuer nicht die Elternkette hoch. Nur das aeussere
+        Fenster anzumelden hiess ueberall 'refuse_drop' - frei liegt es ja
+        nirgends, ueberall sitzt die Flaeche, ein Reiter oder ein Feld."""
+        if not self.app._dnd_einrichten():
+            self.skipTest("tkdnd ist nicht installiert")
+        for w in (self.wurzel, self.app.cv, self.app.nb, self.app.lb_el,
+                  self.app.btn_gen):
+            self.assertTrue(w.bind("<<DropTargetTypes>>"),
+                            "%s nimmt keine Dateien" % w)
+            self.assertTrue(w.bind("<<Drop:DND_Files>>"),
+                            "%s hat keinen Griff fuers Loslassen" % w)
+
+    def test_tkdnd_nimmt_den_zug_ueber_der_flaeche_an(self):
+        """Dieselbe Frage, aber von tkdnd selbst gestellt: genau das kam
+        vorher mit 'refuse_drop' zurueck."""
+        if not self.app._dnd_einrichten():
+            self.skipTest("tkdnd ist nicht installiert")
+        self.wurzel.deiconify()
+        self.wurzel.geometry("1200x800")
+        self.wurzel.update()
+        x = self.app.cv.winfo_rootx() + 200
+        y = self.app.cv.winfo_rooty() + 150
+        self.wurzel.tk.call("tkdnd::xdnd::_HandleXdndEnter", ".", "0x1",
+                            "text/uri-list")
+        self.assertEqual(
+            self.wurzel.tk.call("tkdnd::xdnd::_HandleXdndPosition",
+                                str(self.app.cv), x, y, "0x1"), "copy")
+
     def test_mit_tkdnd_haengt_es_am_fenster(self):
         """Mit der Erweiterung laesst sich der ganze Weg gehen: anmelden,
         genau das Stueck Tcl ausfuehren, das tkdnd beim Fallenlassen

@@ -3566,8 +3566,17 @@ class DateienHereinziehen(Grundlage):
                          ["/tmp/a.svg"])
 
     def test_fallengelassene_dateien_werden_geladen(self):
-        self.assertEqual(self.app._dnd_fallen("{%s}" % self.svg(), 0, 0),
-                         "copy")
+        self.assertEqual(self.app._dnd_fallen("{%s}" % self.svg()), "copy")
+        self.wurzel.update()
+        self.assertEqual(len(self.app.elemente), 1)
+
+    def test_geladen_wird_erst_nach_der_antwort(self):
+        """Solange der Griff laeuft, wartet das abgebende Programm auf die
+        Antwort und haelt den Zeiger fest. Eine SVG zu lesen dauert, und
+        die Frage nach den Farbebenen wartet auf einen Menschen."""
+        self.app._dnd_fallen("{%s}" % self.svg())
+        self.assertEqual(self.app.elemente, [], "mitten im Griff geladen")
+        self.wurzel.update()
         self.assertEqual(len(self.app.elemente), 1)
 
     def test_mit_tkdnd_haengt_es_am_fenster(self):
@@ -3581,13 +3590,30 @@ class DateienHereinziehen(Grundlage):
         skript = self.wurzel.bind("<<Drop:DND_Files>>")
         self.assertTrue(skript, "kein Stueck Tcl am Fenster")
         antwort = self.wurzel.tk.eval(
-            skript.replace("%D", "[list {%s}]" % self.svg())
-            .replace("%X", "0").replace("%Y", "0"))
+            skript.replace("%D", "[list {%s}]" % self.svg()))
         self.assertEqual(antwort, "copy")
+        self.wurzel.update()
         self.assertEqual(len(self.app.elemente), 1)
 
     def test_nichts_dabei_wird_abgelehnt(self):
-        self.assertEqual(self.app._dnd_fallen("", 0, 0), "refuse_drop")
+        self.assertEqual(self.app._dnd_fallen(""), "refuse_drop")
+
+    def test_die_lage_kommt_aus_dem_ziehen(self):
+        """In <<Drop>> setzt tkdnd die Bildschirmlage fest auf 0,0
+        (tkdnd_unix.tcl, _HandleXdndDrop). Brauchbar ist sie nur waehrend
+        des Ziehens - sonst laegen alle Dateien in der Ecke."""
+        self.wurzel.deiconify()
+        self.wurzel.geometry("1200x800")
+        self.wurzel.update()
+        px = self.app.cv.winfo_rootx() + 200
+        py = self.app.cv.winfo_rooty() + 150
+        self.assertEqual(self.app._dnd_lage(px, py), "copy")
+        self.assertEqual(
+            [round(v, 2) for v in self.app._dnd_punkt],
+            [round(v, 2) for v in self.app._mm_zurueck(200, 150)])
+        # Neben der Flaeche gibt es keine Stelle, nur "mach auf"
+        self.app._dnd_lage(5, 5)
+        self.assertIsNone(self.app._dnd_punkt)
 
     def test_es_liegt_wo_man_loslaesst(self):
         """Sonst landet es irgendwo, und man schiebt es doch wieder von

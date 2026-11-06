@@ -277,6 +277,7 @@ class App:
         gelandet ist, entscheidet nachher der Platz.
         """
         self.dnd = False
+        self._dnd_punkt = None
         for paket in ("tkdnd", "tkdnd2.8", "tkdnd1.0"):
             try:
                 self.root.tk.call("package", "require", paket)
@@ -290,11 +291,18 @@ class App:
         try:
             self.root.tk.call("tkdnd::drop_target", "register",
                               self.root, "DND_Files")
-            befehl = self.root.register(self._dnd_fallen)
             # %D sind die Dateien, %X/%Y der Punkt auf dem Schirm. Beides
             # gibt es nur als Tcl-Ersetzung, also wird hier ein Stueck Tcl
             # gebunden statt einer Funktion.
-            self.root.bind("<<Drop:DND_Files>>", befehl + " %D %X %Y")
+            #
+            # Die Lage kommt aus <<DropPosition>>, nicht aus <<Drop>>:
+            # tkdnd_unix.tcl setzt in _HandleXdndDrop rootX und rootY fest
+            # auf 0, dort ist %X/%Y also immer der linke obere Bildschirm-
+            # rand. Waehrend des Ziehens stimmen sie.
+            self.root.bind("<<DropPosition>>",
+                           self.root.register(self._dnd_lage) + " %X %Y")
+            self.root.bind("<<Drop:DND_Files>>",
+                           self.root.register(self._dnd_fallen) + " %D")
         except tk.TclError as e:
             self._log(T("Drag & Drop nicht eingerichtet: {0}").format(e))
             return False
@@ -327,21 +335,40 @@ class App:
                 pfade.append(t)
         return pfade
 
-    def _dnd_fallen(self, daten, x=0, y=0):
-        """Dateien sind im Fenster gelandet."""
-        pfade = self._dnd_dateien(daten)
-        if not pfade:
-            return "refuse_drop"
-        wunsch = None
+    def _dnd_lage(self, x=0, y=0):
+        """Wo der Zeiger waehrend des Ziehens steht, in Millimetern.
+
+        Nur solange er ueber der Flaeche ist - wer eine Datei auf den
+        Reiter fallen laesst, meint keine Stelle, sondern nur "mach auf".
+        Der Rueckgabewert sagt tkdnd, was ein Loslassen taete.
+        """
+        self._dnd_punkt = None
         try:
             px = int(x) - self.cv.winfo_rootx()
             py = int(y) - self.cv.winfo_rooty()
             if 0 <= px < self.cv.winfo_width() and \
                     0 <= py < self.cv.winfo_height():
-                wunsch = self._mm_zurueck(px, py)
+                self._dnd_punkt = self._mm_zurueck(px, py)
         except (ValueError, TypeError, tk.TclError):
-            wunsch = None
-        self.dateien_laden(pfade, wunsch=wunsch)
+            pass
+        return "copy"
+
+    def _dnd_fallen(self, daten):
+        """Dateien sind im Fenster gelandet.
+
+        Geladen wird erst danach. Solange dieser Aufruf laeuft, wartet das
+        abgebende Programm auf die Antwort und haelt den Zeiger fest -
+        eine SVG zu lesen dauert, und die Rueckfrage nach den Farbebenen
+        wartet auf einen Menschen. Mitten im Protokoll stehenzubleiben
+        bekommt weder dem Dateimanager noch dem Fenster.
+        """
+        pfade = self._dnd_dateien(daten)
+        if not pfade:
+            return "refuse_drop"
+        wunsch = self._dnd_punkt
+        self._dnd_punkt = None
+        self.root.after_idle(
+            lambda: self.dateien_laden(pfade, wunsch=wunsch))
         return "copy"
 
     def _scrollbereich(self, nb, titel):

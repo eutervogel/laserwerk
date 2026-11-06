@@ -2969,6 +2969,46 @@ class EineZeileSagtWoranManIst(Grundlage):
 
 
 @ohne_bildschirm
+class GeladenerGcodeIstAuchGcode(Grundlage):
+    """Eine geladene .nc hat kein Motiv - sie ist eines.
+
+    load_gcode() leert die Motivliste und setzt self.lines. Alles, was
+    danach noch geht, muss sich an self.lines halten und nicht an der
+    leeren Liste.
+    """
+
+    def laden(self):
+        self.app.elemente = []
+        self.app.aktiv = None
+        self.app.src = None
+        self.app.lines = ["G21", "G90", "M4 S40",
+                          "G1 X10 Y0 F1000", "G1 X10 Y10", "M5", "G0 X0 Y0"]
+        self.app._knoepfe_zeigen()
+
+    def test_der_rahmen_laesst_sich_fahren(self):
+        self.laden()
+        self.assertEqual(str(self.app.jobknoepfe["rahmen"]["state"]), "normal")
+
+    def test_start_sowieso(self):
+        self.laden()
+        self.assertEqual(str(self.app.jobknoepfe["start"]["state"]), "normal")
+
+    def test_ohne_gcode_bleibt_er_abgeblendet(self):
+        self.app.elemente = []
+        self.app.lines = None
+        self.app._knoepfe_zeigen()
+        self.assertEqual(str(self.app.jobknoepfe["rahmen"]["state"]), "disabled")
+
+    def test_die_rahmenfahrt_nimmt_die_ausmasse_des_gcodes(self):
+        self.laden()
+        self.app.v_frame_laser.set(False)
+        self.app.frame()
+        xs = [float(z.split("X")[1].split()[0])
+              for z in self.app.grbl.gesendet if "X" in z]
+        self.assertAlmostEqual(max(xs), 10.0, delta=0.5)
+
+
+@ohne_bildschirm
 class ZeigenHeisstNichtBrennen(Grundlage):
     """Sichtkreuz, Rahmen und Kontur sollen zeigen, wo etwas hinkommt.
 

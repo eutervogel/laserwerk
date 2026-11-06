@@ -2273,8 +2273,13 @@ class App:
         self.jobknoepfe["pause"].configure(state=an(laeuft and not pausiert))
         self.jobknoepfe["weiter"].configure(state=an(laeuft and pausiert))
         self.jobknoepfe["stopp"].configure(state=an(verbunden))
+        # Der Rahmen faehrt um den fertigen G-Code herum, nicht um die
+        # Motivliste - frame() nimmt sich die Ausmasse aus self.lines. Hier
+        # stand aber self.elemente, und geladener G-Code leert die Liste:
+        # Datei geladen, Start ging, Rahmen blieb abgeblendet. Ausgerechnet
+        # bei fremdem G-Code will man vorher sehen, wohin er faehrt.
         self.jobknoepfe["rahmen"].configure(
-            state=an(verbunden and not laeuft and bool(self.elemente)))
+            state=an(verbunden and not laeuft and fertig))
         self.jobknoepfe["kontur"].configure(
             state=an(verbunden and not laeuft and self._schneidet()))
 

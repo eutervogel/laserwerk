@@ -436,6 +436,11 @@ EN = {
         'The picture is then rectified into machine coordinates: what\nlies somewhere on it really lies there.',
     'Die Eichung gilt für eine Höhe. Ein dickes Brett liegt\nnäher an der Kamera und erscheint nach außen verschoben.\nMit diesem Maß rechnet Laserwerk die Materialstärke heraus.\n0 heißt: nicht herausrechnen.':
         'The calibration holds for one height. A thick board sits\ncloser to the camera and appears shifted outwards.\nWith this measure Laserwerk takes the material thickness out.\n0 means: do not take it out.',
+    'Unterlage über dem Bett': 'Support above the bed',
+    'Wabenplatte oder Opferbrett: was darauf liegt, liegt um\nso viel höher. Die Materialstärke kommt aus dem Reiter\nMaterial und zählt dazu.':
+        'Honeycomb plate or sacrificial board: whatever lies on it sits\nthat much higher. The material thickness comes from the\nMaterial tab and counts on top.',
+    'Untergrund neu gerechnet: {d:.1f} mm über der Eichebene.':
+        'Underlay recomputed: {d:.1f} mm above the calibration plane.',
     'Noch keine Eichung für diese Maschine.': 'No calibration for this machine yet.',
     'Erst eine Kamera wählen.': 'Pick a camera first.',
     'hole ein Bild von {g}': 'taking a picture from {g}',

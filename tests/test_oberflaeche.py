@@ -3149,6 +3149,56 @@ class KameraUnterDerZeichenflaeche(Grundlage):
         self.assertEqual(self.gezeigt, [])
         self.assertEqual(self.app._kam_eichung().get("hoehe"), 300.0)
 
+    def test_die_unterlage_zaehlt_zur_materialstaerke(self):
+        """Wabenplatte plus Brett: beides hebt die Oberseite."""
+        self.eichen()
+        self.app.v_dicke.set(12.0)
+        self.app.v_kam_unterlage.set(22.0)
+        self.assertAlmostEqual(self.app._kam_dicke(), 34.0, places=3)
+
+    def test_was_beim_eichen_schon_darunter_lag_zaehlt_nicht_doppelt(self):
+        """Die Eichebene ist nicht immer das nackte Bett.
+
+        Lag die Karte beim Eichen auf einem 3-mm-Brett, dann ist die
+        Eichebene 3 mm hoch - ein 12-mm-Brett liegt nur 9 mm darueber.
+        """
+        self.eichen()
+        self.app._kam_eichung()["dicke"] = 3.0
+        self.app.v_dicke.set(12.0)
+        self.app.v_kam_unterlage.set(0.0)
+        self.assertAlmostEqual(self.app._kam_dicke(), 9.0, places=3)
+
+    def test_die_unterlage_wird_gespeichert(self):
+        self.eichen()
+        self.app.v_kam_unterlage.set(22.0)
+        self.app._kam_unterlage_sichern()
+        self.assertAlmostEqual(float(self.app.cfg["kam_unterlage"]), 22.0)
+
+    def test_eine_andere_staerke_rechnet_den_untergrund_neu(self):
+        """Ohne neues Bild - das rohe liegt noch da.
+
+        Wer nach dem Bildholen die Materialstaerke aendert, sah bisher
+        weiter das Bild der alten Staerke; versetzt um H/(H-d), und
+        nichts sagte es ihm.
+        """
+        self.eichen()
+        self.app._kam_eichung()["hoehe"] = 260.0
+        self.app.v_dicke.set(0.0)
+        self.app.v_kam_unterlage.set(0.0)
+        self.app._kamera_uebernehmen(self.bild())
+        self.assertAlmostEqual(self.app.kam_dicke, 0.0, places=3)
+        self.app.v_dicke.set(20.0)
+        self.assertTrue(self.app._kamera_neu_rechnen())
+        self.assertAlmostEqual(self.app.kam_dicke, 20.0, places=3)
+        # Gleiche Staerke, gleiches Bild: nicht noch einmal rechnen
+        self.assertFalse(self.app._kamera_neu_rechnen())
+
+    def test_ohne_bild_gibt_es_nichts_umzurechnen(self):
+        self.eichen()
+        self.app.kam_roh = self.app.kam_bett = None
+        self.app.v_dicke.set(18.0)
+        self.assertFalse(self.app._kamera_neu_rechnen(zwingen=True))
+
     def hoehenfeld(self):
         for rahmen in self.app.tab_kam.winfo_children():
             for w in rahmen.winfo_children():

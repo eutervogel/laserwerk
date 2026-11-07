@@ -39,6 +39,7 @@ class App:
         self.presets = P.load_presets()
         self.test = None            # Parameter eines Materialtest-Elements
         self.kam_roh = self.kam_bett = self.kam_tk = None
+        self.kam_dicke = None     # Hoehe, mit der kam_bett gerechnet wurde
         self._kam_groesse = None
         self.maschinen = P.load_maschinen()
         self._maschine_einrichten()
@@ -878,6 +879,23 @@ class App:
                    "Mit diesem Maß rechnet Laserwerk die Materialstärke heraus.\n"
                    "0 heißt: nicht herausrechnen."))).grid(
             row=1, column=0, columnspan=3, sticky="w", pady=(3, 0))
+
+        ttk.Label(hf, text=T("Unterlage über dem Bett")).grid(
+            row=2, column=0, sticky="w", pady=(4, 0))
+        self.v_kam_unterlage = tk.DoubleVar(
+            value=float(self.cfg.get("kam_unterlage", 0.0) or 0.0))
+        sp_unter = ttk.Spinbox(hf, from_=0.0, to=200.0, increment=1.0, width=6,
+                               textvariable=self.v_kam_unterlage,
+                               command=self._kam_unterlage_sichern)
+        sp_unter.grid(row=2, column=1, padx=4, pady=(4, 0))
+        sp_unter.bind("<Return>", lambda e: self._kam_unterlage_sichern())
+        sp_unter.bind("<FocusOut>", lambda e: self._kam_unterlage_sichern())
+        ttk.Label(hf, text="mm").grid(row=2, column=2, sticky="w", pady=(4, 0))
+        self._erklaerung(ttk.Label(hf, style="Muted.TLabel", wraplength=360,
+            text=T("Wabenplatte oder Opferbrett: was darauf liegt, liegt um\n"
+                   "so viel höher. Die Materialstärke kommt aus dem Reiter\n"
+                   "Material und zählt dazu."))).grid(
+            row=3, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._kam_zeigen()
 
     def _kameras(self):
@@ -922,6 +940,7 @@ class App:
         self.cfg["kamera"] = d
         P.save_config(self.cfg)
         self._maschine_sichern()
+        self._kamera_neu_rechnen(zwingen=True)
         self._kamera_zeigen()
 
     def _kam_zeigen(self):
@@ -945,19 +964,71 @@ class App:
             self.q.put(("kamerabild", roh))
         self._bg(arbeit, T("hole ein Bild von {g}").format(g=geraet))
 
+    def _kam_zahl(self, name, vorgabe=0.0):
+        var = getattr(self, name, None)
+        try:
+            return float(var.get())
+        except (tk.TclError, ValueError, AttributeError):
+            return vorgabe
+
+    def _kam_dicke(self):
+        """Wie hoch die sichtbare Oberseite ueber der Eichebene liegt.
+
+        Geeicht wurde in einer Ebene - hier dem nackten Bett. Darauf liegt
+        die Unterlage, darauf das Material, und gesehen wird die Oberseite:
+        beide Maße zaehlen zusammen. Lag beim Eichen selbst schon etwas
+        unter der Karte, steht das in der Eichung und wird abgezogen,
+        sonst zaehlte es doppelt.
+        """
+        return (self._kam_zahl("v_dicke") + self._kam_zahl("v_kam_unterlage")
+                - float(self._kam_eichung().get("dicke", 0.0) or 0.0))
+
+    def _kam_bett_rechnen(self):
+        """Aus dem rohen Bild die Draufsicht fuer die jetzige Hoehe."""
+        dicke = self._kam_dicke()
+        self.kam_bett = KAM.bett_bild(
+            self.kam_roh, self._kam_eichung(),
+            0.0, 0.0, float(self.cfg["x_max"]), float(self.cfg["y_max"]),
+            px_je_mm=2.0, dicke=dicke)
+        self.kam_dicke = dicke
+        return dicke
+
+    def _kamera_neu_rechnen(self, zwingen=False):
+        """Den Untergrund auf die jetzige Hoehe umrechnen.
+
+        Das entzerrte Bild gilt fuer eine Hoehe. Wer nach dem Bildholen
+        die Materialstaerke aendert oder ein Preset laedt, sah bisher
+        weiter das Bild der alten Staerke - um ein paar Millimeter
+        versetzt, und nichts sagte es ihm. Neu geholt werden muss dafuer
+        nichts: das rohe Bild liegt noch da.
+        """
+        if getattr(self, "kam_roh", None) is None or self.kam_bett is None:
+            return False
+        if not zwingen and abs(self._kam_dicke() - (self.kam_dicke or 0.0)) < 0.05:
+            return False
+        self._log(T("Untergrund neu gerechnet: {d:.1f} mm über der Eichebene.")
+                  .format(d=self._kam_bett_rechnen()))
+        return True
+
+    def _kam_unterlage_sichern(self):
+        """Die Unterlage uebernehmen und das Bild darauf umrechnen."""
+        self.cfg["kam_unterlage"] = max(0.0, self._kam_zahl("v_kam_unterlage"))
+        if self.v_kam_unterlage.get() != self.cfg["kam_unterlage"]:
+            self.v_kam_unterlage.set(self.cfg["kam_unterlage"])
+        P.save_config(self.cfg)
+        self._maschine_sichern()
+        self._kamera_neu_rechnen()
+        self._kamera_zeigen()
+
     def _kamera_uebernehmen(self, roh):
         """Das frische Bild entzerren und merken."""
         self.kam_roh = roh
-        self.kam_bett = None
+        self.kam_bett = self.kam_dicke = None
         d = self._kam_eichung()
         if not d:
             self._log(T("Bild geholt ({b}x{h}) - ohne Eichung nur ein Bild.")
                       .format(b=roh.size[0], h=roh.size[1]))
             return
-        try:
-            dicke = float(self.v_dicke.get())
-        except (tk.TclError, ValueError):
-            dicke = 0.0
         soll = tuple(d.get("bild", (0, 0)))
         if soll and tuple(roh.size) != soll:
             # Nicht stillschweigend weiterrechnen: eine 16:9-Aufloesung ist
@@ -972,9 +1043,7 @@ class App:
                       .format(ib=roh.size[0], ih=roh.size[1],
                               sb=soll[0], sh=soll[1]))
             return
-        self.kam_bett = KAM.bett_bild(
-            roh, d, 0.0, 0.0, float(self.cfg["x_max"]), float(self.cfg["y_max"]),
-            px_je_mm=2.0, dicke=dicke)
+        dicke = self._kam_bett_rechnen()
         self._log(T("Bild {rb}x{rh} entzerrt auf {bb}x{bh} für {x:.0f} x {y:.0f} mm, "
                     "Materialstärke {d:.1f} mm.").format(
             rb=roh.size[0], rh=roh.size[1],
@@ -4020,6 +4089,10 @@ class App:
     def _fokus_spaet(self):
         self._fokus_job = None
         self._save_cfg()
+        # Die Materialstaerke steckt auch im Kamerabild. Erst hier, nicht
+        # bei jedem Tastendruck: das Umrechnen kostet einen Augenblick.
+        if self._kamera_neu_rechnen():
+            self._kamera_zeigen()
 
     def _fokus_zeigen(self):
         """Dicke, Korrektur und die Hoehe, die daraus wird - an beiden

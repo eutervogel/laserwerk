@@ -283,12 +283,27 @@ def bett_bild(bild, eichung, x0, y0, x1, y1, px_je_mm=2.0, dicke=0.0):
 
 
 def eichung_lesbar(eichung):
-    """Eine Zeile, die sagt, was die Eichung taugt."""
+    """Eine Zeile, die sagt, was die Eichung taugt.
+
+    Mit der Flaeche, auf der sie gemessen wurde. Ein Fehler ohne seine
+    Flaeche sagt nichts: 0,43 mm klingt hervorragend und galt doch nur
+    fuer 140 x 100 mm in der Bettmitte - aussen waren es 6,5 mm, und
+    niemand konnte das der Zeile ansehen.
+    """
     if not eichung:
         return ""
-    return ("%s, %d Aufnahmen, Fehler %.2f mm, geeicht bei %.0f mm Materialstärke"
-            % (eichung.get("geraet", "?"), eichung.get("aufnahmen", 0),
-               eichung.get("fehler_mm", 0.0), eichung.get("dicke", 0.0)))
+    sp = eichung.get("spanne_mm")
+    if isinstance(sp, (list, tuple)) and len(sp) == 2:
+        wo = "über %.0f x %.0f mm" % tuple(sp)
+    elif isinstance(sp, (int, float)) and sp:
+        wo = "über %.0f mm Spanne" % sp
+    else:
+        wo = "Fläche nicht vermerkt"
+    n = eichung.get("kreuze")
+    womit = ("%d Kreuze" % n) if n else ("%d Aufnahmen" % eichung.get("aufnahmen", 0))
+    return ("%s, Fehler %.2f mm %s (%s), geeicht bei %.0f mm Materialstärke"
+            % (eichung.get("geraet", "?"), eichung.get("fehler_mm", 0.0),
+               wo, womit, eichung.get("dicke", 0.0)))
 
 
 def werkstueck(bild, x0, y0, mm_je_px, schwelle=0.18, rand=4):

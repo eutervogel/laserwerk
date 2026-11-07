@@ -200,6 +200,35 @@ class WerkstueckImBild(unittest.TestCase):
         self.assertAlmostEqual(w["breite"], 60.0, delta=2.0)
 
 
+class EichungSagtWasSieTaugt(unittest.TestCase):
+    """Ein Fehler ohne seine Flaeche ist eine Falle.
+
+    0,43 mm sah nach einer sehr guten Eichung aus - gemessen war das auf
+    140 x 100 mm in der Bettmitte, und aussen lag sie um 6,5 mm daneben.
+    """
+
+    def test_flaeche_und_punkte_stehen_dabei(self):
+        t = K.eichung_lesbar(dict(geraet="/dev/video2", fehler_mm=1.58,
+                                    spanne_mm=[340, 340], kreuze=9, dicke=0.0))
+        self.assertIn("1.58", t.replace(",", "."))
+        self.assertIn("340", t)
+        self.assertIn("9 Kreuze", t)
+
+    def test_eine_zahl_ist_eine_spanne(self):
+        t = K.eichung_lesbar(dict(geraet="x", fehler_mm=1.0, spanne_mm=340,
+                                    kreuze=9))
+        self.assertIn("340", t)
+
+    def test_ohne_flaeche_sagt_er_das_auch(self):
+        """Aeltere Eichungen haben den Eintrag nicht - dann kein stilles Nichts."""
+        t = K.eichung_lesbar(dict(geraet="x", fehler_mm=0.43, aufnahmen=11))
+        self.assertIn("nicht vermerkt", t)
+        self.assertIn("11 Aufnahmen", t)
+
+    def test_ohne_eichung_keine_zeile(self):
+        self.assertEqual(K.eichung_lesbar({}), "")
+
+
 class Geraete(unittest.TestCase):
     def test_kameras_liefert_eine_liste(self):
         """Ohne Kamera eine leere Liste, mit Kamera Paare aus Geraet und

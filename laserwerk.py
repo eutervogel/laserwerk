@@ -180,6 +180,7 @@ class App:
             self.root.bind_all(ev, self._rad, add="+")
         # jede Aenderung, die den G-Code beeinflusst, macht ihn ungueltig
         for v in (self.v_inv, self.v_mode, self.v_schw, self.v_rot,
+                  self.v_raster, self.v_luft,
                   self.v_s, self.v_f, self.v_line, self.v_job, self.v_passes,
                   self.v_xoff, self.v_over, self.v_yoff, self.v_gamma,
                   self.v_cs, self.v_cf,
@@ -645,34 +646,55 @@ class App:
         self.v_mode = tk.StringVar(value="schwelle")
         ttk.Radiobutton(f, text=T("Schwarzweiß (Strichgrafik)"), value="schwelle",
                         variable=self.v_mode).grid(row=13, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text=T("Rasterung (Punktdichte, für Fotos)"), value="raster",
-                        variable=self.v_mode).grid(row=12, column=0, columnspan=3, sticky="w")
+        # Radio und Verfahren in einer Zeile: das eine gilt nur mit dem
+        # anderen, und so bleibt die Zeilennummerierung darunter in Ruhe.
+        rz = ttk.Frame(f)
+        rz.grid(row=12, column=0, columnspan=3, sticky="ew")
+        ttk.Radiobutton(rz, text=T("Rasterung (Punktdichte, für Fotos)"), value="raster",
+                        variable=self.v_mode).pack(side="left")
+        self.v_raster = tk.StringVar(value="floyd")
+        self.v_rastername = tk.StringVar(value=self.RASTERNAMEN[0][1])
+        self.cb_raster = ttk.Combobox(
+            rz, textvariable=self.v_rastername, width=14, state="readonly",
+            values=[T(n) for _, n in self.RASTERNAMEN])
+        self.cb_raster.pack(side="left", padx=(6, 0))
+        self.cb_raster.bind("<<ComboboxSelected>>",
+                            lambda e: self._rasterart_gewaehlt())
+        self.v_raster.trace_add("write", lambda *a: self._rasterart_zeigen())
         ttk.Radiobutton(f, text=T("Graustufen (Leistung variiert)"), value="grau",
                         variable=self.v_mode).grid(row=11, column=0, columnspan=3, sticky="w")
         self.v_schw = tk.DoubleVar(value=0.5)
-        ttk.Label(f, text=T("Schwelle")).grid(row=14, column=0, sticky="w")
+        ttk.Label(f, text=T("Schwelle")).grid(row=15, column=0, sticky="w")
         ttk.Scale(f, from_=0.1, to=0.9, variable=self.v_schw, length=140
-                  ).grid(row=14, column=1, columnspan=2, sticky="w")
+                  ).grid(row=15, column=1, columnspan=2, sticky="w")
 
         # Tonwertkurve: hebt oder senkt nur die Mitten. Schwarz bleibt schwarz,
         # Weiss bleibt aus - das Mittel gegen "laeuft alles zu".
         self.v_gamma = tk.DoubleVar(value=1.0)
-        ttk.Label(f, text=T("Mitten")).grid(row=15, column=0, sticky="w")
+        ttk.Label(f, text=T("Mitten")).grid(row=16, column=0, sticky="w")
         sg = ttk.Frame(f)
-        sg.grid(row=15, column=1, columnspan=2, sticky="w")
+        sg.grid(row=16, column=1, columnspan=2, sticky="w")
         ttk.Scale(sg, from_=0.4, to=2.5, variable=self.v_gamma, length=110,
                   command=lambda v: self._gamma_zeigen()).pack(side="left")
         self.lbl_gamma = ttk.Label(sg, width=4)
         self.lbl_gamma.pack(side="left", padx=(4, 0))
         ttk.Button(sg, text="1:1", width=3,
                    command=lambda: self.v_gamma.set(1.0)).pack(side="left", padx=(2, 0))
+        self._erklaerung(ttk.Label(f, style="Muted.TLabel", wraplength=360,
+            text=T("Das Verfahren gilt nur für die Rasterung. Atkinson gibt\n"
+                   "ein Viertel des Fehlers nicht weiter: kontrastreicher,\n"
+                   "und die Mitten laufen nicht zu. Jarvis und Stucki\n"
+                   "streuen weiter und wirken feiner. Halbton setzt\n"
+                   "gewachsene Punkte statt gestreute - für Schiefer\n"
+                   "und Glas, wo ein einzelner Punkt nichts hinterlässt."))).grid(
+            row=14, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.lbl_gammahilfe = ttk.Label(
             f, text=T("größer = Mitten heller (nur Graustufen)"), style="Muted.TLabel")
-        self.lbl_gammahilfe.grid(row=16, column=0, columnspan=3, sticky="w")
+        self.lbl_gammahilfe.grid(row=17, column=0, columnspan=3, sticky="w")
         self._gamma_zeigen()
 
         bk = ttk.LabelFrame(f, text=T("Bildkorrektur"), padding=4)
-        bk.grid(row=17, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        bk.grid(row=18, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_hell = tk.DoubleVar(value=0.0)
         self.v_kontrast = tk.DoubleVar(value=0.0)
         self.v_schaerfe = tk.DoubleVar(value=0.0)
@@ -700,7 +722,7 @@ class App:
         self._bk_zeigen()
 
         jb = ttk.LabelFrame(f, text=T("Bearbeitung"), padding=4)
-        jb.grid(row=18, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        jb.grid(row=19, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.v_job = tk.StringVar(value="gravur")
         ttk.Radiobutton(jb, text=T("Gravieren (Flächen, zeilenweise)"), value="gravur",
                         variable=self.v_job, command=self._job_changed).grid(row=0, column=0, columnspan=3, sticky="w")
@@ -713,6 +735,9 @@ class App:
         self.v_passes = tk.IntVar(value=1)
         ttk.Spinbox(jb, from_=1, to=10, textvariable=self.v_passes, width=4
                     ).grid(row=3, column=1, sticky="w")
+        self.v_luft = tk.BooleanVar(value=bool(self.cfg.get("luft", False)))
+        ttk.Checkbutton(jb, text=T("Luft (M8)"), variable=self.v_luft).grid(
+            row=3, column=2, columnspan=2, sticky="w", padx=(8, 0))
         self.v_cs = tk.IntVar(value=0)
         self.v_cf = tk.IntVar(value=0)
         ttk.Label(jb, text=T("Schnitt S")).grid(row=4, column=0, sticky="w", pady=(6, 0))
@@ -724,7 +749,10 @@ class App:
                     textvariable=self.v_cf).grid(row=4, column=3, sticky="w", pady=(6, 0))
         self._erklaerung(ttk.Label(jb, text=T("0 = Werte aus dem Reiter Material.\n"
                              "Schneiden braucht meist mehr Leistung und\n"
-                             "weniger Vorschub als Gravieren."),
+                             "weniger Vorschub als Gravieren.\n"
+                             "'Luft' schaltet die Düse für den ganzen Job ein\n"
+                             "(M8 am Anfang, M9 am Ende) - nur wenn die\n"
+                             "Maschine sie über den Controller schaltet."),
                   style="Muted.TLabel")).grid(row=5, column=0, columnspan=4, sticky="w")
         self.v_eigen = tk.BooleanVar(value=False)
         self.chk_eigen = ttk.Checkbutton(
@@ -740,17 +768,17 @@ class App:
                 row=7, column=0, columnspan=4, sticky="w")
 
         ttk.Button(f, text=T("Vorschau + G-Code erzeugen"), command=self.generate, style="Accent.TButton"
-                   ).grid(row=19, column=0, columnspan=3, sticky="ew", pady=(10, 2))
+                   ).grid(row=20, column=0, columnspan=3, sticky="ew", pady=(10, 2))
         self.lbl_info = ttk.Label(f, text="", justify="left")
-        self.lbl_info.grid(row=20, column=0, columnspan=3, sticky="w")
+        self.lbl_info.grid(row=21, column=0, columnspan=3, sticky="w")
         bb = ttk.Frame(f)
-        bb.grid(row=21, column=0, columnspan=3, sticky="ew", pady=6)
+        bb.grid(row=22, column=0, columnspan=3, sticky="ew", pady=6)
         ttk.Button(bb, text=T("G-Code speichern"), command=self.save_gcode).pack(side="left")
         ttk.Button(bb, text=T("G-Code laden"), command=self.load_gcode).pack(side="left", padx=4)
         self.btn_weg = ttk.Button(bb, text=T("Verwerfen"), command=self.verwerfen)
         self.btn_weg.pack(side="left")
         pb = ttk.Frame(f)
-        pb.grid(row=22, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        pb.grid(row=23, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         ttk.Button(pb, text=T("Projekt speichern"), command=self.save_project
                    ).pack(side="left", fill="x", expand=True)
         ttk.Button(pb, text=T("Projekt öffnen"), command=self.open_project
@@ -1761,6 +1789,7 @@ class App:
     # dicke und Maschine gelten fuer alle gemeinsam.
     ELEMENTFELDER = (
         "v_w", "v_h", "v_lock", "v_rot", "v_inv", "v_nurbild", "v_mode", "v_schw",
+        "v_raster",
         "v_gamma", "v_hell", "v_kontrast", "v_schaerfe",
         "v_xoff", "v_yoff", "v_over", "v_spiegel", "v_achse",
         "v_job", "v_passes", "v_cs", "v_cf",
@@ -1775,6 +1804,39 @@ class App:
     # "Eigene Werte" nimmt es aus der Gruppe.
     GEMEINSAM = ("v_s", "v_smin", "v_f", "v_line",
                  "v_passes", "v_cs", "v_cf")
+
+    # Die Verfahren der Rasterung: Schluessel fuer Presets und Projekte,
+    # Name fuer die Anzeige. Die vier Fehlerdiffusionen heissen nach ihren
+    # Erfindern und bleiben in jeder Sprache gleich.
+    RASTERNAMEN = (("floyd", "Floyd-Steinberg"), ("atkinson", "Atkinson"),
+                   ("jarvis", "Jarvis"), ("stucki", "Stucki"),
+                   ("halbton", "Halbton"))
+
+    def _rasterart_gewaehlt(self):
+        """Aus dem angezeigten Namen den Schluessel machen."""
+        gewaehlt = self.v_rastername.get()
+        for schluessel, name in self.RASTERNAMEN:
+            if T(name) == gewaehlt:
+                self.v_raster.set(schluessel)
+                return
+
+    def _rasterart_zeigen(self):
+        """Und zurueck - fuer Preset, Projekt und Elementwechsel."""
+        if not hasattr(self, "v_rastername"):
+            return
+        schluessel = self.v_raster.get()
+        for s, name in self.RASTERNAMEN:
+            if s == schluessel:
+                self.v_rastername.set(T(name))
+                return
+        self.v_rastername.set(T(self.RASTERNAMEN[0][1]))
+
+    def _luft_an(self):
+        """Ob dieser Job die Duese einschalten soll."""
+        try:
+            return bool(self.v_luft.get())
+        except (tk.TclError, AttributeError):
+            return False
 
     def _element_sichern(self):
         """Die Eingabefelder in das gerade gewaehlte Element zurueckschreiben."""
@@ -1889,6 +1951,7 @@ class App:
         ("v_board", "brett_zeigen"), ("v_snap", "einrasten"),
         ("v_maxw", "max_breite"), ("v_maxh", "max_hoehe"),
         ("v_dicke", "dicke"), ("v_korr", "fokuskorrektur"),
+        ("v_luft", "luft"),
         ("v_notiz", "notiz"),
         ("v_preset", "preset"),
     )
@@ -2977,6 +3040,12 @@ class App:
             marken += [(idx + len(zeilen), art, nr, gesamt)
                        for idx, art, nr, gesamt in teilmarken]
             zeilen += teil
+        # Die Luft gilt fuer den ganzen Job, nicht je Element: ein M8 davor,
+        # ein M9 danach. Die Marken zeigen auf Zeilennummern - sie ruecken
+        # mit, sonst stuende die Anzeige den ganzen Job um eine Zeile falsch.
+        if self._luft_an():
+            zeilen = ["M8"] + zeilen + ["M9"]
+            marken = [(k + 1, art, nr, ges) for k, art, nr, ges in marken]
         self.lines = zeilen
         # Die Ausdehnung ist die des ganzen Jobs. Nur die des ersten Elements
         # zu nehmen hiess: ein Motiv rechts ausserhalb des Verfahrwegs kam
@@ -3063,7 +3132,7 @@ class App:
                       kontrast=self.v_kontrast.get(),
                       schaerfe=self.v_schaerfe.get(),
                       rotate=self.v_rot.get(), mode=self.v_mode.get(),
-                      schwelle=self.v_schw.get())
+                      schwelle=self.v_schw.get(), art=self.v_raster.get())
         over = self._anlauf(f)
         xoff = max(0.0, float(self.v_xoff.get()))
         yoff = max(0.0, float(self.v_yoff.get()))
@@ -3449,6 +3518,8 @@ class App:
         self.v_smin.set(d.get("smin", 0))
         self.v_line.set(d.get("line", 0.1)); self.v_notiz.set(d.get("notiz", ""))
         self.v_mode.set(d.get("mode", "schwelle")); self.v_schw.set(d.get("schwelle", 0.5))
+        self.v_raster.set(d.get("rasterart", "floyd"))
+        self.v_luft.set(bool(d.get("luft", False)))
         self.v_gamma.set(d.get("gamma", 1.0)); self._gamma_zeigen()
         # Aeltere Presets haben keine Schnittwerte. 0 heisst "nimm die vom
         # Material", 1 Durchgang - genau das Verhalten von vorher.
@@ -3610,6 +3681,10 @@ class App:
                                s=self.v_s.get(), smin=self.v_smin.get(),
                                f=self.v_f.get(), line=self.v_line.get(),
                                mode=self.v_mode.get(), schwelle=round(self.v_schw.get(), 2),
+                               rasterart=self.v_raster.get(),
+                               # Die Duese gehoert zum Material: Acryl ohne
+                               # Luft qualmt, Holz ohne Luft brennt breiter.
+                               luft=self.v_luft.get(),
                                gamma=round(self.v_gamma.get(), 2),
                                # Die Schnittwerte gehoeren dazu. Sie kosten am
                                # meisten Zeit zum Herausfinden - ein halber Tag
@@ -4068,6 +4143,7 @@ class App:
 
     def _save_cfg(self):
         self.cfg["z_invert"] = self.v_zinv.get()
+        self.cfg["luft"] = self._luft_an()
         self._fokus_sichern()
         P.save_config(self.cfg)
         # Der laufende Stand gehoert auch in das Profil der Maschine -

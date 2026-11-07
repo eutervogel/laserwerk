@@ -106,6 +106,28 @@ class StelleFinden(unittest.TestCase):
         self.assertEqual(treffer(TASCHE, (50.0, 10.0, -1.5)), [])
 
 
+class LuftBleibtAn(unittest.TestCase):
+    """Ein Job mit Duese wird mit Duese fortgesetzt."""
+
+    JOB = ["G21", "G90", "G94", "M4 S0", "M8",
+           "G0 X0.000 Y0.000",
+           "G1 X40.000 Y0.000 S500 F1000",
+           "G1 X40.000 Y0.150",
+           "M9", "G0 X0 Y0"]
+
+    def test_mitten_im_job_war_sie_an(self):
+        self.assertEqual(F.luft_vor(self.JOB, 6), "M8")
+
+    def test_vor_dem_m8_war_sie_aus(self):
+        self.assertEqual(F.luft_vor(self.JOB, 3), "")
+
+    def test_nach_dem_m9_ist_sie_aus(self):
+        self.assertEqual(F.luft_vor(self.JOB, 8), "")
+
+    def test_ein_job_ohne_duese_bekommt_keine(self):
+        self.assertEqual(F.luft_vor(GRAVUR, 5), "")
+
+
 class Resttext(unittest.TestCase):
     def test_hat_z_erkennt_die_zustellung(self):
         self.assertTrue(F.hat_z(TASCHE))

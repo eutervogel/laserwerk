@@ -85,6 +85,22 @@ def endpunkte(lines):
     return out
 
 
+def luft_vor(lines, idx):
+    """War die Duese an, als es bei Zeile idx stehenblieb?
+
+    Der letzte M8/M9 davor sagt es. Ohne diese Frage schneidet der Rest
+    ohne Luft weiter - und zwar genau die Haelfte, bei der man es nachher
+    nicht mehr auseinanderhalten kann.
+    """
+    luft = ""
+    for z in lines[:idx + 1]:
+        if "M8" in z:
+            luft = "M8"
+        elif "M9" in z:
+            luft = ""
+    return luft
+
+
 def hat_z(lines):
     """Stellt die Datei Z zu? Reine Lasergravuren tun das nicht."""
     return any(re.search(r"Z[-\d.]", l) for l in lines)
@@ -150,7 +166,8 @@ def main():
                 "Zum Fortsetzen mit --start aufrufen."))
         return
 
-    pre = ["G21", "G90", "G94", f"F{feed:g}", "M4 S0"]
+    luft = luft_vor(lines, idx)
+    pre = ["G21", "G90", "G94", f"F{feed:g}", "M4 S0"] + ([luft] if luft else [])
     queue = pre + rest
     pend, sent, done, err = [], 0, 0, 0
     t0 = time.time()

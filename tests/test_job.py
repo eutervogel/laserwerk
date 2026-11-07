@@ -140,6 +140,61 @@ class Tonwerte(unittest.TestCase):
             self.assertAlmostEqual(dichte, (i + 0.5) / 8, delta=0.04)
         self.assertEqual(achtel, sorted(achtel))        # steigt durchgehend
 
+    def test_jedes_verfahren_kennt_nur_punkt_oder_nicht(self):
+        for art in J.RASTERARTEN:
+            p = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="raster", art=art)
+            self.assertEqual(sorted(set(np.unique(p))), [0.0, 1.0], art)
+
+    def test_die_treuen_verfahren_bilden_den_verlauf_ab(self):
+        """Fehlerdiffusion gibt den Fehler weiter - der Tonwert bleibt."""
+        for art in ("floyd", "jarvis", "stucki", "halbton"):
+            p = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="raster", art=art)
+            achtel = [t.mean() for t in np.array_split(p, 8, axis=1)]
+            for i, dichte in enumerate(achtel):
+                self.assertAlmostEqual(dichte, (i + 0.5) / 8, delta=0.04,
+                                       msg="%s, Achtel %d" % (art, i))
+
+    def test_atkinson_spreizt_den_kontrast(self):
+        """Ein Viertel des Fehlers wirft Atkinson weg - mit Absicht.
+
+        Die Lichter werden heller, die Schatten dunkler. Auf Holz, wo
+        zwischen "zeichnet nicht" und "verkohlt" kaum Platz ist, ist
+        genau das oft das Brauchbare.
+        """
+        a = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="raster", art="atkinson")
+        f = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="raster", art="floyd")
+        self.assertLess(a[:, :50].mean(), f[:, :50].mean())
+        self.assertGreater(a[:, -50:].mean(), f[:, -50:].mean())
+
+    def test_halbton_setzt_punkte_die_zusammenhaengen(self):
+        """Gewachsene Punkte statt gestreuter.
+
+        Ein einzelner Punkt mitten im Weissen hinterlaesst auf Schiefer
+        oder Glas nichts. Gezaehlt wird, wie viele brennende Punkte
+        keinen brennenden Nachbarn haben.
+        """
+        grau = Image.fromarray(np.full((80, 400), 128, dtype=np.uint8))
+        def einzeln(p):
+            n = np.zeros_like(p)
+            n[1:] += p[:-1]; n[:-1] += p[1:]
+            n[:, 1:] += p[:, :-1]; n[:, :-1] += p[:, 1:]
+            return int(((p > 0) & (n == 0)).sum())
+        h = J.prepare(grau, 40.0, 8.0, 0.1, mode="raster", art="halbton")
+        f = J.prepare(grau, 40.0, 8.0, 0.1, mode="raster", art="floyd")
+        self.assertLess(einzeln(h), einzeln(f))
+
+    def test_unbekanntes_verfahren_faellt_auf_floyd_zurueck(self):
+        """Ein Projekt von einer spaeteren Fassung darf nichts zerreissen."""
+        a = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="raster", art="gibtsnicht")
+        f = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="raster", art="floyd")
+        self.assertTrue(np.array_equal(a, f))
+
+    def test_ohne_rasterung_aendert_das_verfahren_nichts(self):
+        for mode in ("schwelle", "grau"):
+            a = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode=mode, art="atkinson")
+            f = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode=mode, art="floyd")
+            self.assertTrue(np.array_equal(a, f), mode)
+
     def test_invertieren(self):
         a = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="schwelle")
         b = J.prepare(self.verlauf, 40.0, 8.0, 0.1, mode="schwelle", invert=True)

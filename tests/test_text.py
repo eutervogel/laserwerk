@@ -48,6 +48,8 @@ DURCHGEREICHT = {
     "Vorderseite", "Rückseite, Wenden links/rechts",
     "Rückseite, Wenden oben/unten",
     "mm", "mm/min", "von 1000", "0 = automatisch",
+    # Die Namen der Rasterverfahren stehen in einer Tabelle, nicht als T("...")
+    "Halbton",
 }
 
 PLATZHALTER = re.compile(r"\{([a-zA-Z_][a-zA-Z_0-9]*|\d*)[^{}]*\}")

@@ -360,9 +360,96 @@ def auto_tonwerte(im, unten=1.0, oben=20.0):
     return round(max(-100.0, min(100.0, h)), 1), round(50.0 * math.log2(c), 1)
 
 
+# Fehlerdiffusion: Kern je Verfahren als ((dx, dy), Gewicht) und Teiler.
+# Der Fehler eines entschiedenen Punktes wird auf die Nachbarn verteilt,
+# die noch nicht entschieden sind - nach rechts und nach unten.
+#
+# Atkinson gibt absichtlich nur 6/8 des Fehlers weiter. Der Rest fliegt
+# weg: das Bild wird kontrastreicher und die Mitten laufen nicht zu -
+# auf Holz, wo zwischen "zeichnet nicht" und "verkohlt" kaum Platz ist,
+# ist das oft genau das Richtige.
+KERNE = {
+    "floyd": ((((1, 0), 7), ((-1, 1), 3), ((0, 1), 5), ((1, 1), 1)), 16),
+    "atkinson": ((((1, 0), 1), ((2, 0), 1), ((-1, 1), 1), ((0, 1), 1),
+                  ((1, 1), 1), ((0, 2), 1)), 8),
+    "jarvis": ((((1, 0), 7), ((2, 0), 5),
+                ((-2, 1), 3), ((-1, 1), 5), ((0, 1), 7), ((1, 1), 5),
+                ((2, 1), 3),
+                ((-2, 2), 1), ((-1, 2), 3), ((0, 2), 5), ((1, 2), 3),
+                ((2, 2), 1)), 48),
+    "stucki": ((((1, 0), 8), ((2, 0), 4),
+                ((-2, 1), 2), ((-1, 1), 4), ((0, 1), 8), ((1, 1), 4),
+                ((2, 1), 2),
+                ((-2, 2), 1), ((-1, 2), 2), ((0, 2), 4), ((1, 2), 2),
+                ((2, 2), 1)), 42),
+}
+
+# Geordnetes Halbtonraster: gruppierter Punkt, kein gestreuter. Die Punkte
+# wachsen um ihre Mitte, wie im Zeitungsdruck - auf Schiefer und Glas
+# haelt das besser zusammen als Fehlerdiffusion, weil ein einzelner
+# gestreuter Punkt dort kaum etwas hinterlaesst.
+HALBTON = np.array([[12, 5, 6, 13],
+                    [4, 0, 1, 7],
+                    [11, 3, 2, 8],
+                    [15, 10, 9, 14]], dtype=np.float32)
+
+RASTERARTEN = ("floyd", "atkinson", "jarvis", "stucki", "halbton")
+
+
+def _diffus(d, art):
+    """Fehlerdiffusion ueber die Leistungsmatrix, 1 = brennen.
+
+    Innerhalb einer Zeile geht es nicht ohne Schleife: jeder Punkt haengt
+    am Fehler seines linken Nachbarn. Was in die naechsten Zeilen fliesst,
+    wird dagegen am Zeilenende in einem Zug verteilt - sonst waeren es bei
+    einem Foto von 200 mm Breite ueber 30 Millionen Einzelzugriffe.
+    """
+    kern, teiler = KERNE[art]
+    h, w = d.shape
+    aus = np.zeros((h, w), dtype=np.float32)
+    gleich = [(dx, g) for (dx, dy), g in kern if dy == 0]
+    spaeter = [(dx, dy, g) for (dx, dy), g in kern if dy > 0]
+    rest = np.zeros((3, w), dtype=np.float32)      # hoechstens zwei voraus
+    for y in range(h):
+        i = y % 3
+        zeile = (d[y] + rest[i]).tolist()
+        rest[i] = 0.0                              # frei fuer y + 3
+        fehler = [0.0] * w
+        for x in range(w):
+            a = zeile[x]
+            if a >= 0.5:
+                aus[y, x] = 1.0
+                f = (a - 1.0) / teiler
+            else:
+                f = a / teiler
+            fehler[x] = f
+            for dx, g in gleich:
+                xx = x + dx
+                if xx < w:
+                    zeile[xx] += f * g
+        fa = np.asarray(fehler, dtype=np.float32)
+        for dx, dy, g in spaeter:
+            ziel = rest[(y + dy) % 3]
+            if dx == 0:
+                ziel += fa * g
+            elif dx > 0:
+                ziel[dx:] += fa[:-dx] * g
+            else:
+                ziel[:dx] += fa[-dx:] * g
+    return aus
+
+
+def _halbton(d):
+    """Schwelle gegen ein gekacheltes Punktmuster - ohne Schleife."""
+    h, w = d.shape
+    m = (HALBTON + 0.5) / HALBTON.size
+    kachel = np.tile(m, (h // m.shape[0] + 1, w // m.shape[1] + 1))[:h, :w]
+    return (d > kachel).astype(np.float32)
+
+
 def prepare(im, w_mm, h_mm, line, invert=False, rotate=0,
             mode="schwelle", schwelle=0.5, gamma=1.0,
-            helligkeit=0.0, kontrast=0.0, schaerfe=0.0):
+            helligkeit=0.0, kontrast=0.0, schaerfe=0.0, art="floyd"):
     """Liefert Leistungsmatrix 0..1 (1 = volle Leistung), Zeile 0 = oben."""
     if rotate:
         im = im.rotate(-rotate, expand=True, fillcolor=255)
@@ -382,9 +469,16 @@ def prepare(im, w_mm, h_mm, line, invert=False, rotate=0,
         # Materials - entscheidend bei Holz mit scharfer Schwelle, wo
         # zwischen "zeichnet nicht" und "verkohlt" kaum Platz ist.
         d = np.clip(dunkel, 0, 1) ** gamma
-        grau = Image.fromarray(((1.0 - d) * 255).astype(np.uint8), "L")
-        sw = grau.convert("1", dither=Image.FLOYDSTEINBERG)
-        p = (np.asarray(sw) == 0).astype(np.float32)   # schwarz = brennen
+        if art == "halbton":
+            p = _halbton(d)
+        elif art in KERNE and art != "floyd":
+            p = _diffus(d, art)
+        else:
+            # Floyd-Steinberg bleibt bei PIL: schnell, und jedes Projekt
+            # von vorher kommt damit auf genau sein altes Bild.
+            grau = Image.fromarray(((1.0 - d) * 255).astype(np.uint8), "L")
+            sw = grau.convert("1", dither=Image.FLOYDSTEINBERG)
+            p = (np.asarray(sw) == 0).astype(np.float32)   # schwarz = brennen
     else:
         p = np.clip(dunkel, 0, 1) ** gamma
         p[p < 0.08] = 0.0

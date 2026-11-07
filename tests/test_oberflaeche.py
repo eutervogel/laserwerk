@@ -3050,6 +3050,136 @@ class MaterialtestZumSchieben(Grundlage):
 
 
 @ohne_bildschirm
+class Luftunterstuetzung(Grundlage):
+    """Die Duese gilt fuer den ganzen Job - es gibt nur eine Pumpe."""
+
+    def gravur(self):
+        self.motiv()
+        self.app.v_mode.set("schwelle")
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+
+    def test_ohne_haken_steht_kein_m8_im_job(self):
+        self.gravur()
+        self.app.v_luft.set(False)
+        self.app.generate()
+        self.assertEqual([z for z in self.app.lines
+                          if "M8" in z or "M9" in z], [])
+
+    def test_mit_haken_umschliesst_die_luft_den_ganzen_job(self):
+        self.gravur()
+        self.app.v_luft.set(True)
+        self.app.generate()
+        self.assertEqual(self.app.lines[0], "M8")
+        self.assertEqual(self.app.lines[-1], "M9")
+        self.assertEqual(self.app.info["befehle"], len(self.app.lines))
+
+    def test_die_marken_ruecken_mit(self):
+        """Marken zeigen auf Zeilennummern.
+
+        Eine Zeile mehr am Anfang heisst: alle um eins weiter. Ohne das
+        stuende die Anzeige den ganzen Job um eine Zeile falsch - und der
+        Waechter saehe den Schnitt an der falschen Stelle anlaufen.
+        """
+        self.gravur()
+        self.app.v_luft.set(False)
+        self.app.generate()
+        ohne_marken = [m[0] for m in self.app.info["marken"]]
+        ohne_zeilen = list(self.app.lines)
+        self.app.v_luft.set(True)
+        self.app.generate()
+        mit = [m[0] for m in self.app.info["marken"]]
+        self.assertEqual(mit, [k + 1 for k in ohne_marken])
+        self.assertEqual(self.app.lines[mit[0]], ohne_zeilen[ohne_marken[0]])
+
+    def test_der_haken_macht_den_gcode_ungueltig(self):
+        self.gravur()
+        self.app.generate()
+        self.assertIsNotNone(self.app.lines)
+        self.app.v_luft.set(True)
+        self.assertIsNone(self.app.lines)
+
+    def test_die_luft_gehoert_zum_material(self):
+        """Acryl ohne Luft qualmt, Holz ohne Luft brennt breiter."""
+        self.app.v_luft.set(True)
+        self.app.v_pname.set("Probe mit Luft")
+        self.app.save_preset()
+        self.app.v_luft.set(False)
+        self.app.v_preset.set("Probe mit Luft")
+        self.app.load_preset()
+        self.assertTrue(self.app.v_luft.get())
+
+    def test_aeltere_presets_haben_keine_luft(self):
+        self.app.v_luft.set(True)
+        self.app.presets["Ohne Eintrag"] = dict(dicke=3.0, s=500, f=1000)
+        self.app.v_preset.set("Ohne Eintrag")
+        self.app.load_preset()
+        self.assertFalse(self.app.v_luft.get())
+
+
+class Rasterverfahren(Grundlage):
+    """Vier Fehlerdiffusionen und ein Halbton - Schluessel und Name."""
+
+    def verlauf(self):
+        v = np.linspace(255, 0, 400).astype(np.uint8)
+        im = Image.fromarray(np.tile(v, (200, 1)))
+        self.motiv()
+        self.app.src = im
+        self.app.elemente[0]["src"] = im
+        self.app._element_sichern()
+        self.app.v_mode.set("raster")
+        self.app.v_w.set(40.0)
+        self.app._keep_ratio("w")
+
+    def test_die_liste_kennt_jedes_verfahren(self):
+        self.assertEqual([s for s, _ in self.app.RASTERNAMEN],
+                         list(J.RASTERARTEN))
+        self.assertEqual(len(self.app.cb_raster.cget("values")),
+                         len(J.RASTERARTEN))
+
+    def test_name_und_schluessel_haengen_zusammen(self):
+        """Gespeichert wird der Schluessel, angezeigt der Name.
+
+        Umgekehrt haette ein Projekt den deutschen Namen in der Datei und
+        liesse sich auf Englisch nicht mehr lesen.
+        """
+        self.app.v_raster.set("atkinson")
+        self.assertEqual(self.app.v_rastername.get(), "Atkinson")
+        self.app.v_rastername.set("Halbton")
+        self.app._rasterart_gewaehlt()
+        self.assertEqual(self.app.v_raster.get(), "halbton")
+
+    def test_ein_unbekannter_schluessel_zeigt_das_erste(self):
+        self.app.v_raster.set("gibtsnicht")
+        self.assertEqual(self.app.v_rastername.get(), "Floyd-Steinberg")
+
+    def test_das_verfahren_aendert_den_job(self):
+        self.verlauf()
+        self.app.v_raster.set("floyd")
+        self.app.generate()
+        floyd = list(self.app.lines)
+        self.app.v_raster.set("atkinson")
+        self.app.generate()
+        self.assertNotEqual(self.app.lines, floyd)
+
+    def test_das_verfahren_gehoert_zum_motiv_und_zum_material(self):
+        self.app.v_raster.set("stucki")
+        self.app.v_pname.set("Probe Stucki")
+        self.app.save_preset()
+        self.app.v_raster.set("floyd")
+        self.app.v_preset.set("Probe Stucki")
+        self.app.load_preset()
+        self.assertEqual(self.app.v_raster.get(), "stucki")
+        self.assertIn("v_raster", self.app.ELEMENTFELDER)
+
+    def test_aeltere_presets_rastern_wie_vorher(self):
+        self.app.v_raster.set("jarvis")
+        self.app.presets["Ohne Eintrag"] = dict(dicke=3.0, s=500, f=1000)
+        self.app.v_preset.set("Ohne Eintrag")
+        self.app.load_preset()
+        self.assertEqual(self.app.v_raster.get(), "floyd")
+
+
 class KameraUnterDerZeichenflaeche(Grundlage):
     """Das entzerrte Kamerabild als Untergrund.
 

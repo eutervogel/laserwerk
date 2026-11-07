@@ -428,6 +428,10 @@ EN = {
         'Material test created: {n} patches, {b:.0f} x {h:.0f} mm',
     'Materialtest {n} Felder zu {b:.1f} x {h:.1f} mm\nS {s}\nF {f}\nca. {min:.0f} min':
         'Material test {n} patches of {b:.1f} x {h:.1f} mm\nS {s}\nF {f}\nabout {min:.0f} min',
+    'Luft (M8)': 'Air (M8)',
+    'Halbton': 'Halftone',
+    'Das Verfahren gilt nur für die Rasterung. Atkinson gibt\nein Viertel des Fehlers nicht weiter: kontrastreicher,\nund die Mitten laufen nicht zu. Jarvis und Stucki\nstreuen weiter und wirken feiner. Halbton setzt\ngewachsene Punkte statt gestreute - für Schiefer\nund Glas, wo ein einzelner Punkt nichts hinterlässt.':
+        'The method only applies to dithering. Atkinson keeps a\nquarter of the error to itself: more contrast, and the\nmidtones do not fill in. Jarvis and Stucki spread\nfurther and look finer. Halftone grows clustered dots\ninstead of scattered ones - for slate and glass, where\na single dot leaves nothing behind.',
     'Kamera': 'Camera',
     'Bild holen': 'Take picture',
     'Kamera über dem Bett': 'Camera above the bed',
@@ -882,10 +886,16 @@ EN = {
     "Schnitt S": "Cut S", "F": "F",
     "0 = Werte aus dem Reiter Material.\n"
     "Schneiden braucht meist mehr Leistung und\n"
-    "weniger Vorschub als Gravieren.":
+    "weniger Vorschub als Gravieren.\n"
+    "'Luft' schaltet die Düse für den ganzen Job ein\n"
+    "(M8 am Anfang, M9 am Ende) - nur wenn die\n"
+    "Maschine sie über den Controller schaltet.":
         "0 = use the values from the Material tab.\n"
         "Cutting usually needs more power and less\n"
-        "feed than engraving.",
+        "feed than engraving.\n"
+        "'Air' switches the nozzle on for the whole job\n"
+        "(M8 at the start, M9 at the end) - only if the\n"
+        "machine switches it through the controller.",
     "\n\nDazu Schnitt: {k} Konturen, {m} m x {p}\n"
     "S{s}/F{f} x {p} = {j} J/mm, ca. {min} min":
         "\n\nPlus cut: {k} contours, {m} m x {p}\n"

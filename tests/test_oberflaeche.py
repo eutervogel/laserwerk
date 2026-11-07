@@ -3050,6 +3050,56 @@ class MaterialtestZumSchieben(Grundlage):
 
 
 @ohne_bildschirm
+class Referenzfahrt(Grundlage):
+    """Der Knopf, den die Maschine als Taste schon hat."""
+
+    def pumpen(self, bedingung, runden=400):
+        for _ in range(runden):
+            self.wurzel.update()
+            if bedingung():
+                return True
+            time.sleep(0.005)
+        return False
+
+    def test_ohne_zusage_faehrt_nichts(self):
+        self.L.messagebox.askokcancel = lambda t, m: False
+        self.app.referenzfahrt()
+        self.assertNotIn("$H", self.app.grbl.protokoll)
+
+    def test_die_fahrt_nimmt_den_nullpunkt_mit(self):
+        """Nach $H stimmt die Maschinenposition - und damit stimmt der
+        Nullpunkt nicht mehr, denn er rechnet von ihr weg."""
+        self.app.set_zero()
+        self.app.set_zref()
+        self.assertTrue(self.app.zero_ok and self.app.zref_ok)
+        self.assertIsNotNone(self.app.null_wco)
+        self.app.referenzfahrt()
+        self.assertTrue(self.pumpen(lambda: not self.app.zero_ok),
+                        "Nullpunkt blieb gueltig")
+        self.assertIn("$H", self.app.grbl.protokoll)
+        self.assertFalse(self.app.zref_ok)
+        self.assertIsNone(self.app.null_wco, "gemerkter Nullpunkt zeigt daneben")
+
+    def test_eine_maschine_ohne_endschalter_sagt_es(self):
+        self.app.grbl.home_antwort = "error:5"
+        self.app.referenzfahrt()
+        self.assertTrue(self.pumpen(
+            lambda: "$22" in self.app.log.get("1.0", "end")),
+            "keine Erklaerung im Protokoll: %r" % self.app.log.get("1.0", "end"))
+        self.assertIn("disabled", self.app.btn_home.state())
+
+    def test_22_schaltet_den_knopf(self):
+        self.app._einstellungen_pruefen({"30": 1000.0, "22": 0.0})
+        self.assertIn("disabled", self.app.btn_home.state())
+        self.app._einstellungen_pruefen({"30": 1000.0, "22": 1.0})
+        self.assertNotIn("disabled", self.app.btn_home.state())
+
+    def test_ohne_auskunft_bleibt_er_bedienbar(self):
+        """$$ nicht gelesen heisst nicht 'kann nicht'."""
+        self.app._einstellungen_pruefen({"30": 1000.0})
+        self.assertNotIn("disabled", self.app.btn_home.state())
+
+
 class Luftunterstuetzung(Grundlage):
     """Die Duese gilt fuer den ganzen Job - es gibt nur eine Pumpe."""
 

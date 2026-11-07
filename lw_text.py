@@ -432,6 +432,17 @@ EN = {
     'Halbton': 'Halftone',
     'Das Verfahren gilt nur für die Rasterung. Atkinson gibt\nein Viertel des Fehlers nicht weiter: kontrastreicher,\nund die Mitten laufen nicht zu. Jarvis und Stucki\nstreuen weiter und wirken feiner. Halbton setzt\ngewachsene Punkte statt gestreute - für Schiefer\nund Glas, wo ein einzelner Punkt nichts hinterlässt.':
         'The method only applies to dithering. Atkinson keeps a\nquarter of the error to itself: more contrast, and the\nmidtones do not fill in. Jarvis and Stucki spread\nfurther and look finer. Halftone grows clustered dots\ninstead of scattered ones - for slate and glass, where\na single dot leaves nothing behind.',
+    'Referenzfahrt ($H)': 'Home ($H)',
+    'Referenzfahrt': 'Homing',
+    'Der Kopf fährt bis an die Endschalter. Nimm vorher alles aus dem Weg - er weicht nichts aus.\n\nNullpunkt und Z-Referenz gelten danach nicht mehr: sie rechnen von der Maschinenposition weg, und genau die wird jetzt neu gesetzt.':
+        'The head travels all the way to the limit switches. Clear everything out of the way first - it dodges nothing.\n\nThe origin and the Z reference no longer hold afterwards: they are measured from the machine position, and that is exactly what is being set anew.',
+    'Referenzfahrt fertig - Nullpunkt und Z-Referenz neu setzen.':
+        'Homing done - set the origin and the Z reference again.',
+    'Diese Maschine kennt keine Referenzfahrt ($22 = 0, keine Endschalter eingeschaltet).':
+        'This machine has no homing ($22 = 0, limit switches not enabled).',
+    'Referenzfahrt ohne Antwort - steht der Kopf schon auf einem Endschalter?':
+        'Homing did not answer - is the head already sitting on a limit switch?',
+    'Referenzfahrt abgebrochen: {a}': 'Homing aborted: {a}',
     'Kamera': 'Camera',
     'Bild holen': 'Take picture',
     'Kamera über dem Bett': 'Camera above the bed',

@@ -132,6 +132,30 @@ class Strom(G.Grbl):
         return True
 
 
+class Referenzfahrt(unittest.TestCase):
+    def test_h_wird_gesendet_und_quittiert(self):
+        g = Strom()
+        self.assertEqual(g.home(), "ok")
+        self.assertEqual(g.gesendet, ["$H"])
+
+    def test_die_fahrt_bekommt_mehr_zeit_als_ein_befehl(self):
+        """Zehn Sekunden reichen nicht: GRBL quittiert erst, wenn der Kopf
+        steht, und bis dahin faehrt er zweimal ueber das ganze Bett."""
+        g = Strom()
+        gemerkt = {}
+        g.cmd = lambda zeile, timeout=10.0: (
+            gemerkt.update(zeile=zeile, timeout=timeout) or "ok")
+        g.home()
+        self.assertEqual(gemerkt["zeile"], "$H")
+        self.assertGreaterEqual(gemerkt["timeout"], 60)
+
+    def test_ein_alarm_ist_danach_vom_tisch(self):
+        g = Strom()
+        g.alarm = "ALARM:9"
+        g.home()
+        self.assertIsNone(g.alarm)
+
+
 ZEILEN = ["G1 X%07.3f Y%07.3f S500" % (i, i) for i in range(40)]
 MARKEN = [0, 8, 16, 24, 32]
 

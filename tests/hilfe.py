@@ -123,6 +123,9 @@ class Attrappe:
     def set_zero_xy(self):
         return self.cmd("G92 X0 Y0")
 
+    def set_z_reference(self, z_value):
+        return self.cmd("G92 Z%.3f" % z_value)
+
     def goto(self, x=None, y=None, z=None, feed=None):
         ziel = tuple(v if v is not None else self.mpos[i] - self.wco[i]
                      for i, v in enumerate((x, y, z)))
@@ -132,6 +135,19 @@ class Attrappe:
     def jog(self, dx=0.0, dy=0.0, dz=0.0, feed=1000):
         self.protokoll.append("jog %+g %+g %+g" % (dx, dy, dz))
         self.mpos = tuple(a + b for a, b in zip(self.mpos, (dx, dy, dz)))
+
+    home_antwort = "ok"           # "error:5" = Maschine ohne Endschalter
+
+    def home(self):
+        """Wie GRBL: der Kopf faehrt an die Schalter, und die
+        Maschinenposition bekommt einen neuen Bezug. Der G92-Versatz
+        bleibt stehen und zeigt damit woanders hin - genau das muss die
+        Oberflaeche abfangen."""
+        self.protokoll.append("$H")
+        self.alarm = None
+        if self.home_antwort == "ok":
+            self.mpos = (0.0, 0.0, self.mpos[2])
+        return self.home_antwort
 
     def unlock(self):
         self.alarm = None

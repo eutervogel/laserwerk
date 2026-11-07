@@ -241,6 +241,22 @@ class Grbl:
             time.sleep(0.05)
         return dict(self.settings)
 
+    # Der Kopf faehrt im schlimmsten Fall das ganze Bett ab, zweimal:
+    # einmal schnell bis an den Schalter, einmal langsam zurueck.
+    HOMING_SEKUNDEN = 90.0
+
+    def home(self):
+        """Referenzfahrt. Antwortet erst, wenn sie durch ist.
+
+        Danach kennt der Controller seine Maschinenposition - und eben
+        deshalb zeigt ein vorher gesetzter Nullpunkt woanders hin. Er
+        haengt an G92, und G92 rechnet von der Maschinenposition weg,
+        die sich gerade geaendert hat. Wer ihn danach weiterbenutzt,
+        brennt neben das Werkstueck.
+        """
+        self.alarm = None
+        return self.cmd("$H", timeout=self.HOMING_SEKUNDEN)
+
     def unlock(self):
         self.alarm = None
         return self.cmd("$X")

@@ -1236,6 +1236,9 @@ class App:
         bb.grid(row=9, column=0, columnspan=3, sticky="ew", pady=2)
         ttk.Button(bb, text=T("Entsperren ($X)"), command=self.unlock).pack(side="left")
         ttk.Button(bb, text=T("Laser aus (M5)"), command=self.laser_off).pack(side="left", padx=4)
+        self.btn_home = ttk.Button(bb, text=T("Referenzfahrt ($H)"),
+                                   command=self.referenzfahrt)
+        self.btn_home.pack(side="left")
 
         ttk.Label(f, text=T("Befehl:")).grid(row=11, column=0, sticky="w", pady=(8, 0))
         self.v_cmd = tk.StringVar()
@@ -3990,6 +3993,11 @@ class App:
         if d.get("32") is not None and d["32"] < 0.5:
             hin.append(T("$32 = 0: Der Lasermodus ist AUS. Der Strahl brennt dann "
                          "auch im Stillstand weiter - mit '$32=1' einschalten."))
+        # $22 sagt, ob die Maschine ueberhaupt Endschalter benutzt. Einen
+        # Knopf anzubieten, der nur 'error:5' zurueckgibt, ist schlechter
+        # als keiner.
+        if d.get("22") is not None and hasattr(self, "btn_home"):
+            self.btn_home.state(["!disabled"] if d["22"] >= 0.5 else ["disabled"])
         if d.get("20", 0) >= 0.5:
             hin.append(T("$20 = 1: Softlimits sind an. Ohne Referenzfahrt ($H) "
                          "weist der Controller Fahrten ab."))
@@ -4124,6 +4132,26 @@ class App:
     def laser_off(self):
         self.grbl.laser_off()
         self._log("M5 gesendet")
+
+    def referenzfahrt(self):
+        """Den Kopf an die Endschalter fahren.
+
+        Gefragt wird vorher, und zwar nicht aus Hoeflichkeit: der Kopf
+        faehrt bis an den Anschlag, ohne auf Werkstuecke oder Klemmen zu
+        achten, und der Nullpunkt ist danach weg.
+        """
+        if not self._need():
+            return
+        if not messagebox.askokcancel(T("Referenzfahrt"), T(
+                "Der Kopf fährt bis an die Endschalter. Nimm vorher alles "
+                "aus dem Weg - er weicht nichts aus.\n\nNullpunkt und "
+                "Z-Referenz gelten danach nicht mehr: sie rechnen von der "
+                "Maschinenposition weg, und genau die wird jetzt neu "
+                "gesetzt.")):
+            return
+        def arbeit():
+            self.q.put(("referenz", self.grbl.home()))
+        self._bg(arbeit, T("Referenzfahrt ($H)"))
 
     def send_cmd(self):
         c = self.v_cmd.get().strip()
@@ -4607,6 +4635,25 @@ class App:
         elif k == "weiter":
             self._log(T("weiter ab {marke}").format(
                 marke=self.lbl_marke.cget("text") or T("der nächsten Zeile")))
+        elif k == "referenz":
+            # Egal wie sie ausging: was vorher galt, gilt jetzt nicht mehr.
+            # Ein gemerkter Nullpunkt waere nach der Fahrt schlimmer als
+            # gar keiner - er sieht gueltig aus und zeigt daneben.
+            self.zero_ok = self.zref_ok = False
+            self._rettung = self.null_wco = None
+            antwort = str(d or "")
+            if "error:5" in antwort:
+                self._log(T("Diese Maschine kennt keine Referenzfahrt "
+                            "($22 = 0, keine Endschalter eingeschaltet)."))
+                self.btn_home.state(["disabled"])
+            elif antwort == "timeout":
+                self._log(T("Referenzfahrt ohne Antwort - steht der Kopf "
+                            "schon auf einem Endschalter?"))
+            elif antwort.startswith("error") or antwort.startswith("ALARM"):
+                self._log(T("Referenzfahrt abgebrochen: {a}").format(a=antwort))
+            else:
+                self._log(T("Referenzfahrt fertig - Nullpunkt und "
+                            "Z-Referenz neu setzen."))
         elif k == "alarm":
             self._log(d)
             self._melde(f"ALARM: {d}")

@@ -3468,7 +3468,12 @@ class App:
         self.clear_motif()
         with open(p) as f:
             self.lines = [l for l in (x.split(";")[0].strip() for x in f) if l]
-        png, (x0, y0, x1, y1), info = J.gcode_preview(self.lines, (CANVAS - 20) / self.area)
+        # Die lange Seite des Motivs, nicht die des Betts, bestimmt die
+        # Aufloesung - sonst ist eine 0,1-mm-Gravur auf einem 400er Bett
+        # nur noch Grauschleier. _prepare_preview rechnet bis 4000 Punkte
+        # hoch, 2600 in der Quelle decken das.
+        png, (x0, y0, x1, y1), info = J.gcode_preview(
+            self.lines, (CANVAS - 20) / self.area, ziel_px=2600)
         if info is None:
             messagebox.showerror(T("G-Code"), T("Keine Fahrbewegungen in der Datei gefunden."))
             self.lines = None

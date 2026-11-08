@@ -1,4 +1,5 @@
 """Rastern, Tonwerte, Ausdehnung, Testmuster - alles ohne Oberflaeche."""
+import io
 import re
 import unittest
 
@@ -356,6 +357,63 @@ class Testmuster(unittest.TestCase):
             weg = sum(float(re.search(achse + r"(-?[\d.]+)", z).group(1))
                       for z in g if z.startswith("G1") and achse in z)
             self.assertAlmostEqual(weg, 0.0, places=3)
+
+
+class VorschauAufloesung(unittest.TestCase):
+    """Die Aufloesung muss sich nach dem Motiv richten, nicht nach dem Bett.
+
+    Vorher kam sie aus Verfahrweg und Fenstergroesse: 400 mm Bett auf 520
+    Punkte sind 1,3 Punkte je Millimeter. Eine Gravur mit 0,1 mm
+    Zeilenabstand hatte damit dreizehn Zeilen in einem Bildpunkt - zu
+    sehen war ein grauer Fleck.
+    """
+
+    def bild(self, png):
+        return Image.open(io.BytesIO(png))
+
+    def gcode(self):
+        # 40 x 20 mm Motiv, wie es auf einem grossen Bett liegen koennte
+        g, _ = J.raster_gcode(np.ones((200, 400)), 0.1, 500, 1000, x_off=5.0)
+        return g
+
+    def test_ziel_richtet_sich_nach_der_langen_seite(self):
+        """Das Motiv ist gut 46 mm lang - 400 Punkte sind 8,7 je Millimeter
+        und bleiben damit unter der Obergrenze."""
+        g = self.gcode()
+        gross = self.bild(J.gcode_preview(g, 1.3, ziel_px=400)[0])
+        self.assertAlmostEqual(max(gross.size), 400, delta=25)
+        klein = self.bild(J.gcode_preview(g, 1.3)[0])
+        self.assertLess(max(klein.size), 100)
+
+    def test_ohne_ziel_bleibt_alles_wie_vorher(self):
+        g = self.gcode()
+        self.assertEqual(self.bild(J.gcode_preview(g, 1.3)[0]).size,
+                         self.bild(J.gcode_preview(g, 1.3, ziel_px=None)[0]).size)
+
+    def test_eine_schon_feine_vorgabe_wird_nicht_vergroebert(self):
+        """ziel_px hebt an, es setzt nicht fest."""
+        g = self.gcode()
+        fein = self.bild(J.gcode_preview(g, 20.0, ziel_px=100)[0])
+        self.assertGreater(max(fein.size), 600)
+
+    def test_feiner_als_die_obergrenze_wird_es_nicht(self):
+        """Ein winziges Motiv soll kein Riesenbild werden."""
+        g = ["G21", "G90", "M4 S500", "G1 X2 Y0 F1000", "G1 X2 Y2", "M5"]
+        im = self.bild(J.gcode_preview(g, 1.0, ziel_px=4000)[0])
+        self.assertLessEqual(max(im.size), 2 * J.PX_JE_MM_MAX + 4)
+
+    def test_das_bild_zeigt_mehr_als_vorher(self):
+        """Mehr Punkte allein genuegt nicht - es muessen Toene dazukommen.
+
+        Bei 1,3 Punkten je Millimeter laufen die Zeilen zu einer Flaeche
+        zusammen; bei feiner Aufloesung bleiben Hell und Dunkel getrennt.
+        """
+        g, _ = J.raster_gcode(
+            np.tile(np.linspace(0, 1, 200), (200, 1)), 0.1, 500, 1000)
+        grob = np.asarray(self.bild(J.gcode_preview(g, 1.3)[0]).convert("L"))
+        fein = np.asarray(self.bild(
+            J.gcode_preview(g, 1.3, ziel_px=1200)[0]).convert("L"))
+        self.assertGreater(len(np.unique(fein)), len(np.unique(grob)))
 
 
 class FremderGcode(unittest.TestCase):

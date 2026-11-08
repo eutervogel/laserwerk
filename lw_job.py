@@ -816,9 +816,23 @@ def graustufentest(powers, feed, stufen=6, feld=7.0, gap=2.5, line=0.12,
     return g, info
 
 
-def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
+# Feiner als ein Zwoelftel Millimeter je Bildpunkt zu zeichnen bringt
+# nichts mehr: so fein faehrt keine Gravur, und das Bild wird nur gross.
+PX_JE_MM_MAX = 12.0
+
+
+def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3, ziel_px=None):
     """Fremden G-Code nachzeichnen: jede Fahrt mit Laser an, Graustufe nach S.
     Beachtet G0/G1/G2/G3 (Boegen als Sehne), G90/G91, M3/M4/M5, modale Werte.
+
+    ziel_px: wie viele Bildpunkte die lange Seite ungefaehr haben soll.
+    Ohne das richtet sich die Aufloesung nach dem Verfahrweg statt nach
+    dem Motiv - bei 400 mm Bett und einem Bildschirmfeld von 540 Punkten
+    sind das 1,3 Punkte je Millimeter, und eine Gravur mit 0,1 mm
+    Zeilenabstand hat dann dreizehn Zeilen in einem Punkt. Das Rastern
+    kostet dabei fast nichts; die Zeit geht fuer das Lesen der Datei
+    drauf.
+
     Rueckgabe: (png, (x0, y0, x1, y1), info) - info wie bei raster_gcode."""
     import re
     from PIL import ImageDraw
@@ -864,6 +878,13 @@ def gcode_preview(lines, px_per_mm, s_max=S_MAX, super_=3):
     xs = [c for m in moves for c in (m[0], m[2])]
     ys = [c for m in moves for c in (m[1], m[3])]
     x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    if ziel_px:
+        spanne = max(x1 - x0, y1 - y0, 1.0)
+        px_per_mm = max(px_per_mm, min(PX_JE_MM_MAX, ziel_px / spanne))
+        # Je feiner gezeichnet wird, desto weniger bringt das Ueberabtasten
+        # - und es vervierfacht den Speicher.
+        if px_per_mm > 3.0:
+            super_ = 2
     sc = px_per_mm * super_
     W = max(2, int((x1 - x0) * sc) + 2)
     H = max(2, int((y1 - y0) * sc) + 2)

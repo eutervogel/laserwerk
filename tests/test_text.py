@@ -50,6 +50,12 @@ DURCHGEREICHT = {
     "mm", "mm/min", "von 1000", "0 = automatisch",
     # Die Namen der Rasterverfahren stehen in einer Tabelle, nicht als T("...")
     "Halbton",
+    # Die Gruende fuer einen Stillstand stehen in lw_grbl.STILLSTAND
+    "Die Maschine steht in der Pause (Hold). 'Weiter' drückt sie an.",
+    "Der Deckel ist offen - oder der Schalter meldet es so. Deckel zu, dann 'Weiter'.",
+    "Die Maschine schläft ($SLP). Das weckt nur ein Reset.",
+    "Die Maschine steht im Alarm. Erst 'Entsperren ($X)', dann von vorn.",
+    "Die Maschine ist im Prüflauf ($C) - sie liest nur, sie fährt nicht.",
 }
 
 PLATZHALTER = re.compile(r"\{([a-zA-Z_][a-zA-Z_0-9]*|\d*)[^{}]*\}")

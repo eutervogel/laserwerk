@@ -5,6 +5,8 @@ einem nicht numerischen Feld (A:C bei laufendem Laser) hat den Lesethread
 umgebracht, und der Job blieb bei 0,5 Prozent stehen.
 """
 import queue
+import threading
+import time
 import unittest
 
 from hilfe import *                                           # noqa: F401,F403
@@ -130,6 +132,80 @@ class Strom(G.Grbl):
 
     def wait_idle(self, timeout=120.0):
         return True
+
+
+class StehtUndSagtWarum(unittest.TestCase):
+    """Ein Job, der haengt, muss sagen warum.
+
+    Am 8.11.2026 stand einer: Luefter und Pumpe liefen an, nichts bewegte
+    sich, nach einer Weile gingen beide wieder aus - und Laserwerk fuehrte
+    ihn die ganze Zeit als laufend. Das Neuaufsetzen greift nur im
+    Leerlauf; steht die Maschine im Hold oder Door, wartete der Job stumm.
+    Die Maschine wusste, warum sie nichts tut. Vorgelesen hat es niemand.
+    """
+
+    class Stockt(Strom):
+        """Quittiert die ersten Zeilen und schweigt dann."""
+
+        def __init__(self, bis, zustand):
+            self.bis = bis
+            super().__init__()
+            self.status["state"] = zustand
+            self.status["bf"] = (0, 65535)      # Planer voll, nicht leer
+            self.STILL_MELDEN = 0.2
+
+        def write(self, data):
+            for zeile in data.decode().splitlines():
+                self.gesendet.append(zeile)
+                if len(self.gesendet) <= self.bis:
+                    self.oks.put("ok")
+
+    def laufen(self, zustand, bis=3, warten=2.0):
+        g = self.Stockt(bis, zustand)
+        t = threading.Thread(
+            target=g.run_job, args=(list(ZEILEN), lambda *a: None), daemon=True)
+        t.start()
+        t0 = time.time()
+        while time.time() - t0 < warten:
+            if [d for a, d in g.ereignisse if a == "msg"]:
+                break
+            time.sleep(0.02)
+        time.sleep(0.3)                 # Zeit fuer eine zweite Meldung
+        g._stop = True
+        t.join(timeout=2.0)
+        return g, [d for a, d in g.ereignisse if a == "msg"]
+
+    def test_ein_offener_deckel_steht_im_protokoll(self):
+        _, meldungen = self.laufen("Door")
+        self.assertTrue(meldungen, "kein Wort zum Stillstand")
+        self.assertIn("Deckel", meldungen[0])
+
+    def test_die_pause_wird_benannt(self):
+        _, meldungen = self.laufen("Hold:0")
+        self.assertTrue(meldungen)
+        self.assertIn("Hold", meldungen[0])
+
+    def test_die_zeile_steht_dabei(self):
+        """Ohne die Stelle muss man raten, wie weit er gekommen ist."""
+        _, meldungen = self.laufen("Door", bis=3)
+        self.assertIn("3", meldungen[0])
+        self.assertIn(str(len(ZEILEN)), meldungen[0])
+
+    def test_ein_unbekannter_zustand_wird_wenigstens_genannt(self):
+        _, meldungen = self.laufen("Ratlos")
+        self.assertTrue(meldungen)
+        self.assertIn("Ratlos", meldungen[0])
+
+    def test_nur_einmal_pro_stillstand(self):
+        """Alle 0,5 Sekunden dieselbe Zeile waere kein Protokoll mehr."""
+        _, meldungen = self.laufen("Door")
+        self.assertEqual(len(meldungen), 1, meldungen)
+
+    def test_ein_laufender_job_meldet_nichts(self):
+        g = Strom()
+        g.STILL_MELDEN = 0.2
+        g.run_job(list(ZEILEN), lambda *a: None)
+        self.assertEqual([d for a, d in g.ereignisse if a == "msg"], [])
 
 
 class Referenzfahrt(unittest.TestCase):

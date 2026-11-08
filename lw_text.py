@@ -443,6 +443,19 @@ EN = {
     'Referenzfahrt ohne Antwort - steht der Kopf schon auf einem Endschalter?':
         'Homing did not answer - is the head already sitting on a limit switch?',
     'Referenzfahrt abgebrochen: {a}': 'Homing aborted: {a}',
+    'Steht seit {s:.0f} s bei Zeile {n} von {g}: {grund}':
+        'Stalled for {s:.0f} s at line {n} of {g}: {grund}',
+    'Zustand {z} - keine Quittung mehr.': 'State {z} - no more acknowledgements.',
+    "Die Maschine steht in der Pause (Hold). 'Weiter' drückt sie an.":
+        "The machine is holding. 'Resume' pushes it on.",
+    'Der Deckel ist offen - oder der Schalter meldet es so. Deckel zu, dann \'Weiter\'.':
+        "The lid is open - or the switch says so. Close it, then 'Resume'.",
+    'Die Maschine schläft ($SLP). Das weckt nur ein Reset.':
+        'The machine is asleep ($SLP). Only a reset wakes it.',
+    "Die Maschine steht im Alarm. Erst 'Entsperren ($X)', dann von vorn.":
+        "The machine is in alarm. Unlock it ($X) first, then start over.",
+    'Die Maschine ist im Prüflauf ($C) - sie liest nur, sie fährt nicht.':
+        'The machine is in check mode ($C) - it only reads, it does not move.',
     'Kamera': 'Camera',
     'Bild holen': 'Take picture',
     'Kamera über dem Bett': 'Camera above the bed',

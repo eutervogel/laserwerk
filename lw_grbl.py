@@ -317,6 +317,8 @@ class Grbl:
         grenze = None                 # bis hierhin senden, dann anhalten
         total = len(lines)
         t0 = time.time()
+        vorwaerts = t0                # wann zuletzt etwas quittiert wurde
+        gemeldet = False              # Stillstand schon einmal gesagt?
         try:
             while done < total:
                 if not self.alive:
@@ -362,11 +364,23 @@ class Grbl:
                         done += len(pend)
                         self.job_done = done
                         pend = []
+                        vorwaerts = time.time()
+                        gemeldet = False
+                    elif not gemeldet and time.time() - vorwaerts > self.STILL_MELDEN:
+                        # Der Strom steht, aber nicht im Leerlauf - dann
+                        # greift das Neuaufsetzen oben nicht, und frueher
+                        # wartete der Job hier stumm bis in alle Ewigkeit.
+                        # Die Maschine weiss, warum sie nichts tut; gesagt
+                        # hat es ihr nur niemand ab.
+                        gemeldet = True
+                        self.on_event("msg", self._stillstand_text(done, total))
                     continue
                 if pend:
                     pend.pop(0)
                 done += 1
                 self.job_done = done
+                vorwaerts = time.time()
+                gemeldet = False
                 if r.startswith("error"):
                     # einzelner Uebertragungsfehler = ein fehlender 0,1-mm-Strich
                     errors += 1
@@ -384,6 +398,30 @@ class Grbl:
             self.job_running = False
             self.pausiert = False
             self._pause_ende = False
+
+    STILL_MELDEN = 10.0         # so lange ohne Quittung, dann sagen warum
+
+    # Warum eine Maschine nichts tut, steht in ihrem Zustand - und bis
+    # hierher hat das niemand vorgelesen. Ein Job, der im Door haengt,
+    # sah genauso aus wie einer, der laeuft: Luefter an, nichts bewegt
+    # sich, und in Laserwerk stand "laeuft".
+    # Jeder Text in einem Stueck: lw_text sucht den Schluessel so, wie er
+    # im Quelltext steht, und ueber zwei Zeilen geklebt findet er ihn nicht.
+    STILLSTAND = {
+        "Hold": "Die Maschine steht in der Pause (Hold). 'Weiter' drückt sie an.",
+        "Door": "Der Deckel ist offen - oder der Schalter meldet es so. Deckel zu, dann 'Weiter'.",
+        "Sleep": "Die Maschine schläft ($SLP). Das weckt nur ein Reset.",
+        "Alarm": "Die Maschine steht im Alarm. Erst 'Entsperren ($X)', dann von vorn.",
+        "Check": "Die Maschine ist im Prüflauf ($C) - sie liest nur, sie fährt nicht.",
+    }
+
+    def _stillstand_text(self, done, total):
+        zustand = (self.status.get("state") or "?").split(":")[0]
+        grund = self.STILLSTAND.get(zustand)
+        grund = T(grund) if grund else T(
+            "Zustand {z} - keine Quittung mehr.").format(z=zustand)
+        return T("Steht seit {s:.0f} s bei Zeile {n} von {g}: {grund}").format(
+            s=self.STILL_MELDEN, n=done, g=total, grund=grund)
 
     STILL_SEKUNDEN = 3.0        # so lange muss es ruhig sein
 

@@ -1841,6 +1841,54 @@ class App:
         except (tk.TclError, AttributeError):
             return False
 
+    # Was Ebenen derselben Zeichnung miteinander teilen: alles, was die
+    # Lage im Werkstueck bestimmt. Beim Aufteilen bekommt jede Ebene die
+    # Ausdehnung der ganzen Zeichnung mit - dadurch liegen sie
+    # uebereinander. Eine davon einzeln zu verschieben hiesse, diese
+    # Deckung hinterher von Hand wiederherzustellen, und mit der Maus
+    # geht das nicht auf ein Zehntel genau.
+    LAGE = ("v_xoff", "v_yoff", "v_w", "v_h", "v_rot",
+            "v_spiegel", "v_achse", "v_lock")
+
+    def _geschwister(self, i=None):
+        """Die Ebenen derselben Zeichnung, die gewaehlte eingeschlossen.
+
+        Woran man sie erkennt: 'ebene' ist gesetzt (sie kommen aus einer
+        Aufteilung) und sie zeigen auf dieselbe Quelldatei. Elemente ohne
+        Ebene stehen fuer sich - zwei getrennt geladene Motive haben
+        nichts miteinander zu tun, auch wenn sie nebeneinanderliegen.
+        """
+        i = self.aktiv if i is None else i
+        if not (0 <= i < len(self.elemente)):
+            return []
+        e = self.elemente[i]
+        if not e.get("ebene"):
+            return [i]
+        quelle = e.get("quelle") or e.get("pfad")
+        return [k for k, a in enumerate(self.elemente)
+                if a.get("ebene") and (a.get("quelle") or a.get("pfad")) == quelle]
+
+    def _lage_auf_geschwister(self):
+        """Die Lage der gewaehlten Ebene auf ihre Geschwister schreiben.
+
+        Waehrend des Erzeugens nicht: dort wird Element fuer Element
+        gerechnet, und ein Ergebnis, das schon steht, duerfte nicht
+        nachtraeglich eine andere Lage zugeschrieben bekommen.
+        """
+        if getattr(self, "_am_erzeugen", False):
+            return
+        andere = [k for k in self._geschwister() if k != self.aktiv]
+        if not andere:
+            return
+        werte = {}
+        for name in self.LAGE:
+            try:
+                werte[name] = getattr(self, name).get()
+            except (tk.TclError, AttributeError):
+                pass
+        for k in andere:
+            self.elemente[k].update(werte)
+
     def _element_sichern(self):
         """Die Eingabefelder in das gerade gewaehlte Element zurueckschreiben."""
         if not (0 <= self.aktiv < len(self.elemente)):
@@ -1858,6 +1906,7 @@ class App:
                  bildlinien=getattr(self, "bildlinien", False),
                  src_nurbild=getattr(self, "src_nurbild", False),
                  pfad=self.src_path, quelle=self.quelle_pfad)
+        self._lage_auf_geschwister()
 
     def _element_laden(self, i, zeichnen=True):
         """Ein Element in die Eingabefelder holen."""
@@ -2432,6 +2481,7 @@ class App:
                     self.v_w.set(round(self.v_h.get() * a, 2))
             except tk.TclError:
                 pass
+        self._lage_auf_geschwister()
         self._stale()
         self._draw()
 
@@ -2514,6 +2564,7 @@ class App:
         else:
             self._keep_ratio("w")
         self._raender_zeigen()
+        self._lage_auf_geschwister()
 
     def _gen_knopf(self):
         """Hervorheben, solange kein gueltiger G-Code vorliegt."""
@@ -5212,6 +5263,10 @@ class App:
         elif sp == "y": y = 2 * a - y - hh
         self.v_xoff.set(round(max(self._xmin(), x), 2))
         self.v_yoff.set(round(max(0.0, y), 2))
+        # Beim Ziehen mit der Maus laeuft _element_sichern nicht mit - die
+        # Geschwister muessen trotzdem sofort mitwandern, sonst sieht man
+        # die Deckung erst nach dem Umschalten wieder.
+        self._lage_auf_geschwister()
 
     def _xmin(self):
         """Beim Gravieren muss links vom Motiv der Anlauf hinpassen."""

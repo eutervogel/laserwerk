@@ -3100,6 +3100,97 @@ class Referenzfahrt(Grundlage):
         self.assertNotIn("disabled", self.app.btn_home.state())
 
 
+class EbenenHaltenZusammen(Grundlage):
+    """Ebenen einer Zeichnung teilen sich ihre Lage.
+
+    Beim Aufteilen bekommt jede Ebene die Ausdehnung der ganzen Zeichnung
+    mit - dadurch liegen sie uebereinander. Eine einzeln zu verschieben
+    hiess bisher, die Deckung hinterher von Hand wiederherzustellen, und
+    mit der Maus geht das nicht auf ein Zehntel.
+    """
+
+    svg = FarbEbenen.svg              # dieselbe zweifarbige Zeichnung
+
+    def laden(self):
+        FarbEbenen.laden(self)
+        self.assertEqual(len(self.app.elemente), 2)
+
+    def lagen(self, feld="v_xoff"):
+        self.app._element_sichern()
+        return [e[feld] for e in self.app.elemente]
+
+    def test_ziehen_nimmt_die_andere_ebene_mit(self):
+        self.laden()
+        self.app._set_box(40.0, 25.0)
+        self.assertEqual(self.lagen("v_xoff"), [40.0, 40.0])
+        self.assertEqual(self.lagen("v_yoff"), [25.0, 25.0])
+
+    def test_die_groesse_gilt_fuer_alle_ebenen(self):
+        self.laden()
+        self.app.v_w.set(80.0)
+        self.app._keep_ratio("w")
+        self.assertEqual(self.lagen("v_w"), [80.0, 80.0])
+        hoehen = self.lagen("v_h")
+        self.assertEqual(hoehen[0], hoehen[1])
+
+    def test_drehen_gilt_fuer_alle_ebenen(self):
+        self.laden()
+        self.app.v_rot.set(30.0)
+        self.app._rotated()
+        self.assertEqual(self.lagen("v_rot"), [30.0, 30.0])
+
+    def test_nach_dem_umschalten_steht_dieselbe_lage_im_feld(self):
+        """Der eigentliche Beweis: die Felder der anderen Ebene zeigen es."""
+        self.laden()
+        self.app._element_laden(0)
+        self.app._set_box(33.0, 17.0)
+        self.app._element_sichern()
+        self.app._element_laden(1)
+        self.assertAlmostEqual(self.app.v_xoff.get(), 33.0, places=2)
+        self.assertAlmostEqual(self.app.v_yoff.get(), 17.0, places=2)
+
+    def test_getrennte_motive_bleiben_getrennt(self):
+        """Zwei einzeln geladene Bilder haben nichts miteinander zu tun."""
+        self.motiv()
+        zweites = dict(self.app.elemente[0])
+        zweites["anzeige"] = "zweites.png"
+        zweites["quelle"] = zweites["pfad"] = "/tmp/zweites.png"
+        self.app.elemente.append(zweites)
+        self.app._element_laden(0)
+        self.app._set_box(55.0, 12.0)
+        self.app._element_sichern()
+        self.assertAlmostEqual(self.app.elemente[0]["v_xoff"], 55.0, places=2)
+        self.assertNotAlmostEqual(
+            self.app.elemente[1].get("v_xoff", 0.0), 55.0, places=2)
+
+    def test_geschwister_nur_aus_derselben_datei(self):
+        self.laden()
+        fremd = dict(self.app.elemente[0])
+        fremd["quelle"] = fremd["pfad"] = "/tmp/andere.svg"
+        self.app.elemente.append(fremd)
+        self.assertEqual(sorted(self.app._geschwister(0)), [0, 1])
+        self.assertEqual(self.app._geschwister(2), [2])
+
+    def test_waehrend_des_erzeugens_wird_nichts_nachgezogen(self):
+        """Dort wird Element fuer Element gerechnet.
+
+        Ein Ergebnis, das schon steht, darf nicht nachtraeglich eine
+        andere Lage zugeschrieben bekommen - sonst zeigt der Rahmen
+        woanders hin als der erzeugte G-Code.
+        """
+        self.laden()
+        self.app._element_laden(0)
+        self.app._set_box(20.0, 10.0)
+        self.app._element_sichern()
+        self.app._am_erzeugen = True
+        try:
+            self.app.v_xoff.set(99.0)
+            self.app._lage_auf_geschwister()
+        finally:
+            self.app._am_erzeugen = False
+        self.assertAlmostEqual(self.app.elemente[1]["v_xoff"], 20.0, places=2)
+
+
 class Luftunterstuetzung(Grundlage):
     """Die Duese gilt fuer den ganzen Job - es gibt nur eine Pumpe."""
 

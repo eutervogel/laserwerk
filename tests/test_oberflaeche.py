@@ -3610,9 +3610,21 @@ class EichenImKamerareiter(Grundlage):
         from test_eichung import ECHT, bild_malen
         return dict(ECHT), bild_malen()
 
+    def ohne_lupe(self):
+        """Das Lupenfenster ueberspringen.
+
+        Es wartet auf einen Menschen; ein Test, der es stehen laesst,
+        haengt die ganze Ereignisschleife auf.
+        """
+        gesehen = []
+        self.app._eich_kreuze_pruefen = (
+            lambda roh, p, f, g: gesehen.append((f, g)) or (f, g))
+        return gesehen
+
     def test_aus_dem_bild_wird_eine_eichung(self):
         echt, bild = self.kunst()
         self.app.cfg["kamera"] = echt
+        self.ohne_lupe()
         self.app.v_kamera.set("/dev/video2")
         self.app.v_kam_hoehe.set(260.0)
         self.app.kam_roh = bild
@@ -3632,6 +3644,7 @@ class EichenImKamerareiter(Grundlage):
         sagen koennen."""
         echt, bild = self.kunst()
         self.app.cfg["kamera"] = echt
+        self.ohne_lupe()
         self.app.kam_roh = bild
         gefragt = []
         self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or False
@@ -3644,6 +3657,7 @@ class EichenImKamerareiter(Grundlage):
         """Eine Fehlerzahl ohne ihre Flaeche ist eine Falle."""
         echt, bild = self.kunst()
         self.app.cfg["kamera"] = echt
+        self.ohne_lupe()
         self.app.kam_roh = bild
         gefragt = []
         self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or True
@@ -3748,6 +3762,114 @@ class EichenImKamerareiter(Grundlage):
         self.app.eichen()
         self.assertEqual(len(gefragt), 1)
         self.assertEqual(len(gefragt[0]), 25)
+
+    def test_die_funde_werden_vor_dem_anpassen_gezeigt(self):
+        """Eine Eichung ist so genau wie ihr schlechtester Fund - also
+        sieht sie jeder einmal an, bevor gerechnet wird."""
+        echt, bild = self.kunst()
+        self.app.cfg["kamera"] = echt
+        gesehen = self.ohne_lupe()
+        self.app.kam_roh = bild
+        self.app.eichen()
+        self.warten(lambda: gesehen)
+        funde, gut = gesehen[0]
+        self.assertEqual(len(funde), 25)
+        self.assertEqual(len(gut), 25)
+
+    def test_wer_die_lupe_abbricht_bekommt_keine_eichung(self):
+        echt, bild = self.kunst()
+        self.app.cfg["kamera"] = echt
+        self.app.kam_roh = bild
+        self.app._eich_kreuze_pruefen = lambda roh, p, f, g: None
+        self.app.eichen()
+        self.warten(lambda: "abgebrochen" in self.app.log.get("1.0", "end"))
+        self.assertIs(self.app._kam_eichung(), echt)
+
+    # ------------------------------------------------------- Lupenfenster
+    def lupe(self):
+        """Das Lupenfenster mit fuenf Kreuzen aufbauen."""
+        _, bild = self.kunst()
+        punkte = [(30.0, 30.0), (200.0, 30.0), (370.0, 30.0),
+                  (200.0, 200.0), (370.0, 370.0)]
+        funde = [(400.0, 700.0), (600.0, 700.0), (800.0, 700.0),
+                 (600.0, 500.0), (800.0, 300.0)]
+        gut = [True, True, False, True, True]
+        return self.app._eich_lupe(bild, punkte, funde, gut)
+
+    def test_ein_klick_in_die_lupe_setzt_die_mitte(self):
+        """Sechsfach vergroessert: ein Bildpunkt auf dem Schirm ist ein
+        Sechstel Bildpunkt der Kamera."""
+        top, lage, an, stand = self.lupe()
+        try:
+            b = top.bedienung
+            mitte = self.app.LUPE_PX / 2.0
+            b["lupe_klick"](type("E", (), {"x": mitte + 12, "y": mitte - 6})())
+            x, y = lage[0]
+            self.assertAlmostEqual(x, 400.0 + 12 / self.app.LUPE_ZOOM, delta=1)
+            self.assertAlmostEqual(y, 700.0 - 6 / self.app.LUPE_ZOOM, delta=1)
+        finally:
+            top.destroy()
+
+    def test_ein_klick_holt_ein_verworfenes_kreuz_zurueck(self):
+        top, lage, an, stand = self.lupe()
+        try:
+            top.bedienung["springen"](ziel=2)
+            self.assertFalse(an[2])
+            top.bedienung["lupe_klick"](type("E", (), {"x": 10, "y": 10})())
+            self.assertTrue(an[2])
+        finally:
+            top.destroy()
+
+    def test_pfeiltasten_schieben_um_einen_bildpunkt(self):
+        top, lage, an, stand = self.lupe()
+        try:
+            top.bedienung["schieben"](-1, 2)
+            self.assertEqual(lage[0], (399.0, 702.0))
+        finally:
+            top.destroy()
+
+    def test_ein_kreuz_laesst_sich_herausnehmen(self):
+        top, lage, an, stand = self.lupe()
+        try:
+            top.bedienung["umschalten"]()
+            self.assertFalse(an[0])
+            top.bedienung["umschalten"]()
+            self.assertTrue(an[0])
+        finally:
+            top.destroy()
+
+    def test_ein_klick_in_die_uebersicht_springt_zum_naechsten(self):
+        top, lage, an, stand = self.lupe()
+        try:
+            m = top.bedienung["mass"]
+            top.bedienung["uebersicht_klick"](
+                type("E", (), {"x": 800 * m + 3, "y": 300 * m - 2})())
+            self.assertEqual(stand["i"], 4)
+        finally:
+            top.destroy()
+
+    def test_abbrechen_liefert_nichts(self):
+        top, lage, an, stand = self.lupe()
+        self.assertFalse(stand["ok"])
+        top.destroy()
+
+    def test_fertig_schliesst_und_zaehlt(self):
+        top, lage, an, stand = self.lupe()
+        top.bedienung["fertig"]()
+        self.assertTrue(stand["ok"])
+
+    def test_die_lupe_schaut_auch_ueber_den_bildrand(self):
+        """Ein Kreuz dicht am Rand darf das Fenster nicht sprengen."""
+        _, bild = self.kunst()
+        top, lage, an, stand = self.app._eich_lupe(
+            bild, [(30.0, 30.0)], [(3.0, 3.0)], [True])
+        try:
+            kasten = top.bedienung["kasten"]
+            self.assertLess(kasten[0], 0)
+            self.assertLess(kasten[1], 0)
+            self.assertEqual(kasten[2] - kasten[0], kasten[3] - kasten[1])
+        finally:
+            top.destroy()
 
     # ---------------------------------------------------------- Pruefen
     def test_pruefen_meldet_was_die_eichung_taugt(self):

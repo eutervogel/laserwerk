@@ -511,6 +511,16 @@ EN = {
         'Calibration grid ready - press Start to burn it',
     'Eichraster - Unterlage mindestens {b:.0f} x {h:.0f} mm':
         'Calibration grid - support at least {b:.0f} x {h:.0f} mm',
+    'Kreuze prüfen': 'Check the crosses',
+    'In die Lupe klicken setzt die Mitte. Pfeiltasten schieben um einen Bildpunkt, Eingabe geht weiter, Entf nimmt das Kreuz heraus. Ein Klick links springt zum nächsten Kreuz.':
+        'Clicking in the magnifier sets the centre. Arrow keys nudge by one pixel, Return moves on, Delete takes the cross out. A click on the left jumps to the nearest cross.',
+    'Kreuz {i} von {n} bei X {x:.0f} / Y {y:.0f} - {z} zählen':
+        'Cross {i} of {n} at X {x:.0f} / Y {y:.0f} - {z} count',
+    'zurück': 'back',
+    'nächstes': 'next',
+    'zählt nicht': 'skip this one',
+    'Fertig': 'Done',
+    'Eichen abgebrochen.': 'Calibration cancelled.',
     'Eckkreuze anklicken': 'Click the corner crosses',
     '{i} von 4: auf das Kreuz bei X {x:.0f} / Y {y:.0f} klicken.':
         '{i} of 4: click the cross at X {x:.0f} / Y {y:.0f}.',

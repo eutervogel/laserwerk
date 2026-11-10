@@ -584,6 +584,8 @@ def getrimmt(funde, punkte_mm, bildgroesse, gut, hoehe=0.0, dicke=0.0,
     die Trimmung durch eine schon gute Anpassung, bis nur noch die vier
     Punkte uebrig sind, die jede Homographie exakt trifft.
     """
+    funde = np.atleast_2d(np.asarray(funde, dtype=float))
+    punkte_mm = np.atleast_2d(np.asarray(punkte_mm, dtype=float))
     behalten = np.array(gut, dtype=bool)
     eichung = None
     for _ in range(max(1, runden)):

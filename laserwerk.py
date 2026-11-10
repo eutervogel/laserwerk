@@ -8,7 +8,7 @@ Nullpunkt setzen, Fokus testen, gravieren.
 import base64, bisect, io, math, os, queue, re, sys, threading, time
 import traceback
 import urllib.parse
-from PIL import Image
+from PIL import Image, ImageOps
 import tkinter as tk
 from tkinter import ttk
 
@@ -1236,12 +1236,36 @@ class App:
         vorlage = {"geraet": self.v_kamera.get().strip()}
 
         def arbeit():
-            e, funde, guete = EI.eichen(
+            funde, guete, gut, h = EI.suchen(
                 roh, punkte, start=alt or None, ecken_px=ecken,
-                dicke=dicke, hoehe=hoehe, vorlage=vorlage)
-            self.q.put(("eichung", (e, funde, guete)))
+                dicke=dicke, hoehe=hoehe)
+            self.q.put(("eichfunde",
+                        (roh, punkte, funde, gut, h, dicke, vorlage)))
         self._bg(arbeit, T("suche {n} Kreuze im Bild ...")
                  .format(n=len(punkte)))
+
+    def _eichfunde_fertig(self, d):
+        """Die Funde zeigen, nachbessern lassen, dann erst anpassen.
+
+        Die Suche ist gut, aber nicht unfehlbar, und eine Eichung ist
+        genau so genau wie ihr schlechtester Fund. Deshalb sieht sie
+        jeder einmal an, bevor gerechnet wird.
+        """
+        roh, punkte, funde, gut, hoehe, dicke, vorlage = d
+        antwort = self._eich_kreuze_pruefen(roh, punkte, funde, gut)
+        if antwort is None:
+            self._log(T("Eichen abgebrochen."))
+            return
+        funde, gut = antwort
+        try:
+            eichung, behalten = EI.getrimmt(funde, punkte, roh.size, gut,
+                                            hoehe=hoehe, dicke=dicke,
+                                            vorlage=vorlage)
+        except ValueError as e:
+            messagebox.showerror(T("Eichen"), str(e))
+            return
+        self._eichung_fertig((eichung, funde,
+                              [1.0 if b else 0.0 for b in behalten]))
 
     def _eichung_fertig(self, d):
         """Das Ergebnis zeigen - und erst auf Zusage uebernehmen.
@@ -1252,7 +1276,7 @@ class App:
         """
         eichung, funde, guete = d
         alt = self._kam_eichung()
-        gefunden = int((guete > 0).sum())
+        gefunden = sum(1 for g in guete if g)
         text = T("{g} von {n} Kreuzen gefunden.\n\n"
                  "Neue Eichung: Fehler {m:.2f} mm im Mittel, {x:.2f} mm "
                  "größter - über {bx:.0f} x {by:.0f} mm.").format(
@@ -1381,6 +1405,164 @@ class App:
                    command=top.destroy).pack(anchor="e", padx=8, pady=6)
         fragen()
         return top, gefunden
+
+    LUPE_PX = 380              # Kantenlaenge der Lupe auf dem Schirm
+    LUPE_ZOOM = 6              # so viel groesser als das Kamerabild
+    UEBERSICHT_PX = 520
+
+    def _eich_kreuze_pruefen(self, roh, punkte, funde, gut):
+        """Die gefundenen Kreuze ansehen und von Hand richtigstellen.
+
+        Die Suche ist gut, aber nicht unfehlbar: eines liegt im
+        Lichtschleier, ueber einem steht der Kopf, eines faellt mit einer
+        Blattkante zusammen. Wer es sieht, trifft die Mitte besser als
+        jeder Filter - vorausgesetzt, er sieht sie gross genug. Die Lupe
+        zeigt sechsfach und hebt den Kontrast an; im Kamerabild selbst
+        ist eine gebrannte Spur nur ein paar Graustufen tief.
+
+        Zurueck kommen die berichtigten Stellen und welche zaehlen - oder
+        None, wenn abgebrochen wurde.
+        """
+        top, lage, an, stand = self._eich_lupe(roh, punkte, funde, gut)
+        top.grab_set()
+        self.root.wait_window(top)
+        return (lage, an) if stand["ok"] else None
+
+    def _eich_lupe(self, roh, punkte, funde, gut):
+        """Das Lupenfenster bauen. Vom Warten getrennt, damit ein Test es
+        bedienen kann, ohne eine Ereignisschleife zu brauchen."""
+        lage = [(float(x), float(y)) for x, y in funde]
+        an = [bool(g) for g in gut]
+        stand = {"i": 0, "ok": False}
+        kasten = [0, 0, 1, 1]
+
+        top = tk.Toplevel(self.root)
+        top.title(T("Kreuze prüfen"))
+        top.transient(self.root)
+        lbl = ttk.Label(top, text="")
+        lbl.grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(8, 2))
+        ttk.Label(top, style="Muted.TLabel", wraplength=self.UEBERSICHT_PX
+                  + self.LUPE_PX, text=T(
+                      "In die Lupe klicken setzt die Mitte. Pfeiltasten "
+                      "schieben um einen Bildpunkt, Eingabe geht weiter, "
+                      "Entf nimmt das Kreuz heraus. Ein Klick links springt "
+                      "zum nächsten Kreuz.")).grid(
+            row=1, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 6))
+
+        mass = min(1.0, self.UEBERSICHT_PX / float(roh.width))
+        klein = roh.resize((max(1, int(roh.width * mass)),
+                            max(1, int(roh.height * mass))), Image.LANCZOS)
+        cv_u = tk.Canvas(top, width=klein.width, height=klein.height,
+                         highlightthickness=0, background=S.PANEL)
+        cv_u.grid(row=2, column=0, padx=(8, 4))
+        cv_l = tk.Canvas(top, width=self.LUPE_PX, height=self.LUPE_PX,
+                         highlightthickness=0, background=S.PANEL)
+        cv_l.grid(row=2, column=1, padx=(4, 8))
+        cv_u.bild = self._tkbild(klein)
+
+        def lupe_malen():
+            x, y = lage[stand["i"]]
+            r = self.LUPE_PX / (2.0 * self.LUPE_ZOOM)
+            kasten[:] = [int(round(x - r)), int(round(y - r)),
+                         int(round(x + r)), int(round(y + r))]
+            # Kontrast anheben, sonst ist die Spur nicht zu sehen. Nur
+            # Helligkeit und Kontrast - es wird nichts hinzuerfunden.
+            aus = ImageOps.autocontrast(roh.crop(tuple(kasten)).convert("L"),
+                                        cutoff=2)
+            cv_l.bild = self._tkbild(
+                aus.resize((self.LUPE_PX, self.LUPE_PX), Image.LANCZOS))
+            cv_l.delete("all")
+            cv_l.create_image(0, 0, anchor="nw", image=cv_l.bild)
+            m = self.LUPE_PX / 2.0
+            farbe = S.ACCENT if an[stand["i"]] else S.DANGER
+            # Mit Luecke in der Mitte: ein durchgezogenes Fadenkreuz
+            # verdeckt genau das, was beurteilt werden soll.
+            for a, b, c, d in ((m - 70, m, m - 9, m), (m + 9, m, m + 70, m),
+                               (m, m - 70, m, m - 9), (m, m + 9, m, m + 70)):
+                cv_l.create_line(a, b, c, d, fill=farbe)
+            cv_l.create_oval(m - 2, m - 2, m + 2, m + 2, outline=farbe)
+
+        def uebersicht_malen():
+            cv_u.delete("all")
+            cv_u.create_image(0, 0, anchor="nw", image=cv_u.bild)
+            for k, (x, y) in enumerate(lage):
+                a, b = x * mass, y * mass
+                farbe = S.ACCENT if an[k] else S.DANGER
+                r = 8 if k == stand["i"] else 4
+                cv_u.create_line(a - r, b, a + r, b, fill=farbe)
+                cv_u.create_line(a, b - r, a, b + r, fill=farbe)
+                if k == stand["i"]:
+                    cv_u.create_rectangle(a - 11, b - 11, a + 11, b + 11,
+                                          outline=farbe, dash=(2, 2))
+
+        def zeigen():
+            i = stand["i"]
+            mx, my = punkte[i]
+            lbl.configure(text=T(
+                "Kreuz {i} von {n} bei X {x:.0f} / Y {y:.0f} - {z} zählen"
+            ).format(i=i + 1, n=len(lage), x=mx, y=my, z=sum(an)))
+            uebersicht_malen()
+            lupe_malen()
+
+        def springen(d=1, ziel=None):
+            stand["i"] = (ziel if ziel is not None
+                          else (stand["i"] + d) % len(lage))
+            zeigen()
+
+        def lupe_klick(e):
+            breite = max(1, kasten[2] - kasten[0])
+            lage[stand["i"]] = (kasten[0] + e.x * breite / float(self.LUPE_PX),
+                                kasten[1] + e.y * breite / float(self.LUPE_PX))
+            an[stand["i"]] = True
+            zeigen()
+
+        def uebersicht_klick(e):
+            d = [(e.x - x * mass) ** 2 + (e.y - y * mass) ** 2
+                 for x, y in lage]
+            springen(ziel=d.index(min(d)))
+
+        def schieben(dx, dy):
+            x, y = lage[stand["i"]]
+            lage[stand["i"]] = (x + dx, y + dy)
+            an[stand["i"]] = True
+            zeigen()
+
+        def umschalten(*_):
+            an[stand["i"]] = not an[stand["i"]]
+            zeigen()
+
+        def fertig():
+            stand["ok"] = True
+            top.destroy()
+
+        cv_l.bind("<Button-1>", lupe_klick)
+        cv_u.bind("<Button-1>", uebersicht_klick)
+        for taste, (dx, dy) in (("<Left>", (-1, 0)), ("<Right>", (1, 0)),
+                                ("<Up>", (0, -1)), ("<Down>", (0, 1))):
+            top.bind(taste, lambda e, a=dx, b=dy: schieben(a, b))
+        top.bind("<Return>", lambda e: springen(1))
+        top.bind("<Delete>", umschalten)
+
+        knoepfe = ttk.Frame(top)
+        knoepfe.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8,
+                     pady=6)
+        ttk.Button(knoepfe, text=T("zurück"), width=9,
+                   command=lambda: springen(-1)).pack(side="left")
+        ttk.Button(knoepfe, text=T("nächstes"), width=9,
+                   command=lambda: springen(1)).pack(side="left", padx=4)
+        ttk.Button(knoepfe, text=T("zählt nicht"), width=12,
+                   command=umschalten).pack(side="left")
+        ttk.Button(knoepfe, text=T("Fertig"), width=11, style="Accent.TButton",
+                   command=fertig).pack(side="right", padx=(4, 0))
+        ttk.Button(knoepfe, text=T("Abbrechen"), width=11,
+                   command=top.destroy).pack(side="right")
+        # Damit ein Test dieselben Wege nehmen kann wie die Maus.
+        top.bedienung = dict(springen=springen, lupe_klick=lupe_klick,
+                             uebersicht_klick=uebersicht_klick,
+                             umschalten=umschalten, schieben=schieben,
+                             fertig=fertig, kasten=kasten, mass=mass)
+        zeigen()
+        return top, lage, an, stand
 
     def _tkbild(self, bild):
         """Ein PIL-Bild als PhotoImage - ohne ImageTk, das nicht ueberall da ist."""
@@ -4975,6 +5157,8 @@ class App:
             self._status_zeigen()
         elif k == "kamerabild":
             self._kamera_uebernehmen(d)
+        elif k == "eichfunde":
+            self._eichfunde_fertig(d)
         elif k == "eichung":
             self._eichung_fertig(d)
         elif k == "eichpruefung":

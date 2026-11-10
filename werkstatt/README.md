@@ -113,6 +113,32 @@ Bildpunkten: die Tonne staucht den Bildrand, dort sind Millimeter weniger
 Bildpunkte wert, und wer in Bildpunkten anpasst, gewichtet ausgerechnet
 die Mitte hoch, an der ohnehin alles stimmt.
 
+### Was am 10.11.2026 beim ersten echten Lauf schiefging
+
+Zwei Dinge, beide nicht in der Rechnung:
+
+1. **Die Belichtung.** Die Automatik der Kamera regelt sich in diesem
+   Gehaeuse nach unten weg - die ersten Bilder sind hell, nach dreissig
+   Bildern liegt das Papier bei Helligkeit 23 von 255. Eine gebrannte
+   Spur ist dann fuenf Stufen tief, das Rauschen zwei. Mit fester
+   Belichtung (`v4l2-ctl -c auto_exposure=1 -c exposure_time_absolute=250`)
+   und festem Fokus liegt das Papier bei 169, und alles ist da.
+2. **Die Blattkanten.** Mehrere Blaetter uebereinander: wo sich zwei
+   Kanten kreuzen, steht ein Kreuz, und es ist ein Vielfaches dunkler als
+   die gebrannte Spur. Die Suche nahm die staerkste Antwort im Fenster
+   und fand siebenmal die Kante. Seitdem wird die Antwort mit einer
+   Glocke um die Vorhersage gewichtet, und die Anpassung wirft Ausreisser
+   heraus, statt ihren Fehler auf alle zu verteilen.
+
+Gemessen danach, am selben Bett: **0,37 mm im Mittel, 0,75 mm groesster**
+ueber 340 x 340 mm, 22 von 25 Kreuzen. Die alte Eichung kam an denselben
+Kreuzen auf 0,99 / 3,82 mm.
+
+Was uebrig bleibt, macht die Lupe: jeder Fund laesst sich sechsfach
+vergroessert ansehen und die Mitte von Hand setzen. Drei Kreuze fielen
+hier durch - eines verdeckte der Kopf, zwei lagen im Lichtschleier am
+oberen Rand.
+
 ### Der Hebel ist die Mitte, nicht die Zahl der Kreuze
 
 Am kuenstlichen Modell gemessen, Fehler ueber das ganze Bett:

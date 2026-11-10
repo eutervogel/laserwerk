@@ -164,7 +164,8 @@ def spur(bild, saum=41):
     return hoch, innen
 
 
-def kreuze_suchen(bild, vorhersage, arm_px=34, fenster=None, dick=5):
+def kreuze_suchen(bild, vorhersage, arm_px=34, fenster=None, dick=5,
+                  streuung=None):
     """Die gebrannten Kreuze im Bild finden, jedes in einem Fenster.
 
     Frei zu suchen ist der falsche Weg: die Spur auf Pappe ist ein paar
@@ -173,6 +174,15 @@ def kreuze_suchen(bild, vorhersage, arm_px=34, fenster=None, dick=5):
     Eichung oder aus vier angeklickten Eckkreuzen - ist nicht falsch, nur
     ungenau. Sie sagt auf ein paar Millimeter, wo jedes Kreuz liegt, und
     damit ist der Fund auch gleich zugeordnet.
+
+    **Im Fenster gewinnt nicht die staerkste Antwort, sondern die
+    naechste.** Wer das uebersieht, findet die Kanten der Unterlage: zwei
+    uebereinandergelegte Blaetter kreuzen sich, und so eine Kreuzung ist
+    um ein Vielfaches dunkler als eine gebrannte Spur. Am 10.11.2026 hat
+    genau das aus fuenfundzwanzig Kreuzen sieben Fehlgriffe gemacht und
+    eine Eichung mit 14 mm Fehler. Die Vorhersage liegt dagegen auf ein
+    paar Bildpunkte genau - also zaehlt die Antwort mal einer Glocke um
+    die Vorhersage, und die Kante zwei Zentimeter weiter faellt durch.
 
     Zurueck kommen die Fundstellen und zu jeder eine Guete. Guete 0 heisst
     'nicht gefunden' - dann steht an der Stelle die Vorhersage, damit der
@@ -183,34 +193,64 @@ def kreuze_suchen(bild, vorhersage, arm_px=34, fenster=None, dick=5):
     if fenster is None:
         fenster = _fensterbreite(vorhersage, arm_px)
     fenster = max(arm_px + 4, int(fenster))
+    streuung = max(2.0, float(streuung if streuung else fenster / 2.0))
     dick = max(1, int(dick) | 1)
 
-    hoch, innen = spur(bild)
-    punkt = np.minimum(_kasten(hoch, dick, 2 * arm_px + 1),
-                       _kasten(hoch, 2 * arm_px + 1, dick))
-    punkt = np.where(innen, punkt, 0.0)
+    punkt = kreuzantwort(bild, arm_px, dick)
     H, W = punkt.shape
+    yy, xx = np.mgrid[-fenster:fenster + 1, -fenster:fenster + 1]
+    glocke = np.exp(-(xx ** 2 + yy ** 2) / (2.0 * streuung ** 2))
 
     funde, guete = [], []
     for px, py in vorhersage:
-        x0, x1 = int(px) - fenster, int(px) + fenster + 1
-        y0, y1 = int(py) - fenster, int(py) + fenster + 1
-        x0, y0 = max(0, x0), max(0, y0)
-        x1, y1 = min(W, x1), min(H, y1)
-        if x1 - x0 < 3 or y1 - y0 < 3:
+        x0, y0 = int(px) - fenster, int(py) - fenster
+        a0, b0 = max(0, x0), max(0, y0)
+        a1 = min(W, x0 + 2 * fenster + 1)
+        b1 = min(H, y0 + 2 * fenster + 1)
+        if a1 - a0 < 3 or b1 - b0 < 3:
             funde.append((px, py))
             guete.append(0.0)
             continue
-        f = punkt[y0:y1, x0:x1]
+        f = (punkt[b0:b1, a0:a1]
+             * glocke[b0 - y0:b1 - y0, a0 - x0:a1 - x0])
         if f.max() <= 0:
             funde.append((px, py))
             guete.append(0.0)
             continue
         dy, dx = divmod(int(f.argmax()), f.shape[1])
-        mitte = _schwerpunkt(hoch, innen, x0 + dx, y0 + dy, arm_px)
+        mitte = _feinlage(punkt, a0 + dx, b0 + dy)
         funde.append(mitte)
-        guete.append(float(f.max()))
+        guete.append(float(punkt[b0 + dy, a0 + dx]))
     return np.array(funde, dtype=float), np.array(guete, dtype=float)
+
+
+def kreuzantwort(bild, arm_px, dick=5):
+    """Wie sehr jede Stelle im Bild nach einem Kreuz aussieht."""
+    hoch, innen = spur(bild)
+    dick = max(1, int(dick) | 1)
+    arm_px = max(4, int(round(arm_px)))
+    punkt = np.minimum(_kasten(hoch, dick, 2 * arm_px + 1),
+                       _kasten(hoch, 2 * arm_px + 1, dick))
+    return np.where(innen, punkt, 0.0)
+
+
+def _feinlage(punkt, gx, gy, rand=6):
+    """Die Mitte genauer als auf den Bildpunkt.
+
+    Gewogen wird die Kreuzantwort selbst, nicht die Spur: die Antwort hat
+    genau in der Mitte ihre Spitze, waehrend die Spur auch entlang der
+    Arme dunkel ist - und wenn daneben eine fremde Kante liegt, zieht die
+    den Schwerpunkt der Spur zu sich herueber.
+    """
+    H, W = punkt.shape
+    y0, y1 = max(0, gy - rand), min(H, gy + rand + 1)
+    x0, x1 = max(0, gx - rand), min(W, gx + rand + 1)
+    s = punkt[y0:y1, x0:x1]
+    w = np.clip(s - s.min(), 0, None)
+    if w.sum() <= 0:
+        return float(gx), float(gy)
+    ay, ax = np.mgrid[y0:y1, x0:x1]
+    return float((ax * w).sum() / w.sum()), float((ay * w).sum() / w.sum())
 
 
 def _fensterbreite(vorhersage, arm_px):
@@ -222,24 +262,6 @@ def _fensterbreite(vorhersage, arm_px):
     w = np.hypot(d[..., 0], d[..., 1])
     w[np.arange(len(w)), np.arange(len(w))] = np.inf
     return int(max(arm_px + 4, min(6 * arm_px, 0.45 * w.min())))
-
-
-def _schwerpunkt(hoch, innen, gx, gy, arm_px):
-    """Die Mitte genauer als auf den Bildpunkt: Schwerpunkt der Spur.
-
-    Das Kastenmittel trifft die Mitte nur auf ein paar Punkte genau, und
-    ein Bildpunkt ist hier ein Drittel Millimeter. Die dunkelsten dreissig
-    Prozent der Umgebung wiegen den Rest heraus.
-    """
-    H, W = hoch.shape
-    s0, s1 = max(0, gy - arm_px - 8), min(H, gy + arm_px + 9)
-    t0, t1 = max(0, gx - arm_px - 8), min(W, gx + arm_px + 9)
-    w = hoch[s0:s1, t0:t1] * innen[s0:s1, t0:t1]
-    g = np.clip(w - np.percentile(w, 70), 0, None)
-    if g.sum() <= 0:
-        return float(gx), float(gy)
-    yy, xx = np.mgrid[s0:s1, t0:t1]
-    return float((xx * g).sum() / g.sum()), float((yy * g).sum() / g.sum())
 
 
 # ------------------------------------------------------------ Anpassen
@@ -470,9 +492,9 @@ def _armlaenge_px(eichung, punkte_mm, dicke, arm=ARM):
     return float(np.median(np.hypot(*(b - a).T)))
 
 
-def eichen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
-           hoehe=None, mindestguete=0.25, vorlage=None):
-    """Der ganze Weg: suchen, anpassen, enger suchen, noch einmal anpassen.
+def suchen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
+           hoehe=None, mindestguete=0.25):
+    """Die beiden Suchdurchgaenge - ohne die abschliessende Anpassung.
 
     'start' ist die bisherige Eichung, 'ecken_px' sind vier angeklickte
     Eckkreuze - eins von beidem muss da sein, sonst weiss niemand, wo zu
@@ -484,8 +506,12 @@ def eichen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
     und dann findet die enge Suche auch die Kreuze, die im ersten
     Durchgang knapp am Fenster vorbeilagen.
 
-    Zurueck kommen Eichung, Fundstellen und Gueten. Wo die Guete null ist,
-    wurde kein Kreuz gefunden - die Stelle ist dann nicht eingerechnet.
+    Getrennt von eichen(), damit zwischen Suchen und Anpassen noch ein
+    Mensch dazwischentreten kann: die Lupe im Kamerareiter zeigt jeden
+    Fund gross und laesst die Mitte von Hand setzen.
+
+    Zurueck kommen Fundstellen, Gueten, welche brauchbar sind, und die
+    Hoehe, mit der gerechnet wurde.
     """
     mm = np.atleast_2d(np.asarray(punkte_mm, dtype=float))
     wegweiser = start
@@ -498,22 +524,79 @@ def eichen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
     if hoehe is None:
         hoehe = float(wegweiser.get("hoehe", 0.0) or 0.0)
 
-    eichung = None
-    funde = guete = None
+    funde = guete = gut = None
     for durchgang in range(2):
         vorher = KAM.maschine_nach_bild(mm, wegweiser, dicke)
         arm_px = _armlaenge_px(wegweiser, mm, dicke)
-        funde, guete = kreuze_suchen(bild, vorher, arm_px=arm_px)
+        # Im zweiten Durchgang eng: die Vorhersage sitzt dann auf einem
+        # halben Millimeter, und jede fremde Kante, die draussen bleibt,
+        # kann auch nicht mehr gewinnen.
+        fenster = max(12, int(1.5 * arm_px)) if durchgang else None
+        funde, guete = kreuze_suchen(bild, vorher, arm_px=arm_px,
+                                     fenster=fenster)
         gut = _brauchbar(guete, mindestguete)
         if gut.sum() < MINDESTKREUZE:
             raise ValueError(
                 "nur %d von %d Kreuzen gefunden - zu wenig fuer eine Eichung"
                 % (int(gut.sum()), len(mm)))
-        eichung = anpassen(funde[gut], mm[gut], bild.size, hoehe, dicke,
-                           vorlage=vorlage if durchgang else wegweiser)
-        wegweiser = eichung
-    guete = np.where(_brauchbar(guete, mindestguete), guete, 0.0)
-    return eichung, funde, guete
+        if not durchgang:
+            wegweiser = getrimmt(funde, mm, bild.size, gut, hoehe=hoehe,
+                                 dicke=dicke, vorlage=wegweiser)[0]
+    return funde, guete, gut, float(hoehe)
+
+
+def eichen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
+           hoehe=None, mindestguete=0.25, vorlage=None):
+    """Suchen und anpassen in einem - der Weg ohne Zwischenfrage.
+
+    Zurueck kommen Eichung, Fundstellen und Gueten. Wo die Guete null ist,
+    wurde kein Kreuz gefunden oder es ist als Ausreisser geflogen - die
+    Stelle ist dann nicht eingerechnet.
+    """
+    mm = np.atleast_2d(np.asarray(punkte_mm, dtype=float))
+    funde, guete, gut, hoehe = suchen(bild, mm, start, ecken_px, dicke,
+                                      hoehe, mindestguete)
+    eichung, behalten = getrimmt(funde, mm, bild.size, gut, hoehe=hoehe,
+                                 dicke=dicke, vorlage=vorlage)
+    return eichung, funde, np.where(behalten, guete, 0.0)
+
+
+AUSREISSER = 3.0           # so viel mal dem mittleren Rest ist zu weit
+TRIMMGRENZE = 0.5          # mm - darunter wird nie aussortiert
+
+
+def getrimmt(funde, punkte_mm, bildgroesse, gut, hoehe=0.0, dicke=0.0,
+             vorlage=None, runden=5):
+    """Anpassen, Ausreisser verwerfen, neu anpassen - bis es steht.
+
+    Ein einziger Fehlgriff reicht, um die ganze Eichung zu verziehen: die
+    Ausgleichsrechnung kann ihn nicht als falsch erkennen, sie verteilt
+    seinen Fehler auf alle anderen. Am 10.11.2026 hat ein Stapel
+    ueberlappender Blaetter genau das geliefert - wo sich zwei Blattkanten
+    kreuzen, steht ein Kreuz, das viel dunkler ist als die gebrannte Spur.
+
+    Wer erst anpasst und dann wegwirft, was weit abliegt, laesst den
+    Fehlgriff den Rest nicht mitreissen. Gemessen wird gegen den
+    *mittleren* Rest, nicht gegen eine feste Zahl: wie genau eine Eichung
+    werden kann, haengt am Bild.
+
+    Unter einem halben Millimeter wird nie aussortiert. Sonst frisst sich
+    die Trimmung durch eine schon gute Anpassung, bis nur noch die vier
+    Punkte uebrig sind, die jede Homographie exakt trifft.
+    """
+    behalten = np.array(gut, dtype=bool)
+    eichung = None
+    for _ in range(max(1, runden)):
+        eichung = anpassen(funde[behalten], punkte_mm[behalten], bildgroesse,
+                           hoehe, dicke, vorlage=vorlage)
+        rest = fehler(eichung, funde, punkte_mm)[2]
+        grenze = max(AUSREISSER * float(np.median(rest[behalten])),
+                     TRIMMGRENZE)
+        neu = behalten & (rest <= grenze)
+        if neu.sum() < MINDESTKREUZE or bool((neu == behalten).all()):
+            break
+        behalten = neu
+    return eichung, behalten
 
 
 def _zeile(mm):
@@ -532,12 +615,16 @@ def _brauchbar(guete, mindestguete):
     """Welche Funde zaehlen.
 
     Nicht gegen eine feste Zahl - wie dunkel die Spur wird, haengt an
-    Material, Licht und Leistung. Gemessen wird gegen den Besten: was
-    weniger als ein Viertel davon hergibt, ist Rauschen oder ein Kreuz,
-    das der Kopf verdeckt.
+    Material, Licht und Leistung. Gemessen wird gegen den *mittleren*
+    Fund, nicht gegen den besten: ein einziger Fehlgriff auf einer
+    Blattkante ist zehnmal dunkler als jede gebrannte Spur, und gegen den
+    gemessen faellt dann das ganze echte Raster durch.
     """
     g = np.asarray(guete, dtype=float)
-    return (g > 0) & (g >= mindestguete * g.max())
+    da = g > 0
+    if not da.any():
+        return da
+    return da & (g >= mindestguete * float(np.median(g[da])))
 
 
 def pruefen(bild, eichung, punkte_mm, dicke=0.0, mindestguete=0.25):

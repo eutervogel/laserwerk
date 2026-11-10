@@ -274,6 +274,77 @@ class KreuzeImBildFinden(unittest.TestCase):
         self.assertFalse((guete > 0).any())
 
 
+class FremdeKantenGewinnenNicht(unittest.TestCase):
+    """Der Fehler vom 10.11.2026, als Test.
+
+    Auf dem Bett lagen mehrere Blaetter uebereinander. Wo sich zwei
+    Blattkanten kreuzen, steht ein Kreuz - und das ist um ein Vielfaches
+    dunkler als eine gebrannte Spur. Die Suche nahm im Fenster die
+    staerkste Antwort und fand siebenmal die Kante. Heraus kam eine
+    Eichung mit 14 mm Fehler, angeboten wie jede andere.
+    """
+
+    def kante_dazu(self, bild, punkt, versatz=55, farbe=40, breit=5):
+        """Ein hartes Kreuz aus zwei Blattkanten neben ein echtes Kreuz."""
+        bild = bild.copy()
+        mal = ImageDraw.Draw(bild)
+        x, y = punkt[0] + versatz, punkt[1] + versatz
+        mal.line([x - 200, y, x + 200, y], fill=(farbe,) * 3, width=breit)
+        mal.line([x, y - 200, x, y + 200], fill=(farbe,) * 3, width=breit)
+        return bild
+
+    def antwort_bei(self, antwort, punkt):
+        x, y = int(punkt[0]), int(punkt[1])
+        return float(antwort[y - 5:y + 6, x - 5:x + 6].max())
+
+    def test_die_kante_ist_wirklich_die_staerkere(self):
+        """Sonst prueft der naechste Test nichts."""
+        bild = self.kante_dazu(kunstbild(), SOLL_PX[12])
+        a = E.kreuzantwort(bild, int(round(arm_px())))
+        echt = self.antwort_bei(a, SOLL_PX[12])
+        kante = self.antwort_bei(a, SOLL_PX[12] + 55)
+        self.assertGreater(kante, 1.2 * echt)
+
+    def test_die_naechste_antwort_zaehlt_nicht_die_staerkste(self):
+        bild = self.kante_dazu(kunstbild(), SOLL_PX[12])
+        funde, guete = E.kreuze_suchen(bild, SOLL_PX, arm_px=arm_px(),
+                                       fenster=80)
+        d = np.hypot(*(funde[12] - SOLL_PX[12]))
+        self.assertLess(d, 8.0, "die Blattkante hat gewonnen")
+
+    def test_ohne_die_glocke_gewinnt_sie(self):
+        """Der Beleg, dass die Glocke den Unterschied macht und nicht
+        irgendetwas anderes am Bild."""
+        bild = self.kante_dazu(kunstbild(), SOLL_PX[12])
+        funde, _ = E.kreuze_suchen(bild, SOLL_PX, arm_px=arm_px(),
+                                   fenster=80, streuung=1e6)
+        self.assertGreater(np.hypot(*(funde[12] - SOLL_PX[12])), 40.0)
+
+    def test_ein_fehlgriff_reisst_die_eichung_nicht_mit(self):
+        """Die Ausgleichsrechnung kann einen Fehlgriff nicht als falsch
+        erkennen - sie verteilt seinen Fehler auf alle anderen."""
+        px = SOLL_PX.copy()
+        px[7] = px[7] + np.array([60.0, -40.0])
+        gut = np.ones(len(px), bool)
+        eichung, behalten = E.getrimmt(px, PUNKTE, ECHT["bild"], gut,
+                                       hoehe=260.0)
+        self.assertFalse(behalten[7])
+        self.assertEqual(int(behalten.sum()), len(px) - 1)
+        self.assertLess(eichung["fehler_mm"], 0.01)
+
+    def test_ohne_ausreisser_wird_nichts_weggeworfen(self):
+        """Sonst frisst sich die Trimmung durch eine gute Anpassung, bis
+        nur die vier Punkte bleiben, die jede Homographie exakt trifft."""
+        gut = np.ones(len(SOLL_PX), bool)
+        _, behalten = E.getrimmt(SOLL_PX, PUNKTE, ECHT["bild"], gut)
+        self.assertEqual(int(behalten.sum()), len(SOLL_PX))
+
+    def test_eine_einzige_starke_antwort_verwirft_nicht_den_rest(self):
+        """Gemessen wird gegen den mittleren Fund, nicht gegen den besten."""
+        guete = np.array([4.0, 5.0, 4.5, 5.0, 400.0])
+        self.assertTrue(E._brauchbar(guete, 0.25).all())
+
+
 class DerGanzeAblauf(unittest.TestCase):
     def test_mit_einer_schiefen_alten_eichung(self):
         """So sieht der Normalfall aus: es gibt eine Eichung, sie ist nur

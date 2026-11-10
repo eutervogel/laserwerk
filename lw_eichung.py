@@ -45,7 +45,7 @@ gewichtet die Bildmitte hoeher - genau die Stelle, an der ohnehin alles
 stimmt.
 """
 import numpy as np
-from PIL import ImageFilter
+from PIL import Image, ImageFilter
 
 import lw_kamera as KAM
 
@@ -165,7 +165,7 @@ def spur(bild, saum=41):
 
 
 def kreuze_suchen(bild, vorhersage, arm_px=34, fenster=None, dick=5,
-                  streuung=None):
+                  streuung=None, vorarbeit=None):
     """Die gebrannten Kreuze im Bild finden, jedes in einem Fenster.
 
     Frei zu suchen ist der falsche Weg: die Spur auf Pappe ist ein paar
@@ -196,7 +196,7 @@ def kreuze_suchen(bild, vorhersage, arm_px=34, fenster=None, dick=5,
     streuung = max(2.0, float(streuung if streuung else fenster / 2.0))
     dick = max(1, int(dick) | 1)
 
-    punkt = kreuzantwort(bild, arm_px, dick)
+    punkt = kreuzantwort(bild, arm_px, dick, vorarbeit)
     H, W = punkt.shape
     yy, xx = np.mgrid[-fenster:fenster + 1, -fenster:fenster + 1]
     glocke = np.exp(-(xx ** 2 + yy ** 2) / (2.0 * streuung ** 2))
@@ -224,9 +224,26 @@ def kreuze_suchen(bild, vorhersage, arm_px=34, fenster=None, dick=5,
     return np.array(funde, dtype=float), np.array(guete, dtype=float)
 
 
-def kreuzantwort(bild, arm_px, dick=5):
-    """Wie sehr jede Stelle im Bild nach einem Kreuz aussieht."""
-    hoch, innen = spur(bild)
+def spurbild(hoch):
+    """Die Spur als Bild zum Ansehen: dunkel, wo etwas gebrannt ist.
+
+    Im rohen Kamerabild ist eine gebrannte Spur ein paar Graustufen tief
+    und liegt unter einem Beleuchtungsverlauf. Herausgerechnet und
+    aufgedreht ist sie ein schwarzes Kreuz auf Weiss - das kann man
+    ansehen und anklicken.
+    """
+    return Image.fromarray(
+        np.clip(255.0 - np.asarray(hoch) * 8.0, 0, 255).astype(np.uint8))
+
+
+def kreuzantwort(bild, arm_px, dick=5, vorarbeit=None):
+    """Wie sehr jede Stelle im Bild nach einem Kreuz aussieht.
+
+    'vorarbeit' ist das Ergebnis von spur() - der teure Teil, und er
+    haengt nicht an der Armlaenge. Wer zweimal mit verschiedenen Armen
+    sucht, rechnet ihn sonst zweimal.
+    """
+    hoch, innen = vorarbeit if vorarbeit else spur(bild)
     dick = max(1, int(dick) | 1)
     arm_px = max(4, int(round(arm_px)))
     punkt = np.minimum(_kasten(hoch, dick, 2 * arm_px + 1),
@@ -510,8 +527,9 @@ def suchen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
     Mensch dazwischentreten kann: die Lupe im Kamerareiter zeigt jeden
     Fund gross und laesst die Mitte von Hand setzen.
 
-    Zurueck kommen Fundstellen, Gueten, welche brauchbar sind, und die
-    Hoehe, mit der gerechnet wurde.
+    Zurueck kommen Fundstellen, Gueten, welche brauchbar sind, die Hoehe,
+    mit der gerechnet wurde, und die Spur als Bild - die wird beim Suchen
+    ohnehin gerechnet, und die Lupe braucht genau sie.
     """
     mm = np.atleast_2d(np.asarray(punkte_mm, dtype=float))
     wegweiser = start
@@ -525,6 +543,7 @@ def suchen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
         hoehe = float(wegweiser.get("hoehe", 0.0) or 0.0)
 
     funde = guete = gut = None
+    vorarbeit = spur(bild)
     for durchgang in range(2):
         vorher = KAM.maschine_nach_bild(mm, wegweiser, dicke)
         arm_px = _armlaenge_px(wegweiser, mm, dicke)
@@ -533,7 +552,7 @@ def suchen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
         # kann auch nicht mehr gewinnen.
         fenster = max(12, int(1.5 * arm_px)) if durchgang else None
         funde, guete = kreuze_suchen(bild, vorher, arm_px=arm_px,
-                                     fenster=fenster)
+                                     fenster=fenster, vorarbeit=vorarbeit)
         gut = _brauchbar(guete, mindestguete)
         if gut.sum() < MINDESTKREUZE:
             raise ValueError(
@@ -542,7 +561,7 @@ def suchen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
         if not durchgang:
             wegweiser = getrimmt(funde, mm, bild.size, gut, hoehe=hoehe,
                                  dicke=dicke, vorlage=wegweiser)[0]
-    return funde, guete, gut, float(hoehe)
+    return funde, guete, gut, float(hoehe), spurbild(vorarbeit[0])
 
 
 def eichen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
@@ -554,8 +573,8 @@ def eichen(bild, punkte_mm, start=None, ecken_px=None, dicke=0.0,
     Stelle ist dann nicht eingerechnet.
     """
     mm = np.atleast_2d(np.asarray(punkte_mm, dtype=float))
-    funde, guete, gut, hoehe = suchen(bild, mm, start, ecken_px, dicke,
-                                      hoehe, mindestguete)
+    funde, guete, gut, hoehe, _ = suchen(bild, mm, start, ecken_px, dicke,
+                                         hoehe, mindestguete)
     eichung, behalten = getrimmt(funde, mm, bild.size, gut, hoehe=hoehe,
                                  dicke=dicke, vorlage=vorlage)
     return eichung, funde, np.where(behalten, guete, 0.0)

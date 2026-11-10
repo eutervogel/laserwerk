@@ -3618,7 +3618,7 @@ class EichenImKamerareiter(Grundlage):
         """
         gesehen = []
         self.app._eich_kreuze_pruefen = (
-            lambda roh, p, f, g: gesehen.append((f, g)) or (f, g))
+            lambda roh, p, f, g, spur=None: gesehen.append((f, g)) or (f, g))
         return gesehen
 
     def test_aus_dem_bild_wird_eine_eichung(self):
@@ -3780,7 +3780,7 @@ class EichenImKamerareiter(Grundlage):
         echt, bild = self.kunst()
         self.app.cfg["kamera"] = echt
         self.app.kam_roh = bild
-        self.app._eich_kreuze_pruefen = lambda roh, p, f, g: None
+        self.app._eich_kreuze_pruefen = lambda roh, p, f, g, s=None: None
         self.app.eichen()
         self.warten(lambda: "abgebrochen" in self.app.log.get("1.0", "end"))
         self.assertIs(self.app._kam_eichung(), echt)
@@ -3868,6 +3868,55 @@ class EichenImKamerareiter(Grundlage):
             self.assertLess(kasten[0], 0)
             self.assertLess(kasten[1], 0)
             self.assertEqual(kasten[2] - kasten[0], kasten[3] - kasten[1])
+        finally:
+            top.destroy()
+
+    def test_die_lupe_zeigt_die_spur_und_laesst_umschalten(self):
+        """Im rohen Bild ist eine gebrannte Linie ein paar Graustufen
+        tief und verschwindet in Lichtschleier und Papiermaserung."""
+        _, bild = self.kunst()
+        spur = self.L.EI.spurbild(self.L.EI.spur(bild)[0])
+        top, lage, an, stand = self.app._eich_lupe(
+            bild, [(30.0, 30.0)], [(400.0, 700.0)], [True], spur)
+        try:
+            self.assertTrue(stand["spur"])
+            top.bedienung["ansicht"]()
+            self.assertFalse(stand["spur"])
+        finally:
+            top.destroy()
+
+    def test_ohne_spur_bleibt_das_kamerabild(self):
+        top, lage, an, stand = self.lupe()
+        try:
+            self.assertFalse(stand["spur"])
+            top.bedienung["ansicht"]()
+            self.assertFalse(stand["spur"], "ohne Spur gibt es nichts zu zeigen")
+        finally:
+            top.destroy()
+
+    def test_der_zoom_laesst_sich_stellen(self):
+        top, lage, an, stand = self.lupe()
+        try:
+            vorher = stand["zoom"]
+            top.bedienung["zoomen"](1)
+            self.assertGreater(stand["zoom"], vorher)
+            breit = top.bedienung["kasten"][2] - top.bedienung["kasten"][0]
+            top.bedienung["zoomen"](-2)
+            self.assertLess(stand["zoom"], vorher)
+            self.assertGreater(
+                top.bedienung["kasten"][2] - top.bedienung["kasten"][0], breit)
+        finally:
+            top.destroy()
+
+    def test_der_zoom_laeuft_nicht_ueber(self):
+        top, lage, an, stand = self.lupe()
+        try:
+            for _ in range(20):
+                top.bedienung["zoomen"](1)
+            self.assertEqual(stand["zoom"], max(self.app.LUPE_STUFEN))
+            for _ in range(20):
+                top.bedienung["zoomen"](-1)
+            self.assertEqual(stand["zoom"], min(self.app.LUPE_STUFEN))
         finally:
             top.destroy()
 

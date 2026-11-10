@@ -1236,11 +1236,11 @@ class App:
         vorlage = {"geraet": self.v_kamera.get().strip()}
 
         def arbeit():
-            funde, guete, gut, h = EI.suchen(
+            funde, guete, gut, h, spur = EI.suchen(
                 roh, punkte, start=alt or None, ecken_px=ecken,
                 dicke=dicke, hoehe=hoehe)
             self.q.put(("eichfunde",
-                        (roh, punkte, funde, gut, h, dicke, vorlage)))
+                        (roh, punkte, funde, gut, h, dicke, vorlage, spur)))
         self._bg(arbeit, T("suche {n} Kreuze im Bild ...")
                  .format(n=len(punkte)))
 
@@ -1251,8 +1251,8 @@ class App:
         genau so genau wie ihr schlechtester Fund. Deshalb sieht sie
         jeder einmal an, bevor gerechnet wird.
         """
-        roh, punkte, funde, gut, hoehe, dicke, vorlage = d
-        antwort = self._eich_kreuze_pruefen(roh, punkte, funde, gut)
+        roh, punkte, funde, gut, hoehe, dicke, vorlage, spur = d
+        antwort = self._eich_kreuze_pruefen(roh, punkte, funde, gut, spur)
         if antwort is None:
             self._log(T("Eichen abgebrochen."))
             return
@@ -1407,10 +1407,11 @@ class App:
         return top, gefunden
 
     LUPE_PX = 380              # Kantenlaenge der Lupe auf dem Schirm
-    LUPE_ZOOM = 6              # so viel groesser als das Kamerabild
+    LUPE_ZOOM = 4              # so viel groesser als das Kamerabild
+    LUPE_STUFEN = (2, 3, 4, 6, 8, 12)
     UEBERSICHT_PX = 520
 
-    def _eich_kreuze_pruefen(self, roh, punkte, funde, gut):
+    def _eich_kreuze_pruefen(self, roh, punkte, funde, gut, spur=None):
         """Die gefundenen Kreuze ansehen und von Hand richtigstellen.
 
         Die Suche ist gut, aber nicht unfehlbar: eines liegt im
@@ -1423,17 +1424,27 @@ class App:
         Zurueck kommen die berichtigten Stellen und welche zaehlen - oder
         None, wenn abgebrochen wurde.
         """
-        top, lage, an, stand = self._eich_lupe(roh, punkte, funde, gut)
+        top, lage, an, stand = self._eich_lupe(roh, punkte, funde, gut, spur)
         top.grab_set()
         self.root.wait_window(top)
         return (lage, an) if stand["ok"] else None
 
-    def _eich_lupe(self, roh, punkte, funde, gut):
+    def _eich_lupe(self, roh, punkte, funde, gut, spur=None):
         """Das Lupenfenster bauen. Vom Warten getrennt, damit ein Test es
-        bedienen kann, ohne eine Ereignisschleife zu brauchen."""
+        bedienen kann, ohne eine Ereignisschleife zu brauchen.
+
+        Gezeigt wird die **Spur**: Bild minus verwischtes Bild, also die
+        Beleuchtung herausgerechnet. Im rohen Bild ist eine gebrannte
+        Linie ein paar Graustufen tief und verschwindet in Lichtschleier
+        und Papiermaserung; als Spur ist sie ein schwarzes Kreuz auf
+        Weiss. Das rohe Bild bleibt umschaltbar - manchmal will man
+        sehen, was dort wirklich liegt.
+        """
         lage = [(float(x), float(y)) for x, y in funde]
         an = [bool(g) for g in gut]
-        stand = {"i": 0, "ok": False}
+        stand = {"i": 0, "ok": False, "zoom": self.LUPE_ZOOM, "spur": True}
+        if spur is None:
+            stand["spur"] = False
         kasten = [0, 0, 1, 1]
 
         top = tk.Toplevel(self.root)
@@ -1446,7 +1457,8 @@ class App:
                       "In die Lupe klicken setzt die Mitte. Pfeiltasten "
                       "schieben um einen Bildpunkt, Eingabe geht weiter, "
                       "Entf nimmt das Kreuz heraus. Ein Klick links springt "
-                      "zum nächsten Kreuz.")).grid(
+                      "zum nächsten Kreuz. Mausrad zoomt, Leertaste schaltet "
+                      "zwischen Spur und Kamerabild.")).grid(
             row=1, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 6))
 
         mass = min(1.0, self.UEBERSICHT_PX / float(roh.width))
@@ -1462,13 +1474,14 @@ class App:
 
         def lupe_malen():
             x, y = lage[stand["i"]]
-            r = self.LUPE_PX / (2.0 * self.LUPE_ZOOM)
+            r = self.LUPE_PX / (2.0 * stand["zoom"])
             kasten[:] = [int(round(x - r)), int(round(y - r)),
                          int(round(x + r)), int(round(y + r))]
-            # Kontrast anheben, sonst ist die Spur nicht zu sehen. Nur
-            # Helligkeit und Kontrast - es wird nichts hinzuerfunden.
-            aus = ImageOps.autocontrast(roh.crop(tuple(kasten)).convert("L"),
-                                        cutoff=2)
+            quelle = spur if (stand["spur"] and spur is not None) else roh
+            # Kontrast anheben, sonst ist auch die Spur nicht zu sehen.
+            # Nur Helligkeit und Kontrast - es wird nichts hinzuerfunden.
+            aus = ImageOps.autocontrast(quelle.crop(tuple(kasten)).convert("L"),
+                                        cutoff=1)
             cv_l.bild = self._tkbild(
                 aus.resize((self.LUPE_PX, self.LUPE_PX), Image.LANCZOS))
             cv_l.delete("all")
@@ -1499,8 +1512,11 @@ class App:
             i = stand["i"]
             mx, my = punkte[i]
             lbl.configure(text=T(
-                "Kreuz {i} von {n} bei X {x:.0f} / Y {y:.0f} - {z} zählen"
-            ).format(i=i + 1, n=len(lage), x=mx, y=my, z=sum(an)))
+                "Kreuz {i} von {n} bei X {x:.0f} / Y {y:.0f} - {z} zählen, "
+                "{v}fach, {a}"
+            ).format(i=i + 1, n=len(lage), x=mx, y=my, z=sum(an),
+                     v=stand["zoom"],
+                     a=T("Spur") if stand["spur"] else T("Kamerabild")))
             uebersicht_malen()
             lupe_malen()
 
@@ -1531,6 +1547,18 @@ class App:
             an[stand["i"]] = not an[stand["i"]]
             zeigen()
 
+        def ansicht(*_):
+            if spur is not None:
+                stand["spur"] = not stand["spur"]
+                zeigen()
+
+        def zoomen(d):
+            stufen = list(self.LUPE_STUFEN)
+            i = min(range(len(stufen)),
+                    key=lambda k: abs(stufen[k] - stand["zoom"]))
+            stand["zoom"] = stufen[max(0, min(len(stufen) - 1, i + d))]
+            zeigen()
+
         def fertig():
             stand["ok"] = True
             top.destroy()
@@ -1542,6 +1570,11 @@ class App:
             top.bind(taste, lambda e, a=dx, b=dy: schieben(a, b))
         top.bind("<Return>", lambda e: springen(1))
         top.bind("<Delete>", umschalten)
+        top.bind("<space>", ansicht)
+        # Mausrad: unter X11 melden sich die Raeder als Taste 4 und 5.
+        cv_l.bind("<Button-4>", lambda e: zoomen(1))
+        cv_l.bind("<Button-5>", lambda e: zoomen(-1))
+        cv_l.bind("<MouseWheel>", lambda e: zoomen(1 if e.delta > 0 else -1))
 
         knoepfe = ttk.Frame(top)
         knoepfe.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8,
@@ -1552,6 +1585,12 @@ class App:
                    command=lambda: springen(1)).pack(side="left", padx=4)
         ttk.Button(knoepfe, text=T("zählt nicht"), width=12,
                    command=umschalten).pack(side="left")
+        ttk.Button(knoepfe, text=T("Ansicht"), width=9,
+                   command=ansicht).pack(side="left", padx=(12, 0))
+        ttk.Button(knoepfe, text="−", width=3,
+                   command=lambda: zoomen(-1)).pack(side="left", padx=(4, 0))
+        ttk.Button(knoepfe, text="+", width=3,
+                   command=lambda: zoomen(1)).pack(side="left")
         ttk.Button(knoepfe, text=T("Fertig"), width=11, style="Accent.TButton",
                    command=fertig).pack(side="right", padx=(4, 0))
         ttk.Button(knoepfe, text=T("Abbrechen"), width=11,
@@ -1560,6 +1599,7 @@ class App:
         top.bedienung = dict(springen=springen, lupe_klick=lupe_klick,
                              uebersicht_klick=uebersicht_klick,
                              umschalten=umschalten, schieben=schieben,
+                             ansicht=ansicht, zoomen=zoomen,
                              fertig=fertig, kasten=kasten, mass=mass)
         zeigen()
         return top, lage, an, stand

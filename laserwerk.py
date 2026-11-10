@@ -1076,6 +1076,7 @@ class App:
     # ------------------------------------------------------------ Eichen
     EICH_RAND = 30.0           # mm Abstand der aeusseren Kreuze zur Bettkante
     EICH_N = 5                 # Kreuze je Achse
+    EICH_DATEI = "eichraster.nc"
 
     def _eich_punkte(self):
         return EI.raster_punkte(float(self.cfg["x_max"]),
@@ -1106,11 +1107,14 @@ class App:
         self.root.update_idletasks()
         x0, y0, x1, y1 = self._eich_kasten(punkte)
         if not messagebox.askokcancel(T("Eichen"), T(
-                "Jetzt etwas Flaches und Helles einlegen, das die blau "
-                "gezeichnete Fläche deckt - {b:.0f} x {h:.0f} mm, Papier "
-                "oder dünne Pappe. Darauf brennt der Laser {n} Kreuze mit "
-                "S{s} bei F{f}; das markiert Papier und brennt nicht "
-                "durch. Auf Holz wäre es fünfmal zu viel.\n\n"
+                "Das blau gezeichnete Raster wird ein ganz normaler Job: "
+                "OK legt ihn nur bereit, gebrannt wird er wie jeder andere "
+                "mit Start.\n\n"
+                "Vorher etwas Flaches und Helles einlegen, das die blaue "
+                "Fläche deckt - {b:.0f} x {h:.0f} mm, Papier oder dünne "
+                "Pappe. Der Laser brennt {n} Kreuze mit S{s} bei F{f}; das "
+                "markiert Papier und brennt nicht durch. Auf Holz wäre es "
+                "fünfmal zu viel.\n\n"
                 "Die Kreuze liegen {d:.1f} mm über dem Bett "
                 "(Materialstärke {m:.1f} + Unterlage {u:.1f}). Stimmt das "
                 "nicht, erst im Reiter Material ändern.\n\n"
@@ -1130,7 +1134,7 @@ class App:
         except ValueError as e:
             messagebox.showerror(T("Eichen"), str(e))
             return
-        pfad = os.path.join(P.DIR, "eichraster.nc")
+        pfad = os.path.join(P.DIR, self.EICH_DATEI)
         with open(pfad, "w") as fh:
             fh.write("\n".join(zeilen) + "\n")
         self._gcode_laden(pfad)          # raeumt die Zeichenflaeche leer
@@ -1153,6 +1157,11 @@ class App:
         ys = [y for _, y in punkte]
         a = max(arme)
         return (min(xs) - a, min(ys) - a, max(xs) + a, max(ys) + a)
+
+    def _eich_geladen(self):
+        """Ob der bereitliegende Job das Eichraster ist."""
+        pfad = str(getattr(self, "src_path", "") or "")
+        return bool(self.lines) and os.path.basename(pfad) == self.EICH_DATEI
 
     def _eichraster_zeigen(self):
         """Das geplante Eichraster auf die Zeichenflaeche legen.
@@ -1180,11 +1189,17 @@ class App:
         # Bettkante, und darueber ist auf der Flaeche kein Platz mehr.
         # Dahinter ein Kaestchen - sie steht auf dem Kamerabild, und auf
         # heller Pappe ist eine duenne blaue Schrift nicht zu lesen.
+        # Nach dem Laden sagt die Zeile, was jetzt dran ist. Ohne das sieht
+        # die Flaeche hinterher genauso aus wie vorher - der geladene Job
+        # ist ja genau dieses Raster -, und es sieht aus, als sei nichts
+        # geschehen.
+        if self._eich_geladen():
+            text = T("Eichraster geladen - zum Brennen auf Start")
+        else:
+            text = T("Eichraster - Unterlage mindestens "
+                     "{b:.0f} x {h:.0f} mm").format(b=x1 - x0, h=y1 - y0)
         schrift = cv.create_text((a1 + a2) / 2, min(b1, b2) + 3, anchor="n",
-                                 fill=S.ACCENT, font=("sans", 8),
-                                 text=T("Eichraster - Unterlage mindestens "
-                                        "{b:.0f} x {h:.0f} mm").format(
-                                            b=x1 - x0, h=y1 - y0))
+                                 fill=S.ACCENT, font=("sans", 8), text=text)
         kasten = cv.bbox(schrift)
         if kasten:
             hinter = cv.create_rectangle(kasten[0] - 3, kasten[1] - 1,

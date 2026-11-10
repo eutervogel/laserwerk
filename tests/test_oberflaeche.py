@@ -3680,6 +3680,26 @@ class EichenImKamerareiter(Grundlage):
         self.assertAlmostEqual(x1 - x0, 340.0 + 2 * self.L.EI.ARM_MARKE,
                                places=3)
 
+    def test_nach_dem_laden_sagt_die_flaeche_was_dran_ist(self):
+        """Der geladene Job IST das Raster - die Flaeche sieht hinterher
+        aus wie vorher, und es sieht aus, als sei nichts geschehen."""
+        self.assertFalse(self.app._eich_geladen())
+        self.app.eich_raster()
+        self.assertTrue(self.app._eich_geladen())
+        self.app._draw()
+        texte = [self.app.cv.itemcget(i, "text")
+                 for i in self.app.cv.find_all()
+                 if self.app.cv.type(i) == "text"]
+        self.assertTrue(any("Start" in t for t in texte), texte)
+
+    def test_die_frage_sagt_dass_ok_nicht_brennt(self):
+        """OK legt den Job bereit, mehr nicht. Wer das anders liest,
+        drückt OK und wartet darauf, dass der Laser losfährt."""
+        gefragt = []
+        self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or True
+        self.app.eich_raster()
+        self.assertIn("Start", gefragt[0])
+
     def test_die_noetige_flaeche_steht_in_der_frage(self):
         gefragt = []
         self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or True

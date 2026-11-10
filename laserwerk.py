@@ -41,6 +41,7 @@ class App:
         self.test = None            # Parameter eines Materialtest-Elements
         self.kam_roh = self.kam_bett = self.kam_tk = None
         self.kam_dicke = None     # Hoehe, mit der kam_bett gerechnet wurde
+        self.eich_umriss = None   # geplantes Eichraster auf der Zeichenflaeche
         self._kam_groesse = None
         self.maschinen = P.load_maschinen()
         self._maschine_einrichten()
@@ -941,9 +942,12 @@ class App:
         self._erklaerung(ttk.Label(ef, style="Muted.TLabel", wraplength=360,
             text=T("Die Maschine ist das bessere Lineal als ein Ausdruck:\n"
                    "sie brennt ein Raster aus Kreuzen, von dem sie auf\n"
-                   "Hundertstel weiß, wo es liegt. Etwas Flaches und Helles\n"
-                   "einlegen, das Raster brennen, Bild holen, eichen.\n"
-                   "Prüfen sagt an einem frischen Bild, was sie noch taugt."))
+                   "Hundertstel weiß, wo es liegt.\n"
+                   "Etwas Flaches und Helles einlegen und ein Bild holen -\n"
+                   "dann liegt die Unterlage unter dem blauen Raster, und\n"
+                   "man sieht vorher, ob sie reicht. Brennen, wieder ein\n"
+                   "Bild holen, eichen. Prüfen sagt an einem frischen Bild,\n"
+                   "was die Eichung noch taugt."))
             ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._kam_zeigen()
 
@@ -1094,20 +1098,31 @@ class App:
         Warnungen und demselben Wächter.
         """
         punkte = self._eich_punkte()
+        # Erst zeichnen, dann fragen. Die Frage steht in einem eigenen
+        # Fenster; dahinter liegt die Zeichenflaeche mit dem Kamerabild,
+        # und darauf ist zu sehen, ob die Pappe bis in die Ecken reicht.
+        self.eich_umriss = punkte
+        self._draw()
+        self.root.update_idletasks()
+        x0, y0, x1, y1 = self._eich_kasten(punkte)
         if not messagebox.askokcancel(T("Eichen"), T(
-                "Jetzt etwas Flaches und Helles einlegen, das das Bett "
-                "füllt - Papier oder dünne Pappe. Darauf brennt der Laser "
-                "{n} Kreuze mit S{s} bei F{f}; das markiert Papier und "
-                "brennt nicht durch. Auf Holz wäre es fünfmal zu viel.\n\n"
+                "Jetzt etwas Flaches und Helles einlegen, das die blau "
+                "gezeichnete Fläche deckt - {b:.0f} x {h:.0f} mm, Papier "
+                "oder dünne Pappe. Darauf brennt der Laser {n} Kreuze mit "
+                "S{s} bei F{f}; das markiert Papier und brennt nicht "
+                "durch. Auf Holz wäre es fünfmal zu viel.\n\n"
                 "Die Kreuze liegen {d:.1f} mm über dem Bett "
                 "(Materialstärke {m:.1f} + Unterlage {u:.1f}). Stimmt das "
                 "nicht, erst im Reiter Material ändern.\n\n"
                 "Der Nullpunkt muss dabei dort stehen, wo er auch beim "
                 "Arbeiten steht - die Eichung gilt für genau diese "
                 "Koordinaten.").format(
+                    b=x1 - x0, h=y1 - y0,
                     n=len(punkte), s=EI.S_RASTER, f=EI.F_RASTER,
                     d=self._eich_dicke(), m=self._kam_zahl("v_dicke"),
                     u=self._kam_zahl("v_kam_unterlage"))):
+            self.eich_umriss = None
+            self._draw()
             return
         try:
             zeilen = EI.raster_gcode(punkte, x_max=float(self.cfg["x_max"]),
@@ -1118,12 +1133,64 @@ class App:
         pfad = os.path.join(P.DIR, "eichraster.nc")
         with open(pfad, "w") as fh:
             fh.write("\n".join(zeilen) + "\n")
-        self._gcode_laden(pfad)
+        self._gcode_laden(pfad)          # raeumt die Zeichenflaeche leer
+        self.eich_umriss = punkte
+        self._draw()
         self._log(T("Eichraster erzeugt: {n} Kreuze über {b:.0f} x {h:.0f} mm. "
                     "Brennen, dann ein Bild holen und auf Eichen drücken.")
                   .format(n=len(punkte),
                           b=float(self.cfg["x_max"]) - 2 * self.EICH_RAND,
                           h=float(self.cfg["y_max"]) - 2 * self.EICH_RAND))
+
+    def _eich_kasten(self, punkte):
+        """Die Flaeche, die die Unterlage decken muss: Kreuzarme inbegriffen.
+
+        Nicht die Spanne der Kreuzmitten - das aeussere Kreuz braucht
+        seine Arme, und die Marke vorn links die laengeren.
+        """
+        arme = [EI.ARM_MARKE if i == 0 else EI.ARM for i in range(len(punkte))]
+        xs = [x for x, _ in punkte]
+        ys = [y for _, y in punkte]
+        a = max(arme)
+        return (min(xs) - a, min(ys) - a, max(xs) + a, max(ys) + a)
+
+    def _eichraster_zeigen(self):
+        """Das geplante Eichraster auf die Zeichenflaeche legen.
+
+        Vorher sehen, wohin es faellt. Wer erst nach dem Lauf merkt, dass
+        die Pappe die beiden aeusseren Kreuze nicht mehr erwischt hat,
+        hat den Lauf umsonst gemacht - und ausgerechnet die aeusseren
+        sind die, auf die es ankommt.
+        """
+        punkte = getattr(self, "eich_umriss", None)
+        if not punkte:
+            return
+        cv = self.cv
+        for i, (x, y) in enumerate(punkte):
+            a = EI.ARM_MARKE if i == 0 else EI.ARM
+            cv.create_line(*self._mm(x - a, y), *self._mm(x + a, y),
+                           fill=S.ACCENT)
+            cv.create_line(*self._mm(x, y - a), *self._mm(x, y + a),
+                           fill=S.ACCENT)
+        x0, y0, x1, y1 = self._eich_kasten(punkte)
+        a1, b1 = self._mm(x0, y1)
+        a2, b2 = self._mm(x1, y0)
+        cv.create_rectangle(a1, b1, a2, b2, outline=S.ACCENT, dash=(4, 3))
+        # Die Beschriftung nach innen: das Raster reicht bis dicht an die
+        # Bettkante, und darueber ist auf der Flaeche kein Platz mehr.
+        # Dahinter ein Kaestchen - sie steht auf dem Kamerabild, und auf
+        # heller Pappe ist eine duenne blaue Schrift nicht zu lesen.
+        schrift = cv.create_text((a1 + a2) / 2, min(b1, b2) + 3, anchor="n",
+                                 fill=S.ACCENT, font=("sans", 8),
+                                 text=T("Eichraster - Unterlage mindestens "
+                                        "{b:.0f} x {h:.0f} mm").format(
+                                            b=x1 - x0, h=y1 - y0))
+        kasten = cv.bbox(schrift)
+        if kasten:
+            hinter = cv.create_rectangle(kasten[0] - 3, kasten[1] - 1,
+                                         kasten[2] + 3, kasten[3] + 1,
+                                         fill=S.PANEL, outline="")
+            cv.tag_lower(hinter, schrift)
 
     def _eich_bild(self):
         """Das rohe Bild, oder eine Erklaerung, warum es keines gibt."""
@@ -1241,20 +1308,31 @@ class App:
         frei zu suchen scheitert am Maschinenrahmen. Vier Ecken reichen
         fuer eine Homographie; die Verzeichnung fehlt darin, aber als
         Suchfenster ist es genau genug.
+        """
+        n = self.EICH_N
+        ziele = [punkte[0], punkte[n - 1], punkte[-n], punkte[-1]]
+        top, gefunden = self._eich_ecken_fenster(roh, ziele)
+        top.grab_set()
+        self.root.wait_window(top)
+        return gefunden if len(gefunden) == len(ziele) else None
+
+    def _eich_ecken_fenster(self, roh, ziele):
+        """Das Fenster dazu bauen und (Fenster, Fundliste) zurueckgeben.
+
+        Vom Warten getrennt, damit ein Test das Anklicken nachspielen
+        kann, ohne eine Ereignisschleife zu brauchen - top.klick(e) ist
+        derselbe Weg, den die Maus nimmt.
 
         Gefragt wird nach Maschinenkoordinaten, nicht nach 'oben links':
         wie herum die Kamera im Bild liegt, weiss das Programm ja gerade
         noch nicht.
         """
-        n = self.EICH_N
-        ziele = [(0, punkte[0]), (n - 1, punkte[n - 1]),
-                 (len(punkte) - n, punkte[-n]), (len(punkte) - 1, punkte[-1])]
         mass = min(1.0, self.ECKEN_BREIT / float(roh.width))
         klein = roh.resize((max(1, int(roh.width * mass)),
                             max(1, int(roh.height * mass))), Image.LANCZOS)
-        top = tk.Toplevel(self)
+        top = tk.Toplevel(self.root)
         top.title(T("Eckkreuze anklicken"))
-        top.transient(self)
+        top.transient(self.root)
         lbl = ttk.Label(top, text="", wraplength=klein.width - 20)
         lbl.pack(anchor="w", padx=8, pady=(8, 4))
         cv = tk.Canvas(top, width=klein.width, height=klein.height,
@@ -1270,7 +1348,7 @@ class App:
             if i >= len(ziele):
                 top.destroy()
                 return
-            x, y = ziele[i][1]
+            x, y = ziele[i]
             lbl.configure(text=T(
                 "{i} von 4: auf das Kreuz bei X {x:.0f} / Y {y:.0f} klicken."
             ).format(i=i + 1, x=x, y=y) + (T(" Das ist die Marke mit den "
@@ -1283,12 +1361,11 @@ class App:
             fragen()
 
         cv.bind("<Button-1>", klick)
+        top.klick = klick
         ttk.Button(top, text=T("Abbrechen"),
                    command=top.destroy).pack(anchor="e", padx=8, pady=6)
         fragen()
-        top.grab_set()
-        self.wait_window(top)
-        return gefunden if len(gefunden) == len(ziele) else None
+        return top, gefunden
 
     def _tkbild(self, bild):
         """Ein PIL-Bild als PhotoImage - ohne ImageTk, das nicht ueberall da ist."""
@@ -2396,6 +2473,7 @@ class App:
             return
         self.elemente = []
         self.aktiv = -1
+        self.eich_umriss = None
         self.src = self.src_path = None
         self.vec = self.vec_bb = self.vec_voll = self._vecdreh = None
         self._live_cache = self.bild_bb = None
@@ -5389,6 +5467,7 @@ class App:
             ex = J.brenn_extent(self.lines)
             a, b = self._mm(ex[0], ex[3]); c, d = self._mm(ex[1], ex[2])
             cv.create_rectangle(a, b, c, d, outline=S.ACCENT, dash=(2, 2))
+        self._eichraster_zeigen()
         cv.create_oval(x0 - 4, y0 - 4, x0 + 4, y0 + 4, outline=S.DANGER, width=2)
         if abs(self.zoom - 1.0) > 0.01:
             cv.create_text(self._cv()[0] - 8, 8, anchor="ne", fill=S.MUTED,

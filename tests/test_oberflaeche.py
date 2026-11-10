@@ -3651,6 +3651,84 @@ class EichenImKamerareiter(Grundlage):
         self.warten(lambda: gefragt)
         self.assertIn("340", gefragt[0])
 
+    # ------------------------------------------------- Vorschau des Rasters
+    def test_das_raster_liegt_vor_der_frage_auf_der_flaeche(self):
+        """Wer erst nach dem Lauf merkt, dass die Pappe die aeusseren
+        Kreuze nicht erwischt hat, hat den Lauf umsonst gemacht."""
+        gezeigt = []
+
+        def fragen(titel, text):
+            gezeigt.append(self.app.eich_umriss)
+            return True
+        self.L.messagebox.askokcancel = fragen
+        self.app.eich_raster()
+        self.assertEqual(len(gezeigt[0]), 25)
+        self.assertEqual(len(self.app.eich_umriss), 25)
+
+    def test_abbrechen_nimmt_das_raster_wieder_weg(self):
+        self.L.messagebox.askokcancel = lambda t, m: False
+        self.app.eich_raster()
+        self.assertIsNone(self.app.eich_umriss)
+
+    def test_die_noetige_flaeche_zaehlt_die_kreuzarme_mit(self):
+        """Nicht die Spanne der Mitten: das aeussere Kreuz braucht seine
+        Arme, und die Marke vorn links die laengeren."""
+        punkte = self.app._eich_punkte()
+        x0, y0, x1, y1 = self.app._eich_kasten(punkte)
+        self.assertLess(x0, 30.0)
+        self.assertGreater(x1, 370.0)
+        self.assertAlmostEqual(x1 - x0, 340.0 + 2 * self.L.EI.ARM_MARKE,
+                               places=3)
+
+    def test_die_noetige_flaeche_steht_in_der_frage(self):
+        gefragt = []
+        self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or True
+        self.app.eich_raster()
+        self.assertIn("366", gefragt[0])
+
+    def test_das_raster_wird_auch_gezeichnet(self):
+        self.app.eich_raster()
+        self.app._draw()
+        # 25 Kreuze zu zwei Strichen, dazu der Kasten und seine Beschriftung
+        self.assertGreaterEqual(len(self.app.cv.find_all()), 52)
+
+    def test_ein_neues_motiv_raeumt_das_raster_weg(self):
+        self.app.eich_raster()
+        self.app.clear_motif()
+        self.assertIsNone(self.app.eich_umriss)
+
+    # ------------------------------------------- die vier Ecken anklicken
+    def test_das_eckenfenster_rechnet_klicks_in_bildpunkte(self):
+        """Beim allerersten Eichen gibt es keinen Wegweiser - vier Klicks
+        sind einer. Das Bild haengt dafuer verkleinert im Fenster, und die
+        Klicks muessen auf die volle Groesse zurueckgerechnet werden."""
+        from test_eichung import SOLL_PX
+        _, bild = self.kunst()
+        ziele = [(30.0, 30.0), (370.0, 30.0), (30.0, 370.0), (370.0, 370.0)]
+        top, gefunden = self.app._eich_ecken_fenster(bild, ziele)
+        try:
+            mass = min(1.0, self.app.ECKEN_BREIT / float(bild.width))
+            for px, py in (SOLL_PX[0], SOLL_PX[4], SOLL_PX[20], SOLL_PX[24]):
+                top.klick(type("E", (), {"x": px * mass, "y": py * mass})())
+            self.assertEqual(len(gefunden), 4)
+            for (gx, gy), (sx, sy) in zip(gefunden,
+                                          (SOLL_PX[0], SOLL_PX[4],
+                                           SOLL_PX[20], SOLL_PX[24])):
+                self.assertAlmostEqual(gx, sx, delta=1.5)
+                self.assertAlmostEqual(gy, sy, delta=1.5)
+        finally:
+            if top.winfo_exists():
+                top.destroy()
+
+    def test_ohne_eichung_wird_nach_den_ecken_gefragt(self):
+        gefragt = []
+        self.app.cfg.pop("kamera", None)
+        self.app.kam_roh = Image.new("RGB", (1296, 972), (180, 180, 180))
+        self.app._eich_ecken_klicken = lambda roh, p: gefragt.append(p) or None
+        self.app.eichen()
+        self.assertEqual(len(gefragt), 1)
+        self.assertEqual(len(gefragt[0]), 25)
+
     # ---------------------------------------------------------- Pruefen
     def test_pruefen_meldet_was_die_eichung_taugt(self):
         """Der Knopf, der den Fehler Wochen frueher gezeigt haette: eine

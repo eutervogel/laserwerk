@@ -313,6 +313,9 @@ Machine travel is set in the *Machine* tab and can be taken from `$130`/`$131`.
 | `lw_grbl.py` | serial link, streaming, status reports |
 | `lw_job.py` | raster G-code, runtime estimate, preview images, tests |
 | `lw_vector.py` | SVG and DXF readers, contours, cutting G-code |
+| `lw_kamera.py` | lens model, rectification, machine coordinates |
+| `lw_eichung.py` | burnt cross grid, cross search, fitting the camera model |
+| `lw_stuecke.py` | finding the workpieces in the rectified top view |
 | `lw_presets.py` | material values and settings |
 | `lw_style.py` | light and dark colour schemes |
 | `lw_text.py` | German and English interface texts |
@@ -387,7 +390,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-800 tests on stdlib only, nothing to install. The interface tests need a
+876 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

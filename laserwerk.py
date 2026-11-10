@@ -15,6 +15,7 @@ from tkinter import ttk
 import materialtest as MT
 import lw_kamera as KAM
 import lw_eichung as EI
+import lw_stuecke as ST
 import lw_dialog as D                         # native GTK-Dialoge
 from lw_dialog import filedialog, messagebox
 import lw_style as S
@@ -42,6 +43,11 @@ class App:
         self.kam_roh = self.kam_bett = self.kam_tk = None
         self.kam_dicke = None     # Hoehe, mit der kam_bett gerechnet wurde
         self.eich_umriss = None   # geplantes Eichraster auf der Zeichenflaeche
+        self.stuecke = []         # erkannte Werkstuecke, nur zum Ansehen
+        self.stueck_aktiv = None  # welches davon gewaehlt ist
+        self.stueck_modus = None  # "rechteck"/"kreis", solange von Hand gezogen
+        self.stueck_zug = None    # der Rahmen, waehrend er gezogen wird
+        self.stuecke_gesucht = False
         self._kam_groesse = None
         self.maschinen = P.load_maschinen()
         self._maschine_einrichten()
@@ -949,6 +955,41 @@ class App:
                    "Bild holen, eichen. Prüfen sagt an einem frischen Bild,\n"
                    "was die Eichung noch taugt."))
             ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(3, 0))
+
+        wf = ttk.LabelFrame(f, text=T("Werkstücke"), padding=4)
+        wf.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Button(wf, text=T("Werkstücke erkennen"), width=19,
+                   style="Accent.TButton", command=self.stuecke_erkennen
+                   ).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Button(wf, text=T("entfernen"), width=11,
+                   command=self.stueck_entfernen).grid(row=0, column=2)
+        ttk.Button(wf, text=T("Rechteck ziehen"), width=15,
+                   command=lambda: self.stueck_aufziehen("rechteck")
+                   ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Button(wf, text=T("Kreis ziehen"), width=11,
+                   command=lambda: self.stueck_aufziehen("kreis")
+                   ).grid(row=1, column=1, padx=4, pady=(4, 0))
+        ttk.Button(wf, text=T("alle löschen"), width=11,
+                   command=self.stuecke_loeschen).grid(row=1, column=2,
+                                                       pady=(4, 0))
+        self.lbl_stuecke = ttk.Label(wf, text="", style="Muted.TLabel",
+                                     wraplength=360)
+        self.lbl_stuecke.grid(row=2, column=0, columnspan=3, sticky="w",
+                              pady=(3, 0))
+        self._erklaerung(ttk.Label(wf, style="Muted.TLabel", wraplength=360,
+            text=T("Bild holen, dann erkennen: Laserwerk misst jedes Stück\n"
+                   "in Millimetern und zeigt seine Mitte. Die Umrisse sind\n"
+                   "nur eine Anzeige - sie werden nie gebrannt.\n"
+                   "Ein Klick wählt ein Stück, die Mitte lässt sich ziehen.\n"
+                   "Was keines ist, entfernen; was fehlt, von Hand ziehen -\n"
+                   "beim Kreis in die Mitte klicken und nach außen ziehen.\n"
+                   "Der Laserkopf wird übersprungen, solange die Maschine\n"
+                   "verbunden ist. Dunkles Material auf dunkler Unterlage\n"
+                   "ist schwer zu sehen; beim Gravieren hilft ein Blatt\n"
+                   "weißes Papier darunter - der Strahl verlässt das\n"
+                   "Werkstück ja nicht."))).grid(
+            row=3, column=0, columnspan=3, sticky="w", pady=(3, 0))
+        self._stueck_stand()
         self._kam_zeigen()
 
     def _kameras(self):
@@ -1036,13 +1077,15 @@ class App:
         return (self._kam_zahl("v_dicke") + self._kam_zahl("v_kam_unterlage")
                 - float(self._kam_eichung().get("dicke", 0.0) or 0.0))
 
+    KAM_PX_JE_MM = 2.0        # Aufloesung der entzerrten Draufsicht
+
     def _kam_bett_rechnen(self):
         """Aus dem rohen Bild die Draufsicht fuer die jetzige Hoehe."""
         dicke = self._kam_dicke()
         self.kam_bett = KAM.bett_bild(
             self.kam_roh, self._kam_eichung(),
             0.0, 0.0, float(self.cfg["x_max"]), float(self.cfg["y_max"]),
-            px_je_mm=2.0, dicke=dicke)
+            px_je_mm=self.KAM_PX_JE_MM, dicke=dicke)
         self.kam_dicke = dicke
         return dicke
 
@@ -1614,6 +1657,12 @@ class App:
         """Das frische Bild entzerren und merken."""
         self.kam_roh = roh
         self.kam_bett = self.kam_dicke = None
+        # Ein neues Bild heisst: die alten Umrisse gelten nicht mehr. Sie
+        # stehenzulassen waere der gefaehrlichste Fehler hier - sie saehen
+        # richtig aus und zeigten auf das, was vorher dalag.
+        self.stuecke = []
+        self.stuecke_gesucht = False
+        self.stueck_aktiv = self.stueck_zug = None
         d = self._kam_eichung()
         if not d:
             self._log(T("Bild geholt ({b}x{h}) - ohne Eichung nur ein Bild.")
@@ -1672,6 +1721,233 @@ class App:
             self._kam_groesse = (b, h)
         self.cv.create_image(x0, y1, image=self.kam_tk, anchor="nw",
                              tags="kamera")
+
+    # ---------------------------------------------------------- Werkstuecke
+
+    KOPF_SPERRE = 50.0         # mm um den Laserkopf, in denen nichts liegt
+    STUECK_FARBE = "#2fae60"   # gefunden und glaubwuerdig
+    STUECK_UNSICHER = "#d9a441"
+    STUECK_GRIFF = 7           # Bildpunkte um die Mitte, die sie fassen
+
+    def _stueck_sperren(self):
+        """Flaechen, in denen kein Werkstueck liegen kann.
+
+        Der Laserkopf liegt mit im Bild und hebt sich praechtig vom Bett
+        ab - ohne diese Sperre waere er der erste Fund. Wo er steht,
+        weiss Laserwerk nur bei verbundener Maschine; sonst bleibt er
+        ein Stueck, das von Hand herauszunehmen ist.
+        """
+        h = getattr(self, "head", None)
+        if not h:
+            return []
+        r = self.KOPF_SPERRE
+        return [(h[0] - r, h[1] - r, h[0] + r, h[1] + r)]
+
+    def _stueck_abdeckung(self):
+        """Welchen Teil des Bettes die Kamera ueberhaupt aufgenommen hat."""
+        roh = getattr(self, "kam_roh", None)
+        if roh is None:
+            return None
+        try:
+            return KAM.bett_abdeckung(
+                roh.size, self._kam_eichung(), 0.0, 0.0,
+                float(self.cfg["x_max"]), float(self.cfg["y_max"]),
+                px_je_mm=self.KAM_PX_JE_MM, dicke=self._kam_dicke())
+        except Exception:
+            return None
+
+    def stuecke_erkennen(self):
+        """Die Werkstuecke im Kamerabild suchen.
+
+        Ein Schnappschuss genuegt - das Bett laeuft nicht weg. Was
+        herauskommt, ist eine Anzeige und kein Auftrag: die Umrisse
+        liegen neben den Motiven, nicht unter ihnen, und kein Strahl
+        folgt ihnen jemals.
+        """
+        if getattr(self, "kam_bett", None) is None:
+            self.lbl_stuecke.configure(text=T(
+                "Erst ein Bild holen - ohne Kamerabild ist nichts zu sehen."))
+            return
+        if not self._kam_eichung().get("homographie"):
+            self.lbl_stuecke.configure(text=T(
+                "Erst eichen: ohne Eichung weiß niemand, wo das Bild liegt."))
+            return
+        self._kamera_neu_rechnen()          # die Hoehe kann sich geaendert haben
+        self.stuecke_gesucht = True
+        self.stuecke = ST.finden(
+            self.kam_bett, 1.0 / self.KAM_PX_JE_MM, 0.0, 0.0,
+            sperren=self._stueck_sperren(), abdeckung=self._stueck_abdeckung())
+        self.stueck_aktiv = 0 if self.stuecke else None
+        self.stueck_modus = self.stueck_zug = None
+        self._stueck_stand()
+        self._log(T("{n} Werkstücke erkannt.").format(n=len(self.stuecke)))
+        self._draw()
+
+    def _stuecke_nummern(self):
+        for i, s in enumerate(self.stuecke):
+            s["nr"] = i + 1
+
+    def _stueck_stand(self):
+        """Die Zeile unter den Knoepfen: was gefunden wurde."""
+        if getattr(self, "lbl_stuecke", None) is None:
+            return
+        if getattr(self, "stueck_modus", None) == "rechteck":
+            self.lbl_stuecke.configure(text=T(
+                "Rechteck auf der Zeichenfläche aufziehen."))
+            return
+        if getattr(self, "stueck_modus", None) == "kreis":
+            self.lbl_stuecke.configure(text=T(
+                "In die Mitte klicken und nach außen ziehen."))
+            return
+        n = len(self.stuecke)
+        if not n and not getattr(self, "stuecke_gesucht", False):
+            self.lbl_stuecke.configure(text="")
+            return
+        if not n:
+            self.lbl_stuecke.configure(text=T(
+                "Nichts gefunden. Ein heller Untergrund hilft - beim "
+                "Gravieren reicht ein Blatt Papier unter dem Material."))
+            return
+        unsicher = sum(1 for s in self.stuecke if not s["sicher"])
+        zeile = (T("Ein Werkstück.") if n == 1
+                 else T("{n} Werkstücke.").format(n=n))
+        if unsicher:
+            zeile += " " + T("{u} davon unsicher - nachsehen.").format(u=unsicher)
+        if self.stueck_aktiv is not None and 0 <= self.stueck_aktiv < n:
+            zeile += "\n" + ST.lesbar(self.stuecke[self.stueck_aktiv], T, Z)
+        self.lbl_stuecke.configure(text=zeile)
+
+    def _stuecke_malen(self):
+        """Die erkannten Werkstuecke auf die Zeichenflaeche legen."""
+        cv = self.cv
+        zug = getattr(self, "stueck_zug", None)
+        if zug:
+            x0, y0, x1, y1 = zug
+            if self.stueck_modus == "kreis":
+                r = math.hypot(x1 - x0, y1 - y0)
+                a, b = self._mm(x0 - r, y0 + r)
+                c, d = self._mm(x0 + r, y0 - r)
+                cv.create_oval(a, b, c, d, outline=S.ACCENT, dash=(3, 2),
+                               tags="stueck")
+            else:
+                a, b = self._mm(min(x0, x1), max(y0, y1))
+                c, d = self._mm(max(x0, x1), min(y0, y1))
+                cv.create_rectangle(a, b, c, d, outline=S.ACCENT, dash=(3, 2),
+                                    tags="stueck")
+        for i, s in enumerate(getattr(self, "stuecke", None) or ()):
+            aktiv = (i == self.stueck_aktiv)
+            farbe = S.ACCENT if aktiv else (
+                self.STUECK_FARBE if s["sicher"] else self.STUECK_UNSICHER)
+            punkte = [c for p in s["umriss"] for c in self._mm(*p)]
+            if len(punkte) >= 6:
+                cv.create_polygon(*punkte, outline=farbe, fill="",
+                                  width=2 if aktiv else 1,
+                                  dash="" if s["sicher"] else (4, 3),
+                                  tags="stueck")
+            mx, my = self._mm(*s["mitte"])
+            g = self.STUECK_GRIFF
+            cv.create_line(mx - g, my, mx + g, my, fill=farbe, tags="stueck")
+            cv.create_line(mx, my - g, mx, my + g, fill=farbe, tags="stueck")
+            if aktiv:
+                cv.create_rectangle(mx - 3, my - 3, mx + 3, my + 3,
+                                    outline=farbe, tags="stueck")
+            tx, ty = self._mm(s["kasten"][0], s["kasten"][3])
+            cv.create_text(tx + 3, ty - 3, anchor="sw", fill=farbe,
+                           font=("sans", 8), text=ST.marke(s, Z),
+                           tags="stueck")
+
+    def _stueck_unter(self, e):
+        """Welches Werkstueck liegt unter dem Zeiger?"""
+        if not getattr(self, "stuecke", None):
+            return None
+        s = ST.unter(self.stuecke, *self._mm_zurueck(e.x, e.y))
+        return self.stuecke.index(s) if s is not None else None
+
+    def _stueck_griff(self, e):
+        """Liegt der Zeiger auf der Mitte des gewaehlten Stuecks?
+
+        Nur beim gewaehlten: die Mitte verschiebt man absichtlich, und
+        wer sie fassen will, hat das Stueck vorher angeklickt.
+        """
+        i = getattr(self, "stueck_aktiv", None)
+        if i is None or not (0 <= i < len(self.stuecke)):
+            return False
+        mx, my = self._mm(*self.stuecke[i]["mitte"])
+        return abs(e.x - mx) <= 8 and abs(e.y - my) <= 8
+
+    def _stueck_waehlen(self, i):
+        if i == getattr(self, "stueck_aktiv", None):
+            return False
+        self.stueck_aktiv = i
+        self._stueck_stand()
+        self._draw()
+        return True
+
+    def stueck_aufziehen(self, art):
+        """Einen Umriss von Hand setzen.
+
+        Die Erkennung ist gut und nicht unfehlbar - dunkler Schiefer auf
+        dunkler Wabenplatte bleibt dunkler Schiefer. Wer den Umriss
+        selbst aufzieht, kommt immer ans Ziel, und niemand muss eine
+        Erkennung annehmen, die er fuer falsch haelt.
+        """
+        if getattr(self, "stueck_modus", None) == art:
+            art = None                      # noch einmal druecken hebt es auf
+        self.stueck_modus = art
+        self.stueck_zug = None
+        try:
+            self.cv.configure(cursor="crosshair" if art else "")
+        except tk.TclError:
+            pass
+        self._stueck_stand()
+        self._draw()
+
+    def _stueck_aufziehen_fertig(self):
+        """Aus dem aufgezogenen Rahmen ein Werkstueck machen."""
+        zug = getattr(self, "stueck_zug", None)
+        art = self.drag[1] if self.drag else "rechteck"
+        self.stueck_zug = None
+        self.stueck_modus = None
+        try:
+            self.cv.configure(cursor="")
+        except tk.TclError:
+            pass
+        neu = None
+        if zug:
+            x0, y0, x1, y1 = zug
+            if art == "kreis":
+                r = math.hypot(x1 - x0, y1 - y0)
+                if r >= 2.0:
+                    neu = ST.kreis_stueck(x0, y0, r)
+            elif abs(x1 - x0) >= 2.0 and abs(y1 - y0) >= 2.0:
+                neu = ST.rechteck_stueck(x0, y0, x1, y1)
+        if neu is not None:
+            self.stuecke.append(neu)
+            self._stuecke_nummern()
+            self.stueck_aktiv = len(self.stuecke) - 1
+        self._stueck_stand()
+        self._draw()
+
+    def stueck_entfernen(self):
+        """Das gewaehlte Stueck herausnehmen - was keines war, ist keines."""
+        i = getattr(self, "stueck_aktiv", None)
+        if i is None or not (0 <= i < len(self.stuecke)):
+            return
+        del self.stuecke[i]
+        self._stuecke_nummern()
+        self.stueck_aktiv = min(i, len(self.stuecke) - 1) if self.stuecke else None
+        self._stueck_stand()
+        self._draw()
+
+    def stuecke_loeschen(self):
+        self.stuecke = []
+        self.stueck_aktiv = self.stueck_modus = self.stueck_zug = None
+        try:
+            self.cv.configure(cursor="")
+        except tk.TclError:
+            pass
+        self._stueck_stand()
+        self._draw()
 
     def _build_maschine(self):
         f = self.tab_masch
@@ -5706,6 +5982,7 @@ class App:
             ex = J.brenn_extent(self.lines)
             a, b = self._mm(ex[0], ex[3]); c, d = self._mm(ex[1], ex[2])
             cv.create_rectangle(a, b, c, d, outline=S.ACCENT, dash=(2, 2))
+        self._stuecke_malen()
         self._eichraster_zeigen()
         cv.create_oval(x0 - 4, y0 - 4, x0 + 4, y0 + 4, outline=S.DANGER, width=2)
         if abs(self.zoom - 1.0) > 0.01:
@@ -5897,6 +6174,8 @@ class App:
               ("move", None): "fleur"}
 
     def _drag_ende(self, e):
+        if self.drag and self.drag[0] == "stueck":
+            self._stueck_aufziehen_fertig()
         self.drag = None
         self._zeiger(e)
 
@@ -5908,6 +6187,8 @@ class App:
         """
         if self.drag:
             return
+        if getattr(self, "stueck_modus", None):
+            return          # das Fadenkreuz bleibt, bis der Umriss steht
         art, ecke, _ = self._griff_unter(e)
         form = self.ZEIGER.get((art, ecke), "")
         if form != getattr(self, "_zeigerform", None):
@@ -5918,14 +6199,43 @@ class App:
                 self.cv.configure(cursor="")        # Form kennt dieses X11 nicht
 
     def _press(self, e):
+        if getattr(self, "stueck_modus", None):
+            x, y = self._mm_zurueck(e.x, e.y)
+            self.stueck_zug = (x, y, x, y)
+            self.drag = ("stueck", self.stueck_modus, None, (e.x, e.y), 0.0)
+            return
+        if self._stueck_griff(e):
+            self.drag = ("mitte", None, None, (e.x, e.y), 0.0)
+            return
         art, ecke, box = self._griff_unter(e)
         if art is None:
+            # Kein Motiv unter dem Zeiger: dann vielleicht ein Werkstueck.
+            i = self._stueck_unter(e)
+            if i is not None:
+                self._stueck_waehlen(i)
             return
         self.drag = (art, ecke, box, (e.x, e.y),
                      float(self.v_rot.get() or 0.0))
 
     def _drag_move(self, e):
         if not self.drag:
+            return
+        # Werkstuecke zuerst: an ihnen haengt kein Motiv, und die fertige
+        # Vorschau darf deshalb stehenbleiben.
+        if self.drag[0] == "stueck":
+            x, y = self._mm_zurueck(e.x, e.y)
+            self.stueck_zug = (self.stueck_zug[0], self.stueck_zug[1], x, y)
+            self._draw()
+            return
+        if self.drag[0] == "mitte":
+            i = self.stueck_aktiv
+            if i is not None and 0 <= i < len(self.stuecke):
+                x, y = self._mm_zurueck(e.x, e.y)
+                s = ST.verschieben(self.stuecke[i], x, y)
+                s["herkunft"], s["sicher"] = "hand", True
+                self.stuecke[i] = s
+                self._stueck_stand()
+                self._draw()
             return
         self.preview_pil = self.preview_img = self.cut_polys = None
         art, ecke, (bx, by, bb, bh), (sx, sy), grad0 = self.drag

@@ -329,6 +329,9 @@ Der Verfahrweg steht im Reiter *Maschine* und lässt sich aus `$130`/`$131`
 | `lw_grbl.py` | serielle Anbindung, Streaming, Statusberichte |
 | `lw_job.py` | Raster-G-Code, Laufzeitschätzung, Vorschaubilder, Tests |
 | `lw_vector.py` | SVG- und DXF-Einleser, Konturen, Schnitt-G-Code |
+| `lw_kamera.py` | Linsenmodell, Entzerrung, Maschinenkoordinaten |
+| `lw_eichung.py` | gebranntes Kreuzraster, Kreuzsuche, Anpassung des Kameramodells |
+| `lw_stuecke.py` | Werkstücke in der entzerrten Draufsicht finden |
 | `lw_presets.py` | Materialwerte und Einstellungen |
 | `lw_style.py` | helles und dunkles Farbschema |
 | `lw_text.py` | deutsche und englische Texte der Oberfläche |
@@ -404,7 +407,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-441 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+876 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

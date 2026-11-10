@@ -1223,4 +1223,56 @@ EN = {
         "becomes 25.4 times as large",
     "G92 setzt den Nullpunkt mitten im Job - ein Soft-Reset löscht ihn wieder":
         "G92 sets the origin mid-job - a soft reset clears it again",
+
+    # ---- Werkstuecke erkennen
+    "Werkstücke": "Workpieces",
+    "Werkstücke erkennen": "Find workpieces",
+    "entfernen": "remove",
+    "Rechteck ziehen": "Drag rectangle",
+    "Kreis ziehen": "Drag circle",
+    "alle löschen": "clear all",
+    "Erst ein Bild holen - ohne Kamerabild ist nichts zu sehen.":
+        "Take a picture first - without one there is nothing to see.",
+    "Erst eichen: ohne Eichung weiß niemand, wo das Bild liegt.":
+        "Calibrate first: without it nobody knows where the picture lies.",
+    "{n} Werkstücke erkannt.": "{n} workpieces found.",
+    "Rechteck auf der Zeichenfläche aufziehen.":
+        "Drag a rectangle on the drawing area.",
+    "In die Mitte klicken und nach außen ziehen.":
+        "Click the centre and drag outwards.",
+    "Nichts gefunden. Ein heller Untergrund hilft - beim Gravieren "
+    "reicht ein Blatt Papier unter dem Material.":
+        "Nothing found. A bright background helps - for engraving a sheet "
+        "of paper under the material is enough.",
+    "Ein Werkstück.": "One workpiece.",
+    "{n} Werkstücke.": "{n} workpieces.",
+    "{u} davon unsicher - nachsehen.":
+        "{u} of them uncertain - have a look.",
+    "{nr}. {form}, {mass}, Mitte X {x} / Y {y}":
+        "{nr}. {form}, {mass}, centre X {x} / Y {y}",
+    "rund": "round",
+    "rechteckig": "rectangular",
+    "unregelmäßig": "irregular",
+    "(unsicher)": "(uncertain)",
+    "Bild holen, dann erkennen: Laserwerk misst jedes Stück\n"
+    "in Millimetern und zeigt seine Mitte. Die Umrisse sind\n"
+    "nur eine Anzeige - sie werden nie gebrannt.\n"
+    "Ein Klick wählt ein Stück, die Mitte lässt sich ziehen.\n"
+    "Was keines ist, entfernen; was fehlt, von Hand ziehen -\n"
+    "beim Kreis in die Mitte klicken und nach außen ziehen.\n"
+    "Der Laserkopf wird übersprungen, solange die Maschine\n"
+    "verbunden ist. Dunkles Material auf dunkler Unterlage\n"
+    "ist schwer zu sehen; beim Gravieren hilft ein Blatt\n"
+    "weißes Papier darunter - der Strahl verlässt das\n"
+    "Werkstück ja nicht.":
+        "Take a picture, then find: Laserwerk measures every piece\n"
+        "in millimetres and shows its centre. The outlines are only\n"
+        "a display - they are never burnt.\n"
+        "A click picks a piece, the centre can be dragged.\n"
+        "Remove what is none; drag what is missing by hand -\n"
+        "for a circle click the centre and drag outwards.\n"
+        "The laser head is skipped while the machine is\n"
+        "connected. Dark material on a dark base is hard to\n"
+        "see; for engraving a sheet of white paper underneath\n"
+        "helps - the beam never leaves the workpiece.",
 }

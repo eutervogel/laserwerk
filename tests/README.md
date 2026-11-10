@@ -35,8 +35,9 @@ xvfb-run -a python3 -m unittest discover -s tests -t tests
 | `test_waechter.py` | Anzeigetexte deuten, fremdes Fenster erkennen, niemals `getUpdates` |
 | `test_telegram.py` | Menü, Steuerkreuz und Befehlsauswertung passen zusammen |
 | `test_trockenlauf.py` | G-Code deuten: wann der Strahl brennt, Grenzen, was GRBL überspringt, Laufzeit wie die Vorschau |
-| `test_kamera.py` | Linse und Homographie hin und zurück, Materialstärke herausrechnen, Werkstück im Bild finden |
+| `test_kamera.py` | Linse und Homographie hin und zurück, Materialstärke herausrechnen, Draufsicht in Maschinenkoordinaten |
 | `test_eichung.py` | Die Kamera einrichten: Raster, Kreuzsuche im künstlichen Bild, Anpassung gegen ein bekanntes Modell |
+| `test_stuecke.py` | Werkstücke finden: Flächen, Umrisse, Form und Maß in Millimetern, und wann ein Fund unsicher ist |
 | `test_materialtest.py` | Gitter, Strichschrift, Einpassen in eine vorgegebene Fläche |
 | `test_dialog.py` | Eigene Dialoge: Vorgaben, Abbrechen, Tastatur |
 | `test_wegwerf.py` | Dass kein Pfad eines Tests in die echte Konfiguration zeigt |

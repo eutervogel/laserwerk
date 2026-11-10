@@ -265,6 +265,23 @@ def bett_bild(bild, eichung, x0, y0, x1, y1, px_je_mm=2.0, dicke=0.0):
     Gerechnet wird rueckwaerts: fuer jeden Punkt des Ergebnisses die
     Stelle im Kamerabild. Vorwaerts bliebe das halbe Bild leer.
     """
+    q = np.asarray(bild.convert("RGB"))
+    u, v, drin, breite, hoehe = _bett_raster(
+        (q.shape[1], q.shape[0]), eichung, x0, y0, x1, y1, px_je_mm, dicke)
+    H, W = q.shape[:2]
+    aus = np.zeros((hoehe * breite, 3), dtype=np.uint8)
+    aus[drin] = q[np.clip(v[drin], 0, H - 1), np.clip(u[drin], 0, W - 1)]
+    return Image.fromarray(aus.reshape(hoehe, breite, 3))
+
+
+def _bett_raster(bildgroesse, eichung, x0, y0, x1, y1, px_je_mm, dicke):
+    """Fuer jeden Punkt der Draufsicht die Stelle im Kamerabild.
+
+    Eine Stelle fuer die Rechnung, von der das Bild und seine Abdeckung
+    beide leben - sonst koennten die zwei verschiedener Meinung darueber
+    sein, welcher Punkt des Bettes ueberhaupt aufgenommen wurde.
+    """
+    W, H = int(bildgroesse[0]), int(bildgroesse[1])
     breite = max(1, int(round((x1 - x0) * px_je_mm)))
     hoehe = max(1, int(round((y1 - y0) * px_je_mm)))
     sx = (np.arange(breite) + 0.5) / px_je_mm + x0
@@ -272,14 +289,26 @@ def bett_bild(bild, eichung, x0, y0, x1, y1, px_je_mm=2.0, dicke=0.0):
     gx, gy = np.meshgrid(sx, sy)
     ziel = np.column_stack([gx.ravel(), gy.ravel()])
     quelle = maschine_nach_bild(ziel, eichung, dicke)
-    q = np.asarray(bild.convert("RGB"))
-    H, W = q.shape[:2]
     u = np.rint(quelle[:, 0]).astype(int)
     v = np.rint(quelle[:, 1]).astype(int)
     drin = (u >= 0) & (u < W) & (v >= 0) & (v < H)
-    aus = np.zeros((hoehe * breite, 3), dtype=np.uint8)
-    aus[drin] = q[np.clip(v[drin], 0, H - 1), np.clip(u[drin], 0, W - 1)]
-    return Image.fromarray(aus.reshape(hoehe, breite, 3))
+    return u, v, drin, breite, hoehe
+
+
+def bett_abdeckung(bildgroesse, eichung, x0, y0, x1, y1, px_je_mm=2.0,
+                   dicke=0.0):
+    """Welche Punkte der Draufsicht die Kamera ueberhaupt aufgenommen hat.
+
+    Das Objektiv sieht das Bett nicht ganz: vorne faellt ein Streifen
+    heraus, und bett_bild legt dort Schwarz hin, weil es nichts anderes
+    hinlegen kann. Schwarz ist aber keine Auskunft, und wer darin nach
+    Werkstuecken sucht, findet den unaufgenommenen Streifen als erstes
+    Stueck. Deshalb sagt diese Funktion getrennt, wo ueberhaupt etwas
+    steht - gerechnet mit derselben Abbildung wie das Bild selbst.
+    """
+    _, _, drin, breite, hoehe = _bett_raster(
+        bildgroesse, eichung, x0, y0, x1, y1, px_je_mm, dicke)
+    return drin.reshape(hoehe, breite)
 
 
 def eichung_lesbar(eichung):
@@ -304,58 +333,3 @@ def eichung_lesbar(eichung):
     return ("%s, Fehler %.2f mm %s (%s), geeicht bei %.0f mm Materialstärke"
             % (eichung.get("geraet", "?"), eichung.get("fehler_mm", 0.0),
                wo, womit, eichung.get("dicke", 0.0)))
-
-
-def werkstueck(bild, x0, y0, mm_je_px, schwelle=0.18, rand=4):
-    """Das Werkstueck im entzerrten Bild: Kasten und Winkel in Millimetern.
-
-    Gesucht wird, was sich vom Untergrund abhebt. Den Untergrund sagt der
-    Rand des Bildes - dort liegt das Bett oder die Wabenplatte, nicht das
-    Brettchen. Danach einmal oeffnen (schrumpfen, dann wieder aufblasen),
-    damit Krümel und Rauschen nicht als Werkstueck durchgehen.
-
-    Der Winkel kommt aus den zweiten Momenten der Flaeche: fuer ein
-    laengliches Stueck zeigt die Hauptachse entlang der langen Seite. Bei
-    einem quadratischen oder runden Stueck gibt es keine - dann steht dort
-    None statt einer Zahl, die nur so aussieht wie eine Antwort.
-
-    Zurueck kommt None, wenn sich nichts abhebt, sonst ein dict mit
-    x0, y0, x1, y1 (Millimeter, Y wie in der Maschine nach oben), breite,
-    hoehe, winkel und anteil (wie viel vom Bild bedeckt ist).
-    """
-    from PIL import ImageFilter
-
-    g = bild.convert("L")
-    a = np.asarray(g).astype(float) / 255.0
-    if a.size == 0:
-        return None
-    r = max(1, min(int(rand), min(a.shape) // 4))
-    ringe = np.concatenate([a[:r].ravel(), a[-r:].ravel(),
-                            a[:, :r].ravel(), a[:, -r:].ravel()])
-    untergrund = float(np.median(ringe))
-    maske = (np.abs(a - untergrund) > schwelle).astype(np.uint8) * 255
-    maske = np.asarray(Image.fromarray(maske)
-                       .filter(ImageFilter.MinFilter(3))
-                       .filter(ImageFilter.MaxFilter(3)))
-    ys, xs = np.nonzero(maske)
-    if len(xs) < 50:
-        return None
-    hoehe = a.shape[0]
-    # Zeile 0 ist oben, in der Maschine ist das das groesste Y.
-    mx0 = x0 + xs.min() * mm_je_px
-    mx1 = x0 + (xs.max() + 1) * mm_je_px
-    my0 = y0 + (hoehe - 1 - ys.max()) * mm_je_px
-    my1 = y0 + (hoehe - ys.min()) * mm_je_px
-    xm, ym = xs.mean(), ys.mean()
-    mu20 = ((xs - xm) ** 2).mean()
-    mu02 = ((ys - ym) ** 2).mean()
-    mu11 = ((xs - xm) * (ys - ym)).mean()
-    spur = mu20 + mu02
-    winkel = None
-    if spur > 0 and (abs(mu20 - mu02) + 2 * abs(mu11)) / spur > 0.02:
-        # Bildachse zeigt nach unten, Maschinenachse nach oben: Vorzeichen.
-        winkel = -0.5 * math.degrees(math.atan2(2 * mu11, mu20 - mu02))
-        winkel = (winkel + 45.0) % 90.0 - 45.0
-    return dict(x0=mx0, y0=my0, x1=mx1, y1=my1,
-                breite=mx1 - mx0, hoehe=my1 - my0, winkel=winkel,
-                anteil=float(len(xs)) / maske.size)

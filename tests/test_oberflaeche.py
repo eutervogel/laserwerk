@@ -3944,6 +3944,274 @@ class EichenImKamerareiter(Grundlage):
         self.assertIn("Neu eichen", "".join(m for _, m in self.gezeigt))
 
 
+
+class WerkstueckeImKamerareiter(Grundlage):
+    """Erkennen, was auf dem Bett liegt - und es von Hand richtigstellen.
+
+    Alles hier rechnet in Millimetern der Maschine. Das ist die ganze
+    Pointe: das entzerrte Bild liegt schon in Maschinenkoordinaten, es
+    gibt keine zweite Umrechnung, und was die Anzeige zeigt, ist das,
+    wohin der Kopf wirklich faehrt.
+
+    Die zweite Pointe steht in test_umrisse_sind_kein_auftrag: ein
+    erkanntes Werkstueck ist eine Auskunft und kein Motiv. Es darf
+    niemals in einen Brennauftrag geraten.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._bett = (self.app.cfg.get("x_max"), self.app.cfg.get("y_max"))
+        self.app.cfg["x_max"] = self.app.cfg["y_max"] = 200.0
+        self.app.cfg["kamera"] = dict(KameraUnterDerZeichenflaeche.EICHUNG)
+        self.app.v_dicke.set(0.0)
+        self.app.v_kam_unterlage.set(0.0)
+
+    def tearDown(self):
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = self._bett
+        super().tearDown()
+
+    def bett(self, stuecke):
+        """Eine kuenstliche Draufsicht unterlegen, ohne Kamera.
+
+        kam_dicke gleich der jetzigen Hoehe: sonst rechnet
+        _kamera_neu_rechnen das Bild aus kam_roh neu und wirft die
+        gemalten Stuecke wieder weg.
+        """
+        from test_stuecke import bett
+        self.app.kam_roh = None
+        self.app.kam_bett = bett(stuecke)
+        self.app.kam_dicke = self.app._kam_dicke()
+
+    def zeiger(self, x, y):
+        import types
+        a, b = self.app._mm(x, y)
+        return types.SimpleNamespace(x=int(round(a)), y=int(round(b)))
+
+    def scheiben(self):
+        self.bett([("kreis", 60.0, 140.0, 25.0), ("kreis", 140.0, 60.0, 25.0)])
+        self.app.stuecke_erkennen()
+
+    # --------------------------------------------------------- Erkennen
+    def test_ohne_bild_sagt_er_was_fehlt(self):
+        self.app.kam_bett = None
+        self.app.stuecke_erkennen()
+        self.assertEqual(self.app.stuecke, [])
+        self.assertIn("Bild holen", self.app.lbl_stuecke.cget("text"))
+
+    def test_ohne_eichung_sagt_er_was_fehlt(self):
+        self.bett([("kreis", 100.0, 100.0, 25.0)])
+        self.app.cfg["kamera"] = {"geraet": "/dev/video9"}
+        self.app.stuecke_erkennen()
+        self.assertEqual(self.app.stuecke, [])
+        self.assertIn("eichen", self.app.lbl_stuecke.cget("text"))
+
+    def test_aus_dem_bild_werden_werkstuecke(self):
+        self.scheiben()
+        self.assertEqual(len(self.app.stuecke), 2)
+        hinten = self.app.stuecke[0]
+        self.assertEqual(hinten["form"], "rund")
+        self.assertAlmostEqual(hinten["mitte"][0], 60.0, delta=1.0)
+        self.assertAlmostEqual(hinten["mitte"][1], 140.0, delta=1.0)
+        self.assertAlmostEqual(hinten["breite"], 50.0, delta=1.0)
+
+    def test_die_zeile_nennt_das_gewaehlte(self):
+        self.scheiben()
+        text = self.app.lbl_stuecke.cget("text")
+        self.assertIn("2", text)
+        self.assertIn("rund", text)
+
+    def test_nichts_gefunden_sagt_was_hilft(self):
+        self.bett([])
+        self.app.stuecke_erkennen()
+        self.assertEqual(self.app.stuecke, [])
+        self.assertIn("Papier", self.app.lbl_stuecke.cget("text"))
+
+    def test_vor_dem_ersten_suchen_steht_da_nichts(self):
+        # "Nichts gefunden" waere gelogen: es wurde noch nicht gesucht.
+        self.assertEqual(self.app.lbl_stuecke.cget("text"), "")
+
+    # ---------------------------------------------------------- Anzeige
+    def test_die_umrisse_liegen_auf_der_flaeche(self):
+        self.scheiben()
+        self.app._draw()
+        self.assertTrue(self.app.cv.find_withtag("stueck"))
+
+    def test_umrisse_sind_kein_auftrag(self):
+        """Ein erkanntes Werkstueck ist eine Auskunft, kein Motiv.
+
+        Geriete es in die Elementliste, wuerde sein Umriss beim naechsten
+        Erzeugen zu einem Schnitt - quer durch das Werkstueck, das er nur
+        beschreiben sollte.
+        """
+        self.scheiben()
+        self.assertEqual(self.app.elemente, [])
+        self.assertIsNone(self.app.lines)
+        self.app._draw()
+        self.assertFalse(self.app.cv.find_withtag("motiv"))
+
+    def test_ein_neues_bild_wirft_die_alten_umrisse_weg(self):
+        """Sie saehen richtig aus und zeigten auf das, was vorher dalag -
+        der gefaehrlichste Fehler, den diese Anzeige machen koennte."""
+        self.scheiben()
+        self.app.cfg["kamera"] = dict(KameraUnterDerZeichenflaeche.EICHUNG)
+        self.app._kamera_uebernehmen(Image.new("RGB", (2592, 1944),
+                                               (90, 90, 90)))
+        self.assertEqual(self.app.stuecke, [])
+        self.assertIsNone(self.app.stueck_aktiv)
+        self.app._draw()
+        self.assertFalse(self.app.cv.find_withtag("stueck"))
+
+    # ----------------------------------------------------------- Waehlen
+    def test_ein_klick_waehlt_ein_stueck(self):
+        self.scheiben()
+        self.app.stueck_aktiv = None
+        self.app._press(self.zeiger(140.0, 60.0))
+        self.assertIsNotNone(self.app.stueck_aktiv)
+        gewaehlt = self.app.stuecke[self.app.stueck_aktiv]
+        self.assertAlmostEqual(gewaehlt["mitte"][0], 140.0, delta=1.5)
+
+    def test_daneben_klicken_waehlt_nichts_ab(self):
+        self.scheiben()
+        self.app._press(self.zeiger(100.0, 100.0))
+        self.assertEqual(self.app.stueck_aktiv, 0)
+
+    def test_das_motiv_geht_vor(self):
+        """Wer den Rahmen des Motivs fasst, will das Motiv schieben."""
+        self.scheiben()
+        self.motiv()
+        self.app.v_w.set(40.0); self.app.v_h.set(40.0)
+        self.app.v_xoff.set(120.0); self.app.v_yoff.set(40.0)
+        self.app._press(self.zeiger(140.0, 60.0))
+        self.assertTrue(self.app.drag)
+        self.assertEqual(self.app.drag[0], "move")
+
+    # ------------------------------------------------------- Richtigstellen
+    def test_die_mitte_laesst_sich_ziehen(self):
+        self.scheiben()
+        self.app.stueck_aktiv = 1
+        alt = self.app.stuecke[1]["mitte"]
+        self.app._press(self.zeiger(*alt))
+        self.assertEqual(self.app.drag[0], "mitte")
+        self.app._drag_move(self.zeiger(alt[0] + 10.0, alt[1] - 5.0))
+        self.app._drag_ende(self.zeiger(alt[0] + 10.0, alt[1] - 5.0))
+        neu = self.app.stuecke[1]["mitte"]
+        self.assertAlmostEqual(neu[0], alt[0] + 10.0, delta=1.0)
+        self.assertAlmostEqual(neu[1], alt[1] - 5.0, delta=1.0)
+        # Der Umriss wandert mit, sonst zeigte er auf die alte Stelle.
+        self.assertAlmostEqual(self.app.stuecke[1]["kasten"][0],
+                               neu[0] - 25.0, delta=1.5)
+
+    def test_die_mitte_ziehen_laesst_die_vorschau_stehen(self):
+        """An einem Werkstueck haengt kein Motiv - die fertige Vorschau
+        deshalb wegzuwerfen waere reine Arbeitsvernichtung."""
+        self.scheiben()
+        self.motiv()
+        self.app.preview_pil = Image.new("L", (4, 4))
+        self.app.stueck_aktiv = 0
+        mitte = self.app.stuecke[0]["mitte"]
+        self.app._press(self.zeiger(*mitte))
+        self.app._drag_move(self.zeiger(mitte[0] + 5.0, mitte[1]))
+        self.assertIsNotNone(self.app.preview_pil)
+
+    def test_entfernen_nimmt_das_gewaehlte_heraus(self):
+        self.scheiben()
+        self.app.stueck_aktiv = 0
+        bleibt = self.app.stuecke[1]["mitte"]
+        self.app.stueck_entfernen()
+        self.assertEqual(len(self.app.stuecke), 1)
+        self.assertEqual(self.app.stuecke[0]["mitte"], bleibt)
+        self.assertEqual(self.app.stuecke[0]["nr"], 1)   # neu durchgezaehlt
+
+    def test_entfernen_ohne_wahl_tut_nichts(self):
+        self.scheiben()
+        self.app.stueck_aktiv = None
+        self.app.stueck_entfernen()
+        self.assertEqual(len(self.app.stuecke), 2)
+
+    def test_alle_loeschen(self):
+        self.scheiben()
+        self.app.stuecke_loeschen()
+        self.assertEqual(self.app.stuecke, [])
+        self.assertIsNone(self.app.stueck_aktiv)
+        self.app._draw()
+        self.assertFalse(self.app.cv.find_withtag("stueck"))
+
+    # ---------------------------------------------------------- Von Hand
+    def test_rechteck_von_hand_aufziehen(self):
+        self.bett([])
+        self.app.stuecke_erkennen()
+        self.app.stueck_aufziehen("rechteck")
+        self.assertEqual(self.app.stueck_modus, "rechteck")
+        self.app._press(self.zeiger(40.0, 50.0))
+        self.app._drag_move(self.zeiger(120.0, 110.0))
+        self.app._drag_ende(self.zeiger(120.0, 110.0))
+        self.assertEqual(len(self.app.stuecke), 1)
+        s = self.app.stuecke[0]
+        self.assertAlmostEqual(s["breite"], 80.0, delta=1.0)
+        self.assertAlmostEqual(s["hoehe"], 60.0, delta=1.0)
+        self.assertAlmostEqual(s["mitte"][0], 80.0, delta=1.0)
+        self.assertAlmostEqual(s["mitte"][1], 80.0, delta=1.0)
+        self.assertIsNone(self.app.stueck_modus)     # der Modus geht aus
+
+    def test_kreis_von_hand_geht_von_der_mitte_aus(self):
+        self.bett([])
+        self.app.stueck_aufziehen("kreis")
+        self.app._press(self.zeiger(100.0, 100.0))
+        self.app._drag_move(self.zeiger(130.0, 100.0))
+        self.app._drag_ende(self.zeiger(130.0, 100.0))
+        self.assertEqual(len(self.app.stuecke), 1)
+        s = self.app.stuecke[0]
+        self.assertEqual(s["form"], "rund")
+        self.assertAlmostEqual(s["mitte"][0], 100.0, delta=1.0)
+        self.assertAlmostEqual(s["breite"], 60.0, delta=2.0)
+
+    def test_ein_klick_ohne_ziehen_legt_nichts_an(self):
+        self.bett([])
+        self.app.stueck_aufziehen("rechteck")
+        self.app._press(self.zeiger(100.0, 100.0))
+        self.app._drag_ende(self.zeiger(100.0, 100.0))
+        self.assertEqual(self.app.stuecke, [])
+
+    def test_das_fadenkreuz_bleibt_beim_aufziehen(self):
+        """Ohne das setzt die erste Mausbewegung den Zeiger zurueck, und
+        nichts sagt mehr, dass der Modus noch an ist."""
+        self.app.stueck_aufziehen("rechteck")
+        self.app._zeiger(self.zeiger(100.0, 100.0))
+        self.assertEqual(str(self.app.cv.cget("cursor")), "crosshair")
+
+    def test_noch_einmal_druecken_hebt_den_modus_auf(self):
+        self.app.stueck_aufziehen("kreis")
+        self.app.stueck_aufziehen("kreis")
+        self.assertIsNone(self.app.stueck_modus)
+
+    def test_von_hand_gesetzte_stuecke_zaehlen_weiter(self):
+        self.scheiben()
+        self.app.stueck_aufziehen("rechteck")
+        self.app._press(self.zeiger(20.0, 20.0))
+        self.app._drag_move(self.zeiger(60.0, 50.0))
+        self.app._drag_ende(self.zeiger(60.0, 50.0))
+        self.assertEqual([s["nr"] for s in self.app.stuecke], [1, 2, 3])
+        self.assertEqual(self.app.stueck_aktiv, 2)
+
+    # ------------------------------------------------------------ Kopf
+    def test_der_kopf_wird_gesperrt(self):
+        self.app.head = (150.0, 150.0)
+        sperren = self.app._stueck_sperren()
+        self.assertEqual(len(sperren), 1)
+        self.assertLess(sperren[0][0], 150.0)
+        self.assertGreater(sperren[0][2], 150.0)
+
+    def test_ohne_maschine_keine_sperre(self):
+        self.app.head = None
+        self.assertEqual(self.app._stueck_sperren(), [])
+
+    def test_der_kopf_wird_nicht_zum_werkstueck(self):
+        self.app.head = (140.0, 60.0)
+        self.scheiben()
+        self.assertEqual(len(self.app.stuecke), 1)
+        self.assertAlmostEqual(self.app.stuecke[0]["mitte"][0], 60.0,
+                               delta=1.5)
+
 class GeladenerGcodeIstAuchGcode(Grundlage):
     """Eine geladene .nc hat kein Motiv - sie ist eines.
 

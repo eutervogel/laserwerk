@@ -482,6 +482,36 @@ EN = {
         '{w:.0f} mm is not a camera height - this is the distance from the bed to the lens, a few hundred millimetres on this machine.\n\nThe material thickness lives in the Material tab and is computed separately.',
     'Bild {ib}x{ih} passt nicht zur Eichung ({sb}x{sh}).':
         'Picture {ib}x{ih} does not match the calibration ({sb}x{sh}).',
+    # --- die Kamera einrichten
+    'Eichen': 'Calibrate',
+    'Raster erzeugen': 'Make grid',
+    'Prüfen': 'Check',
+    'Die Maschine ist das bessere Lineal als ein Ausdruck:\nsie brennt ein Raster aus Kreuzen, von dem sie auf\nHundertstel weiß, wo es liegt. Etwas Flaches und Helles\neinlegen, das Raster brennen, Bild holen, eichen.\nPrüfen sagt an einem frischen Bild, was sie noch taugt.':
+        'The machine is a better ruler than a printout:\nit burns a grid of crosses and knows to a hundredth\nof a millimetre where it put them. Lay in something flat\nand light, burn the grid, take a picture, calibrate.\nCheck tells you on a fresh picture what it is still worth.',
+    'Jetzt etwas Flaches und Helles einlegen, das das Bett füllt - Papier oder dünne Pappe. Darauf brennt der Laser {n} Kreuze mit S{s} bei F{f}; das markiert Papier und brennt nicht durch. Auf Holz wäre es fünfmal zu viel.\n\nDie Kreuze liegen {d:.1f} mm über dem Bett (Materialstärke {m:.1f} + Unterlage {u:.1f}). Stimmt das nicht, erst im Reiter Material ändern.\n\nDer Nullpunkt muss dabei dort stehen, wo er auch beim Arbeiten steht - die Eichung gilt für genau diese Koordinaten.':
+        'Now lay in something flat and light that fills the bed - paper or thin card. The laser burns {n} crosses onto it with S{s} at F{f}; that marks paper and does not burn through. On wood it would be five times too much.\n\nThe crosses will sit {d:.1f} mm above the bed (material thickness {m:.1f} + support {u:.1f}). If that is wrong, change it in the Material tab first.\n\nThe zero point must sit where it sits when you work - the calibration holds for exactly those coordinates.',
+    'Eichraster erzeugt: {n} Kreuze über {b:.0f} x {h:.0f} mm. Brennen, dann ein Bild holen und auf Eichen drücken.':
+        'Calibration grid made: {n} crosses over {b:.0f} x {h:.0f} mm. Burn it, then take a picture and press Calibrate.',
+    'Erst ein Bild holen - gerechnet wird am rohen Kamerabild, nicht am entzerrten.':
+        'Take a picture first - the computation runs on the raw camera picture, not on the rectified one.',
+    'Es gibt noch keine Eichung zum Prüfen.':
+        'There is no calibration to check yet.',
+    'suche {n} Kreuze im Bild ...': 'looking for {n} crosses in the picture ...',
+    'prüfe die Eichung am frischen Bild ...':
+        'checking the calibration against the fresh picture ...',
+    '{g} von {n} Kreuzen gefunden.\n\nNeue Eichung: Fehler {m:.2f} mm im Mittel, {x:.2f} mm größter - über {bx:.0f} x {by:.0f} mm.':
+        '{g} of {n} crosses found.\n\nNew calibration: error {m:.2f} mm on average, {x:.2f} mm largest - over {bx:.0f} x {by:.0f} mm.',
+    '\n\nBisher stand dort {a:.2f} mm.': '\n\nSo far it said {a:.2f} mm.',
+    '\n\nÜbernehmen?': '\n\nTake it?',
+    'Eichung geprüft: {g} Kreuze gefunden, Fehler {m:.2f} mm im Mittel, {x:.2f} mm größter.':
+        'Calibration checked: {g} crosses found, error {m:.2f} mm on average, {x:.2f} mm largest.',
+    '\n\nDas ist deutlich mehr, als die Eichung für sich behauptet ({v:.2f} mm). Neu eichen.':
+        '\n\nThat is well beyond what the calibration claims for itself ({v:.2f} mm). Calibrate again.',
+    'Eckkreuze anklicken': 'Click the corner crosses',
+    '{i} von 4: auf das Kreuz bei X {x:.0f} / Y {y:.0f} klicken.':
+        '{i} of 4: click the cross at X {x:.0f} / Y {y:.0f}.',
+    ' Das ist die Marke mit den längeren Armen.':
+        ' That is the mark with the longer arms.',
     'Rahmen X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} ({b:.1f} x {h:.1f} mm)':
         'Frame X {x0:.1f}..{x1:.1f}  Y {y0:.1f}..{y1:.1f} ({b:.1f} x {h:.1f} mm)',
     'Rahmenfahrt (Laser schwach, S{s})':

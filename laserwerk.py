@@ -14,6 +14,7 @@ from tkinter import ttk
 
 import materialtest as MT
 import lw_kamera as KAM
+import lw_eichung as EI
 import lw_dialog as D                         # native GTK-Dialoge
 from lw_dialog import filedialog, messagebox
 import lw_style as S
@@ -924,6 +925,26 @@ class App:
                    "so viel höher. Die Materialstärke kommt aus dem Reiter\n"
                    "Material und zählt dazu."))).grid(
             row=3, column=0, columnspan=3, sticky="w", pady=(3, 0))
+
+        ef = ttk.LabelFrame(f, text=T("Eichen"), padding=4)
+        ef.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Button(ef, text=T("Raster erzeugen"), width=15,
+                   command=self.eich_raster).grid(row=0, column=0)
+        ttk.Button(ef, text=T("Eichen"), width=11, style="Accent.TButton",
+                   command=self.eichen).grid(row=0, column=1, padx=4)
+        ttk.Button(ef, text=T("Prüfen"), width=11,
+                   command=self.eichung_pruefen).grid(row=0, column=2)
+        self.lbl_eich = ttk.Label(ef, text="", style="Muted.TLabel",
+                                  wraplength=360)
+        self.lbl_eich.grid(row=1, column=0, columnspan=3, sticky="w",
+                           pady=(3, 0))
+        self._erklaerung(ttk.Label(ef, style="Muted.TLabel", wraplength=360,
+            text=T("Die Maschine ist das bessere Lineal als ein Ausdruck:\n"
+                   "sie brennt ein Raster aus Kreuzen, von dem sie auf\n"
+                   "Hundertstel weiß, wo es liegt. Etwas Flaches und Helles\n"
+                   "einlegen, das Raster brennen, Bild holen, eichen.\n"
+                   "Prüfen sagt an einem frischen Bild, was sie noch taugt."))
+            ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._kam_zeigen()
 
     def _kameras(self):
@@ -1047,6 +1068,233 @@ class App:
         self._maschine_sichern()
         self._kamera_neu_rechnen()
         self._kamera_zeigen()
+
+    # ------------------------------------------------------------ Eichen
+    EICH_RAND = 30.0           # mm Abstand der aeusseren Kreuze zur Bettkante
+    EICH_N = 5                 # Kreuze je Achse
+
+    def _eich_punkte(self):
+        return EI.raster_punkte(float(self.cfg["x_max"]),
+                                float(self.cfg["y_max"]),
+                                self.EICH_RAND, self.EICH_N)
+
+    def _eich_dicke(self):
+        """Wie hoch die Kreuze ueber dem nackten Bett liegen.
+
+        Das ist die Ebene, fuer die die Eichung gilt. Steht sie nicht in
+        der Eichung, zaehlt die Unterlage beim naechsten Bild doppelt.
+        """
+        return self._kam_zahl("v_dicke") + self._kam_zahl("v_kam_unterlage")
+
+    def eich_raster(self):
+        """Den Brennauftrag fuer das Eichraster erzeugen und als Job laden.
+
+        Gebrannt wird er nicht von hier aus. Er wird ein ganz gewoehnlicher
+        Job und startet wie jeder andere - mit demselben Knopf, denselben
+        Warnungen und demselben Wächter.
+        """
+        punkte = self._eich_punkte()
+        if not messagebox.askokcancel(T("Eichen"), T(
+                "Jetzt etwas Flaches und Helles einlegen, das das Bett "
+                "füllt - Papier oder dünne Pappe. Darauf brennt der Laser "
+                "{n} Kreuze mit S{s} bei F{f}; das markiert Papier und "
+                "brennt nicht durch. Auf Holz wäre es fünfmal zu viel.\n\n"
+                "Die Kreuze liegen {d:.1f} mm über dem Bett "
+                "(Materialstärke {m:.1f} + Unterlage {u:.1f}). Stimmt das "
+                "nicht, erst im Reiter Material ändern.\n\n"
+                "Der Nullpunkt muss dabei dort stehen, wo er auch beim "
+                "Arbeiten steht - die Eichung gilt für genau diese "
+                "Koordinaten.").format(
+                    n=len(punkte), s=EI.S_RASTER, f=EI.F_RASTER,
+                    d=self._eich_dicke(), m=self._kam_zahl("v_dicke"),
+                    u=self._kam_zahl("v_kam_unterlage"))):
+            return
+        try:
+            zeilen = EI.raster_gcode(punkte, x_max=float(self.cfg["x_max"]),
+                                     y_max=float(self.cfg["y_max"]))
+        except ValueError as e:
+            messagebox.showerror(T("Eichen"), str(e))
+            return
+        pfad = os.path.join(P.DIR, "eichraster.nc")
+        with open(pfad, "w") as fh:
+            fh.write("\n".join(zeilen) + "\n")
+        self._gcode_laden(pfad)
+        self._log(T("Eichraster erzeugt: {n} Kreuze über {b:.0f} x {h:.0f} mm. "
+                    "Brennen, dann ein Bild holen und auf Eichen drücken.")
+                  .format(n=len(punkte),
+                          b=float(self.cfg["x_max"]) - 2 * self.EICH_RAND,
+                          h=float(self.cfg["y_max"]) - 2 * self.EICH_RAND))
+
+    def _eich_bild(self):
+        """Das rohe Bild, oder eine Erklaerung, warum es keines gibt."""
+        roh = getattr(self, "kam_roh", None)
+        if roh is None:
+            messagebox.showinfo(T("Eichen"), T(
+                "Erst ein Bild holen - gerechnet wird am rohen Kamerabild, "
+                "nicht am entzerrten."))
+            return None
+        return roh
+
+    def eichen(self):
+        """Aus den gebrannten Kreuzen eine neue Eichung rechnen."""
+        roh = self._eich_bild()
+        if roh is None:
+            return
+        punkte = self._eich_punkte()
+        alt = self._kam_eichung()
+        ecken = None
+        if not alt.get("homographie"):
+            # Beim allerersten Mal gibt es keinen Wegweiser. Vier Klicks
+            # sind einer.
+            ecken = self._eich_ecken_klicken(roh, punkte)
+            if ecken is None:
+                return
+        dicke = self._eich_dicke()
+        hoehe = self._kam_zahl("v_kam_hoehe")
+        vorlage = {"geraet": self.v_kamera.get().strip()}
+
+        def arbeit():
+            e, funde, guete = EI.eichen(
+                roh, punkte, start=alt or None, ecken_px=ecken,
+                dicke=dicke, hoehe=hoehe, vorlage=vorlage)
+            self.q.put(("eichung", (e, funde, guete)))
+        self._bg(arbeit, T("suche {n} Kreuze im Bild ...")
+                 .format(n=len(punkte)))
+
+    def _eichung_fertig(self, d):
+        """Das Ergebnis zeigen - und erst auf Zusage uebernehmen.
+
+        Eine Eichung schweigend zu ersetzen waere die schlechteste Art,
+        sie zu verbessern: wer am Ende schlechter dasteht als vorher, soll
+        das vorher sehen und nein sagen koennen.
+        """
+        eichung, funde, guete = d
+        alt = self._kam_eichung()
+        gefunden = int((guete > 0).sum())
+        text = T("{g} von {n} Kreuzen gefunden.\n\n"
+                 "Neue Eichung: Fehler {m:.2f} mm im Mittel, {x:.2f} mm "
+                 "größter - über {bx:.0f} x {by:.0f} mm.").format(
+            g=gefunden, n=len(guete), m=eichung["fehler_mittel_mm"],
+            x=eichung["fehler_mm"], bx=eichung["spanne_mm"][0],
+            by=eichung["spanne_mm"][1])
+        if alt.get("fehler_mm"):
+            text += T("\n\nBisher stand dort {a:.2f} mm.").format(
+                a=alt["fehler_mm"])
+        self._log(text.replace("\n\n", " "))
+        if not messagebox.askokcancel(T("Eichen"), text + T(
+                "\n\nÜbernehmen?")):
+            return
+        self.cfg["kamera"] = eichung
+        P.save_config(self.cfg)
+        self._maschine_sichern()
+        self.kam_bett = self.kam_dicke = None
+        self._kam_zeigen()
+        # Nicht ueber _kamera_neu_rechnen(): das steigt aus, solange kein
+        # entzerrtes Bild dasteht - und das wurde gerade weggeworfen, weil
+        # es nach der alten Eichung gerechnet war.
+        if getattr(self, "kam_roh", None) is not None:
+            self._kam_bett_rechnen()
+        self._kamera_zeigen()
+
+    def eichung_pruefen(self):
+        """Was die gespeicherte Eichung heute noch taugt.
+
+        Der Knopf, der den Fehler Wochen frueher gezeigt haette: eine
+        Eichung verrutscht nicht laut, sie verrutscht still.
+        """
+        roh = self._eich_bild()
+        if roh is None:
+            return
+        alt = self._kam_eichung()
+        if not alt.get("homographie"):
+            messagebox.showinfo(T("Eichen"), T("Es gibt noch keine Eichung "
+                                               "zum Prüfen."))
+            return
+        punkte = self._eich_punkte()
+        dicke = self._eich_dicke()
+
+        def arbeit():
+            self.q.put(("eichpruefung",
+                        EI.pruefen(roh, alt, punkte, dicke=dicke)))
+        self._bg(arbeit, T("prüfe die Eichung am frischen Bild ..."))
+
+    def _eichpruefung_fertig(self, d):
+        mittel, groesster, funde, guete = d
+        versprochen = float(self._kam_eichung().get("fehler_mm", 0.0) or 0.0)
+        text = T("Eichung geprüft: {g} Kreuze gefunden, Fehler {m:.2f} mm "
+                 "im Mittel, {x:.2f} mm größter.").format(
+            g=int((guete > 0).sum()), m=mittel, x=groesster)
+        self._log(text)
+        self.lbl_eich.configure(text=text)
+        rat = ""
+        if versprochen and groesster > 2.0 * max(0.3, versprochen):
+            rat = T("\n\nDas ist deutlich mehr, als die Eichung für sich "
+                    "behauptet ({v:.2f} mm). Neu eichen.").format(v=versprochen)
+        messagebox.showinfo(T("Eichen"), text + rat)
+
+    ECKEN_BREIT = 900          # Bildpunkte, auf die das Bild zum Klicken faellt
+
+    def _eich_ecken_klicken(self, roh, punkte):
+        """Die vier Eckkreuze anklicken lassen - der erste Wegweiser.
+
+        Ohne alte Eichung weiss niemand, wo im Bild ein Kreuz liegt, und
+        frei zu suchen scheitert am Maschinenrahmen. Vier Ecken reichen
+        fuer eine Homographie; die Verzeichnung fehlt darin, aber als
+        Suchfenster ist es genau genug.
+
+        Gefragt wird nach Maschinenkoordinaten, nicht nach 'oben links':
+        wie herum die Kamera im Bild liegt, weiss das Programm ja gerade
+        noch nicht.
+        """
+        n = self.EICH_N
+        ziele = [(0, punkte[0]), (n - 1, punkte[n - 1]),
+                 (len(punkte) - n, punkte[-n]), (len(punkte) - 1, punkte[-1])]
+        mass = min(1.0, self.ECKEN_BREIT / float(roh.width))
+        klein = roh.resize((max(1, int(roh.width * mass)),
+                            max(1, int(roh.height * mass))), Image.LANCZOS)
+        top = tk.Toplevel(self)
+        top.title(T("Eckkreuze anklicken"))
+        top.transient(self)
+        lbl = ttk.Label(top, text="", wraplength=klein.width - 20)
+        lbl.pack(anchor="w", padx=8, pady=(8, 4))
+        cv = tk.Canvas(top, width=klein.width, height=klein.height,
+                       highlightthickness=0)
+        cv.pack()
+        bild = self._tkbild(klein)
+        cv.create_image(0, 0, anchor="nw", image=bild)
+        cv.bild = bild                       # sonst raeumt Tk es weg
+        gefunden = []
+
+        def fragen():
+            i = len(gefunden)
+            if i >= len(ziele):
+                top.destroy()
+                return
+            x, y = ziele[i][1]
+            lbl.configure(text=T(
+                "{i} von 4: auf das Kreuz bei X {x:.0f} / Y {y:.0f} klicken."
+            ).format(i=i + 1, x=x, y=y) + (T(" Das ist die Marke mit den "
+                                             "längeren Armen.") if not i else ""))
+
+        def klick(e):
+            gefunden.append((e.x / mass, e.y / mass))
+            cv.create_line(e.x - 12, e.y, e.x + 12, e.y, fill="#2ecc40", width=2)
+            cv.create_line(e.x, e.y - 12, e.x, e.y + 12, fill="#2ecc40", width=2)
+            fragen()
+
+        cv.bind("<Button-1>", klick)
+        ttk.Button(top, text=T("Abbrechen"),
+                   command=top.destroy).pack(anchor="e", padx=8, pady=6)
+        fragen()
+        top.grab_set()
+        self.wait_window(top)
+        return gefunden if len(gefunden) == len(ziele) else None
+
+    def _tkbild(self, bild):
+        """Ein PIL-Bild als PhotoImage - ohne ImageTk, das nicht ueberall da ist."""
+        puffer = io.BytesIO()
+        bild.convert("RGB").save(puffer, format="PNG")
+        return tk.PhotoImage(data=base64.b64encode(puffer.getvalue()))
 
     def _kamera_uebernehmen(self, roh):
         """Das frische Bild entzerren und merken."""
@@ -3516,6 +3764,16 @@ class App:
                                                   (T("alle"), "*")])
         if not p:
             return
+        self._gcode_laden(p)
+
+    def _gcode_laden(self, p):
+        """Eine fertige G-Code-Datei als Job uebernehmen.
+
+        Getrennt vom Dateidialog, weil nicht jeder Job aus einer vom
+        Benutzer gewaehlten Datei kommt: das Eichraster schreibt sich
+        selbst eine und soll denselben Weg nehmen wie alles andere - mit
+        Vorschau, Laufzeit und dem gewohnten Startknopf.
+        """
         self.clear_motif()
         with open(p) as f:
             self.lines = [l for l in (x.split(";")[0].strip() for x in f) if l]
@@ -4624,6 +4882,10 @@ class App:
             self._status_zeigen()
         elif k == "kamerabild":
             self._kamera_uebernehmen(d)
+        elif k == "eichung":
+            self._eichung_fertig(d)
+        elif k == "eichpruefung":
+            self._eichpruefung_fertig(d)
         elif k == "prog":
             done, tot, el, er = d
             self.prog["value"] = done * 1000 / tot

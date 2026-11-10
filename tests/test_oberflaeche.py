@@ -77,6 +77,7 @@ class Aufbau(Grundlage):
         for name, tab in (("Motiv", self.app.tab_motiv),
                           ("Material", self.app.tab_mat),
                           ("Maschine", self.app.tab_masch),
+                          ("Kamera", self.app.tab_kam),
                           ("Tests", self.app.tab_test)):
             kaesten = [(c.winfo_x(), c.winfo_y(), c.winfo_width(), c.winfo_height())
                        for c in tab.winfo_children() if c.grid_info()]
@@ -3531,6 +3532,149 @@ class KameraUnterDerZeichenflaeche(Grundlage):
 
 
 @ohne_bildschirm
+class EichenImKamerareiter(Grundlage):
+    """Die Kamera einrichten, ohne Skripte.
+
+    Bis zum 10.11.2026 lief jede Eichung ueber Dateien in werkstatt/:
+    Muster schreiben, Foto holen, Kreuze suchen, Zahlen von Hand ins
+    Profil. Wer Laserwerk neu aufsetzte, sah ein Bild und sonst nichts.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._bett = (self.app.cfg.get("x_max"), self.app.cfg.get("y_max"))
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 400.0, 400.0
+        self.app.v_dicke.set(0.0)
+        self.app.v_kam_unterlage.set(0.0)
+
+    def tearDown(self):
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = self._bett
+        super().tearDown()
+
+    def warten(self, fertig, sekunden=60.0):
+        """Auf die Hintergrundarbeit warten und dabei die Schlange leeren."""
+        ende = time.time() + sekunden
+        while time.time() < ende:
+            self.wurzel.update()
+            if fertig():
+                return
+            time.sleep(0.01)
+        self.fail("die Hintergrundarbeit wurde nicht fertig")
+
+    # ---------------------------------------------------------- Raster
+    def test_das_raster_wird_ein_ganz_normaler_job(self):
+        """Kein eigener Brennweg: derselbe Knopf, dieselben Warnungen,
+        derselbe Waechter wie bei jedem anderen Job."""
+        self.app.eich_raster()
+        self.assertTrue(self.app.lines)
+        self.assertEqual(sum(1 for z in self.app.lines if z.startswith("G1")),
+                         50)
+        self.assertIsNotNone(self.app.info)
+
+    def test_das_raster_bleibt_auf_dem_bett(self):
+        self.app.eich_raster()
+        zahlen = [float(m.group(1)) for z in self.app.lines
+                  for m in re.finditer(r"[XY](-?\d+\.?\d*)", z)]
+        self.assertGreater(min(zahlen), -0.001)
+        self.assertLess(max(zahlen), 400.001)
+
+    def test_wer_abbricht_bekommt_keinen_job(self):
+        self.L.messagebox.askokcancel = lambda t, m: False
+        self.app.lines = None
+        self.app.eich_raster()
+        self.assertIsNone(self.app.lines)
+
+    def test_die_eichebene_ist_material_plus_unterlage(self):
+        """Geeicht wird in einer Ebene. Steht nicht dabei, welche, zaehlt
+        die Unterlage beim naechsten Bild doppelt."""
+        self.app.v_dicke.set(3.0)
+        self.app.v_kam_unterlage.set(22.0)
+        self.assertAlmostEqual(self.app._eich_dicke(), 25.0, places=3)
+
+    # ----------------------------------------------------------- Eichen
+    def test_eichen_ohne_bild_sagt_es(self):
+        self.app.kam_roh = None
+        self.gezeigt.clear()
+        self.app.eichen()
+        self.assertTrue(any(art == "i" for art, _ in self.gezeigt))
+
+    def test_pruefen_ohne_eichung_sagt_es(self):
+        self.app.kam_roh = Image.new("RGB", (1296, 972), (180, 180, 180))
+        self.app.cfg.pop("kamera", None)
+        self.gezeigt.clear()
+        self.app.eichung_pruefen()
+        self.assertTrue(any(art == "i" for art, _ in self.gezeigt))
+
+    def kunst(self):
+        """Ein gebranntes Raster, wie die Kamera es saehe - kuenstlich."""
+        from test_eichung import ECHT, bild_malen
+        return dict(ECHT), bild_malen()
+
+    def test_aus_dem_bild_wird_eine_eichung(self):
+        echt, bild = self.kunst()
+        self.app.cfg["kamera"] = echt
+        self.app.v_kamera.set("/dev/video2")
+        self.app.v_kam_hoehe.set(260.0)
+        self.app.kam_roh = bild
+        self.app.eichen()
+        self.warten(lambda: "fehler_mm" in self.app._kam_eichung())
+        e = self.app._kam_eichung()
+        self.assertEqual(e["kreuze"], 25)
+        self.assertLess(e["fehler_mm"], 0.5)
+        self.assertEqual(e["geraet"], "/dev/video2")
+        self.assertEqual(e["hoehe"], 260.0)
+        # Das entzerrte Bild gilt jetzt nach der neuen Eichung
+        self.assertIsNotNone(self.app.kam_bett)
+
+    def test_eine_neue_eichung_wird_erst_gefragt(self):
+        """Schweigend zu ersetzen waere die schlechteste Art, eine Eichung
+        zu verbessern: wer hinterher schlechter dasteht, soll vorher nein
+        sagen koennen."""
+        echt, bild = self.kunst()
+        self.app.cfg["kamera"] = echt
+        self.app.kam_roh = bild
+        gefragt = []
+        self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or False
+        self.app.eichen()
+        self.warten(lambda: gefragt)
+        self.assertIs(self.app._kam_eichung(), echt)
+        self.assertIn("Kreuzen gefunden", gefragt[0])
+
+    def test_der_fehler_steht_mit_seiner_flaeche_da(self):
+        """Eine Fehlerzahl ohne ihre Flaeche ist eine Falle."""
+        echt, bild = self.kunst()
+        self.app.cfg["kamera"] = echt
+        self.app.kam_roh = bild
+        gefragt = []
+        self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or True
+        self.app.eichen()
+        self.warten(lambda: gefragt)
+        self.assertIn("340", gefragt[0])
+
+    # ---------------------------------------------------------- Pruefen
+    def test_pruefen_meldet_was_die_eichung_taugt(self):
+        """Der Knopf, der den Fehler Wochen frueher gezeigt haette: eine
+        Eichung verrutscht nicht laut, sie verrutscht still."""
+        echt, bild = self.kunst()
+        self.app.cfg["kamera"] = echt
+        self.app.kam_roh = bild
+        self.gezeigt.clear()
+        self.app.eichung_pruefen()
+        self.warten(lambda: self.gezeigt)
+        self.assertIn("Kreuze gefunden", self.app.lbl_eich.cget("text"))
+
+    def test_eine_verrutschte_eichung_faellt_beim_pruefen_auf(self):
+        echt, bild = self.kunst()
+        echt["versatz"] = [echt["versatz"][0] + 2.5, echt["versatz"][1] - 1.5]
+        echt["fehler_mm"] = 0.4
+        self.app.cfg["kamera"] = echt
+        self.app.kam_roh = bild
+        self.gezeigt.clear()
+        self.app.eichung_pruefen()
+        self.warten(lambda: self.gezeigt)
+        self.assertIn("Neu eichen", "".join(m for _, m in self.gezeigt))
+
+
 class GeladenerGcodeIstAuchGcode(Grundlage):
     """Eine geladene .nc hat kein Motiv - sie ist eines.
 

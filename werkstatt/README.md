@@ -1,17 +1,22 @@
 # Werkstatt
 
-Prototypen, die noch kein Programmteil sind. Was hier steht, lief am
-**7.11.2026** einmal richtig durch und ist die Vorlage fuer `lw_eichung.py`
-— nicht mehr. Pfade und Maschinenname stehen teils fest im Text, es gibt
-keine Tests, und die `*.nc` schreiben die Skripte nur; **gestartet wird an
-der Maschine von Hand.**
+Prototypen. Was hier steht, lief am **7.11.2026** einmal richtig durch
+und war die Vorlage fuer `lw_eichung.py`. Pfade und Maschinenname stehen
+teils fest im Text, es gibt keine Tests, und die `*.nc` schreiben die
+Skripte nur; **gestartet wird an der Maschine von Hand.**
 
-## Warum es das gibt
+> **Seit dem 10.11.2026 ist der Weg im Programm.** Reiter Kamera, Kasten
+> *Eichen*: Raster erzeugen, brennen, Bild holen, Eichen, Pruefen. Die
+> Skripte hier werden nicht mehr gebraucht und auch nicht mehr gepflegt;
+> sie bleiben als Beleg dafuer, wie die Zahlen in `lw_eichung.py`
+> entstanden sind.
 
-Die Kamera im Deckel laesst sich benutzen, aber **nicht einrichten**. Alles,
+## Warum es das gab
+
+Die Kamera im Deckel liess sich benutzen, aber **nicht einrichten**. Alles,
 was die Falcon2 am 6. und 7.11. brauchbar gemacht hat, lief ueber diese
-Skripte. Im Kamerareiter gibt es dafuer keinen einzigen Knopf — wer das
-Programm neu aufsetzt, sieht ein Bild und sonst nichts.
+Skripte. Im Kamerareiter gab es dafuer keinen einzigen Knopf — wer das
+Programm neu aufsetzte, sah ein Bild und sonst nichts.
 
 ## Stand der Falcon2 Pro 22 W
 
@@ -74,54 +79,57 @@ Was funktioniert:
   dunkelsten Ecke dicht an der Schiene und war zweimal nur von Hand zu
   finden.
 
-## Der Plan: `lw_eichung.py`
+## Was daraus geworden ist: `lw_eichung.py`
 
-### Die Punktekarte faellt weg
+Gebaut am **10.11.2026**, mit 44 Tests. Die Punktekarte faellt weg: ein
+Raster aus 25 gebrannten Kreuzen ueber das ganze Bett liefert Linse,
+Homographie und Lage aus *einem* Foto in *einem* Anpassungsschritt — kein
+Ausdruck, keine elf Aufnahmen, keine Frage, ob die Karte flach lag.
 
-Bisher zwei Schritte mit zwei Datensaetzen: elf Aufnahmen einer gedruckten
-Karte fuer die Linse, danach gebrannte Kreuze fuer die Lage. Beide lagen
-nur in der Bildmitte — daher die 6,5 mm aussen.
+Der Ablauf im Reiter Kamera, Kasten *Eichen*:
 
-Fuer andere Nutzer kommt dazu, dass sie die Karte erst masshaltig
-ausdrucken muessten. Ein Tintenstrahldrucker trifft 20 mm Mittenabstand
-nicht auf ein Zehntel.
+1. **Raster erzeugen** — fragt nach, welche Ebene gemeint ist
+   (Materialstaerke + Unterlage), schreibt den Brennauftrag und laedt ihn
+   als ganz gewoehnlichen Job. Gestartet wird er wie jeder andere.
+2. **Bild holen** (der Knopf von vorher).
+3. **Eichen** — sucht die Kreuze, passt an, zeigt den Fehler mit seiner
+   Flaeche und uebernimmt erst auf Zusage.
+4. **Pruefen** — frisches Bild, Kreuze suchen, Fehler gegen die
+   *gespeicherte* Eichung. Der Knopf, der den Fehler Wochen frueher
+   gezeigt haette.
 
-**Die Maschine ist das bessere Lineal.** Sie weiss auf Hundertstel, wo ihr
-Kopf steht. Ein Raster aus 25 gebrannten Kreuzen ueber das ganze Bett
-belegt jede Bildecke und liefert k1/k2, Homographie und Lage aus *einem*
-Foto in *einem* Anpassungsschritt — kein Ausdruck, keine elf Aufnahmen,
-keine Frage, ob die Karte flach lag.
+Beim allerersten Eichen gibt es keinen Wegweiser, der sagt, wo die Kreuze
+liegen. Dann oeffnet sich ein Fenster mit dem Bild und fragt nach vier
+Eckkreuzen — nach Maschinenkoordinaten, nicht nach "oben links": wie herum
+die Kamera im Bild liegt, weiss das Programm an der Stelle ja gerade noch
+nicht. Das erste Kreuz hat laengere Arme und ist daran zu erkennen.
 
-### Der Ablauf im Reiter Kamera
+### Was die Rechnung traegt
 
-1. **Eichen** — "Leg etwas Flaches und Helles ein, das das Bett fuellt."
-2. Materialstaerke eintragen; sie wird als `dicke` in der Eichung vermerkt.
-3. **Raster erzeugen** — wird ein ganz normaler Job. Gestartet wird er wie
-   jeder andere vom Benutzer; der Laser brennt.
-4. **Bild holen** — 25 Kreuze gesucht, angepasst, Fehler angezeigt.
-5. **Uebernehmen.**
+**Stehen k1, k2 und die Verzeichnungsmitte fest, ist die Homographie
+linear zu bestimmen.** Damit bleibt eine Suche ueber vier Zahlen statt
+ueber zwoelf. Gemessen wird der Fehler dabei in Millimetern, nicht in
+Bildpunkten: die Tonne staucht den Bildrand, dort sind Millimeter weniger
+Bildpunkte wert, und wer in Bildpunkten anpasst, gewichtet ausgerechnet
+die Mitte hoch, an der ohnehin alles stimmt.
 
-Dazu, und fast wichtiger, ein zweiter Knopf: **Pruefen.** Frisches Bild,
-Kreuze suchen, Fehler gegen die gespeicherte Eichung ausrechnen. Am 7.11.
-von Hand gemacht; als Knopf haette er den Fehler Wochen frueher gezeigt.
+### Der Hebel ist die Mitte, nicht die Zahl der Kreuze
 
-### Was zu bauen ist
+Am kuenstlichen Modell gemessen, Fehler ueber das ganze Bett:
 
-| Teil | Umfang |
-|---|---|
-| `lw_eichung.py`: Raster erzeugen, Kreuze finden, gemeinsame Anpassung von k1/k2, Homographie und Lage (Gauss-Newton wie in `lw_kamera`) | ~350 Zeilen |
-| Ablauf im Reiter Kamera | ~150 Zeilen |
-| Tests gegen ein kuenstlich verzeichnetes Bild: Kreuze durch ein bekanntes Modell rechnen, anpassen, die bekannten Werte muessen zurueckkommen | ~150 Zeilen |
+| | Mitte fest in der Bildmitte | Mitte mitgesucht |
+|---|---|---|
+| 9 Kreuze | 1,49 / 3,14 mm | 0 |
+| 25 Kreuze | 1,31 / 3,40 mm | 0 |
 
-Der kuenstliche Test ist der Kern. Nur er prueft die Anpassung, ohne dass
-eine Maschine laeuft.
+Mehr Kreuze bringen **nichts**, solange die Verzeichnungsmitte auf der
+Bildmitte festgenagelt ist — die Linse sitzt bei dieser Kamera 100
+Bildpunkte daneben. Genau dort steckten die 1,4 mm, die am 7.11. nach der
+Neuanpassung uebrig blieben.
 
-**Rueckfalltuer fuer die Kreuzsuche:** findet sie nicht alle, zeigt das
-Programm das Bild und laesst die vier Eckkreuze anklicken. Daraus kommt
-der Wegweiser, der beim ersten Eichen fehlt — danach greift die
-fenstergefuehrte Suche fuer alle 25. Die Gittererkennung, die
-`lw_kamera` fuer die Punktekarte schon kann (Basis aus den haeufigsten
-kurzen Verschiebungen), ist der zweite Anlauf.
+Mit Messrauschen und freier Mitte (25 Kreuze): 0,5 Bildpunkte Rauschen →
+0,10 mm im Mittel, 0,38 mm groesster. **Unter einem halben Millimeter ist
+erreichbar.**
 
 ## Offen
 
@@ -138,11 +146,17 @@ sind das 2,4 % Groessenunterschied — gut messbar. Dafuer reicht es, die
 schon gebrannte Pappe um ein bekanntes Mass anzuheben und ein zweites Mal
 zu fotografieren; nichts verschieben, nur heben.
 
-**Die 1,4 mm Rest sitzen in der Linse, nicht mehr in der Lage.** Ein
-starres Anpassen von Maszstab, Drehung und Versatz kann nicht besser
-werden. Das Bild zeigt deutliche Tonnenverzeichnung — die Bettkanten sind
-sichtbar gebogen —, und k1/k2 stammen aus der Punktekarte in der
-Bildmitte. Das 25er-Raster sollte unter einen halben Millimeter kommen.
+**Die 1,4 mm Rest sassen in der Linse, nicht in der Lage** — genauer: in
+ihrer *Mitte*. Siehe die Tabelle oben. Am Modell faellt der Fehler damit
+unter einen halben Millimeter; an der echten Maschine ist das noch nicht
+nachgemessen. Dafuer gibt es jetzt den Knopf **Pruefen**.
+
+**Nachgemessen am Werkstueck, 9./10.11.2026.** Ein Schild von 136,3 x 72,2
+mm auf einem Brettchen: die Kamera zeigte das Brett 2,3 mm breiter, als es
+war, und die Gravur kam gegenueber der Brettmitte 0,7 mm weiter links und
+0,7 mm weiter vorn heraus. An der linken Kante summierte sich das auf 1,8
+mm. Groessenordnung und Richtung passen zu den 1,58 mm, die die damalige
+Eichung fuer sich auswies.
 
 **Ein Teil der 1,4 mm kann auch die Pappe sein.** Sie lag nicht
 hundertprozentig flach, und 1 mm Woelbung sind bei 200 mm Abstand vom

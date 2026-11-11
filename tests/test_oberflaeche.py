@@ -4252,6 +4252,150 @@ class WerkstueckeImKamerareiter(Grundlage):
         self.assertEqual([s["nr"] for s in self.app.stuecke], [1, 2, 3])
         self.assertEqual(self.app.stueck_aktiv, 2)
 
+    # ----------------------------------------------------------- Fangen
+    def fang_motiv(self, b=40.0, h=40.0):
+        self.motiv()
+        self.app.v_w.set(b); self.app.v_h.set(h)
+        self.app.v_snap.set(True)
+        self.app.v_fang.set(True)
+        self.app.v_fangradius.set(8.0)
+
+    def ziehen_auf(self, von, nach):
+        """Das Motiv an seiner Mitte fassen und woandershin ziehen."""
+        x, y, b, h = self.app._box()
+        self.app._press(self.zeiger(x + b / 2.0, y + h / 2.0))
+        self.app._drag_move(self.zeiger(*nach))
+        self.app._drag_ende(self.zeiger(*nach))
+
+    def test_die_mitte_des_motivs_rastet_auf_der_mitte_des_stuecks_ein(self):
+        """Nicht die Ecke, nicht der Rahmen: die Mitte auf die Mitte.
+        Daran entscheidet sich, ob die Gravur mittig sitzt."""
+        self.scheiben()
+        self.fang_motiv()
+        ziel = self.app.stuecke[1]["mitte"]
+        self.app._set_box(ziel[0] - 20.0 + 4.0, ziel[1] - 20.0 + 3.0)
+        self.ziehen_auf(None, (ziel[0] + 3.0, ziel[1] - 2.0))
+        x, y, b, h = self.app._box()
+        self.assertAlmostEqual(x + b / 2.0, ziel[0], delta=0.01)
+        self.assertAlmostEqual(y + h / 2.0, ziel[1], delta=0.01)
+
+    def test_zu_weit_weg_rastet_nicht_ein(self):
+        self.scheiben()
+        self.fang_motiv()
+        self.app.v_fangradius.set(2.0)
+        s = self.app.stuecke[1]["mitte"]
+        x, y = self.app._stueck_fangen(s[0] - 20.0 + 9.0, s[1] - 20.0, 40.0, 40.0)
+        self.assertAlmostEqual(x, s[0] - 20.0 + 9.0, delta=0.01)
+        self.assertIsNone(self.app.stueck_fang)
+
+    def test_ohne_haken_wird_nicht_gefangen(self):
+        self.scheiben()
+        self.fang_motiv()
+        self.app.v_fang.set(False)
+        s = self.app.stuecke[1]["mitte"]
+        x, y = self.app._stueck_fangen(s[0] - 20.0 + 1.0, s[1] - 20.0, 40.0, 40.0)
+        self.assertAlmostEqual(x, s[0] - 20.0 + 1.0, delta=0.01)
+
+    def test_ohne_einrasten_ueberhaupt_wird_nicht_gefangen(self):
+        """Der alte Haken bleibt der Hauptschalter - wer ihn ausmacht,
+        will nirgends einrasten."""
+        self.scheiben()
+        self.fang_motiv()
+        self.app.v_snap.set(False)
+        s = self.app.stuecke[1]["mitte"]
+        x, _ = self.app._stueck_fangen(s[0] - 20.0 + 1.0, s[1] - 20.0, 40.0, 40.0)
+        self.assertAlmostEqual(x, s[0] - 20.0 + 1.0, delta=0.01)
+
+    def test_das_naechste_stueck_gewinnt(self):
+        self.scheiben()
+        self.fang_motiv()
+        self.app.v_fangradius.set(200.0)
+        nah = self.app.stuecke[1]["mitte"]
+        self.app._stueck_fangen(nah[0] - 20.0 + 2.0, nah[1] - 20.0, 40.0, 40.0)
+        self.assertEqual(self.app.stueck_fang, 1)
+
+    def test_eingerastet_sieht_man_es(self):
+        self.scheiben()
+        self.fang_motiv()
+        s = self.app.stuecke[0]["mitte"]
+        self.app._stueck_fangen(s[0] - 20.0, s[1] - 20.0, 40.0, 40.0)
+        self.assertEqual(self.app.stueck_fang, 0)
+        self.app._draw()
+        self.assertTrue(self.app.cv.find_withtag("stueck"))
+        self.app._drag_ende(self.zeiger(0.0, 0.0))
+        self.assertIsNone(self.app.stueck_fang)
+
+    def test_der_knopf_legt_das_motiv_genau_hin(self):
+        self.scheiben()
+        self.fang_motiv(b=30.0, h=20.0)
+        self.app.stueck_aktiv = 1
+        ziel = self.app.stuecke[1]["mitte"]
+        self.app.motiv_auf_stueck()
+        x, y, b, h = self.app._box()
+        self.assertAlmostEqual(x + b / 2.0, ziel[0], delta=0.01)
+        self.assertAlmostEqual(y + h / 2.0, ziel[1], delta=0.01)
+        # und die Lage steht auch im Element, nicht nur in den Feldern
+        self.assertAlmostEqual(self.app.elemente[self.app.aktiv]["v_xoff"],
+                               x, delta=0.01)
+
+    def test_der_knopf_ohne_wahl_sagt_es(self):
+        self.scheiben()
+        self.fang_motiv()
+        self.app.stueck_aktiv = None
+        self.app.motiv_auf_stueck()
+        self.assertIn("wählen", self.app.lbl_stuecke.cget("text"))
+
+    def test_der_knopf_ohne_motiv_sagt_es(self):
+        self.scheiben()
+        self.app.stueck_aktiv = 0
+        self.app.motiv_auf_stueck()
+        self.assertIn("Motiv", self.app.lbl_stuecke.cget("text"))
+
+    def test_mitdrehen_nimmt_den_winkel_des_stuecks(self):
+        self.bett([("gedreht", 100.0, 100.0, 90.0, 40.0, 20.0)])
+        self.app.stuecke_erkennen()
+        self.fang_motiv()
+        self.app.v_fang_drehen.set(True)
+        self.app.stueck_aktiv = 0
+        self.app.motiv_auf_stueck()
+        # Das Zahlenfeld rastet auf ein Zehntelgrad - genauer wird der
+        # Winkel eines Brettchens ohnehin nicht gemessen.
+        self.assertAlmostEqual(float(self.app.v_rot.get()),
+                               self.app.stuecke[0]["winkel"], delta=0.2)
+
+    def test_ohne_mitdrehen_bleibt_der_winkel(self):
+        self.bett([("gedreht", 100.0, 100.0, 90.0, 40.0, 20.0)])
+        self.app.stuecke_erkennen()
+        self.fang_motiv()
+        self.app.v_fang_drehen.set(False)
+        self.app.v_rot.set(0.0)
+        self.app.stueck_aktiv = 0
+        self.app.motiv_auf_stueck()
+        self.assertAlmostEqual(float(self.app.v_rot.get()), 0.0, delta=0.01)
+
+    def test_das_kleinste_stueck_raeumt_die_waben_weg(self):
+        """Eine Wabe ist nach jedem Mass ein zusammenhaengendes Stueck.
+        Keine Schwelle trennt sie von einem kleinen Werkstueck - nur die
+        Auskunft, wie klein das kleinste eigene ueberhaupt ist."""
+        self.bett([("kreis", 60.0, 140.0, 25.0),
+                   ("rechteck", 150.0, 30.0, 172.0, 48.0)])
+        self.app.v_stueck_min.set(15.0)
+        self.app.stuecke_erkennen()
+        self.assertEqual(len(self.app.stuecke), 2)
+        self.app.v_stueck_min.set(40.0)
+        self.app.stuecke_erkennen()
+        self.assertEqual(len(self.app.stuecke), 1)
+        self.assertEqual(self.app.stuecke[0]["form"], "rund")
+
+    def test_das_kleinste_stueck_ueberlebt_die_sitzung(self):
+        vorher = self.L.P.load_config()
+        try:
+            self.app.v_stueck_min.set(45.0)
+            self.app._stueck_schwelle_sichern()
+            self.assertEqual(self.L.P.load_config().get("stueck_mindest"), 45.0)
+        finally:
+            self.L.P.save_config(vorher)
+
     # ------------------------------------------------------------ Kopf
     def test_der_kopf_wird_gesperrt(self):
         self.app.head = (150.0, 150.0)

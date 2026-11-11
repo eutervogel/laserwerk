@@ -1240,6 +1240,12 @@ EN = {
         "From the far back it grazes the surface instead.\n"
         "Careful: the gantry travels backwards for this -\n"
         "keep anything tall out of its way.",
+    "auf die Werkstückmitte fangen": "snap to the workpiece centre",
+    "Motiv auf das Werkstück legen": "Put the motif on the workpiece",
+    "mitdrehen": "turn with it",
+    "Erst ein Werkstück wählen.": "Pick a workpiece first.",
+    "Kein Motiv da.": "No motif there.",
+    "kleinstes Stück": "smallest piece",
     "entfernen": "remove",
     "Rechteck ziehen": "Drag rectangle",
     "Kreis ziehen": "Drag circle",
@@ -1281,7 +1287,14 @@ EN = {
     "Die Schwelle sagt, wie deutlich sich etwas abheben\n"
     "muss. Höher: nur klare Kanten, dafür weniger Unsinn\n"
     "aus Wabenplatte und Lichtschleier. Niedriger: auch\n"
-    "Schwaches, dafür mehr Fehlfunde.":
+    "Schwaches, dafür mehr Fehlfunde.\n"
+    "Beim Ziehen rastet die Mitte des Motivs auf der Mitte\n"
+    "eines Werkstücks ein, sobald sie nah genug ist. Der\n"
+    "Knopf legt es ohne Ziehen genau dorthin.\n"
+    "Das kleinste Stück räumt die Wabenplatte weg: ihre\n"
+    "Waben sind gut zwanzig Millimeter groß und nach jedem\n"
+    "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
+    "eigenes Werkstück ist.":
         "Take a picture, then find: Laserwerk measures every piece\n"
         "in millimetres and shows its centre. The outlines are only\n"
         "a display - they are never burnt.\n"
@@ -1295,5 +1308,11 @@ EN = {
         "The threshold says how clearly something must stand out.\n"
         "Higher: only clear edges, less nonsense from the honeycomb\n"
         "and the glare. Lower: faint things too, at the price of\n"
-        "more false finds.",
+        "more false finds.\n"
+        "While dragging, the centre of the motif snaps onto the centre\n"
+        "of a workpiece as soon as it is close enough. The button puts\n"
+        "it exactly there without dragging.\n"
+        "The smallest piece clears away the honeycomb: its cells are a\n"
+        "good twenty millimetres across and a piece by every measure.\n"
+        "Enter how small your own smallest workpiece is.",
 }

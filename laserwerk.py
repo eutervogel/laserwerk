@@ -48,6 +48,7 @@ class App:
         self.stueck_modus = None  # "rechteck"/"kreis", solange von Hand gezogen
         self.stueck_zug = None    # der Rahmen, waehrend er gezogen wird
         self.stuecke_gesucht = False
+        self.stueck_fang = None   # Werkstueck, auf dem das Motiv einrastet
         self._kam_groesse = None
         self.maschinen = P.load_maschinen()
         self._maschine_einrichten()
@@ -986,19 +987,53 @@ class App:
         ttk.Button(wf, text=T("alle löschen"), width=11,
                    command=self.stuecke_loeschen).grid(row=1, column=2,
                                                        pady=(4, 0))
-        ttk.Label(wf, text=T("Schwelle")).grid(row=2, column=0, sticky="w",
+        ttk.Label(wf, text=T("kleinstes Stück")).grid(
+            row=2, column=0, sticky="w", pady=(4, 0))
+        self.v_stueck_min = tk.DoubleVar(
+            value=float(self.cfg.get("stueck_mindest", ST.MINDEST_MM)))
+        sp_m = ttk.Spinbox(wf, from_=5.0, to=200.0, increment=5.0, width=6,
+                           textvariable=self.v_stueck_min,
+                           command=self._stueck_schwelle_sichern)
+        sp_m.grid(row=2, column=1, padx=4, pady=(4, 0), sticky="w")
+        sp_m.bind("<Return>", lambda e: self._stueck_schwelle_sichern())
+        sp_m.bind("<FocusOut>", lambda e: self._stueck_schwelle_sichern())
+        ttk.Label(wf, text="mm").grid(row=2, column=2, sticky="w",
+                                      pady=(4, 0))
+        ttk.Label(wf, text=T("Schwelle")).grid(row=7, column=0, sticky="w",
                                                pady=(4, 0))
         self.v_stueck_schwelle = tk.DoubleVar(
             value=float(self.cfg.get("stueck_schwelle", ST.SCHWELLE)))
         sp_s = ttk.Spinbox(wf, from_=0.05, to=0.60, increment=0.05, width=6,
                            textvariable=self.v_stueck_schwelle,
                            command=self._stueck_schwelle_sichern)
-        sp_s.grid(row=2, column=1, padx=4, pady=(4, 0), sticky="w")
+        sp_s.grid(row=7, column=1, padx=4, pady=(4, 0), sticky="w")
         sp_s.bind("<Return>", lambda e: self._stueck_schwelle_sichern())
         sp_s.bind("<FocusOut>", lambda e: self._stueck_schwelle_sichern())
+        self.v_fang = tk.BooleanVar(
+            value=bool(self.cfg.get("stueck_fangen", True)))
+        ttk.Checkbutton(wf, text=T("auf die Werkstückmitte fangen"),
+                        variable=self.v_fang,
+                        command=self._fang_sichern).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.v_fangradius = tk.DoubleVar(
+            value=float(self.cfg.get("stueck_fangradius", 8.0)))
+        sp_f = ttk.Spinbox(wf, from_=1.0, to=50.0, increment=1.0, width=6,
+                           textvariable=self.v_fangradius,
+                           command=self._fang_sichern)
+        sp_f.grid(row=3, column=2, pady=(4, 0))
+        sp_f.bind("<Return>", lambda e: self._fang_sichern())
+        sp_f.bind("<FocusOut>", lambda e: self._fang_sichern())
+        ttk.Button(wf, text=T("Motiv auf das Werkstück legen"), width=26,
+                   command=self.motiv_auf_stueck).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.v_fang_drehen = tk.BooleanVar(
+            value=bool(self.cfg.get("stueck_drehen", False)))
+        ttk.Checkbutton(wf, text=T("mitdrehen"), variable=self.v_fang_drehen,
+                        command=self._fang_sichern).grid(
+            row=4, column=2, sticky="w", pady=(4, 0))
         self.lbl_stuecke = ttk.Label(wf, text="", style="Muted.TLabel",
                                      wraplength=360)
-        self.lbl_stuecke.grid(row=3, column=0, columnspan=3, sticky="w",
+        self.lbl_stuecke.grid(row=5, column=0, columnspan=3, sticky="w",
                               pady=(3, 0))
         self._erklaerung(ttk.Label(wf, style="Muted.TLabel", wraplength=360,
             text=T("Bild holen, dann erkennen: Laserwerk misst jedes Stück\n"
@@ -1015,8 +1050,15 @@ class App:
                    "Die Schwelle sagt, wie deutlich sich etwas abheben\n"
                    "muss. Höher: nur klare Kanten, dafür weniger Unsinn\n"
                    "aus Wabenplatte und Lichtschleier. Niedriger: auch\n"
-                   "Schwaches, dafür mehr Fehlfunde."))).grid(
-            row=4, column=0, columnspan=3, sticky="w", pady=(3, 0))
+                   "Schwaches, dafür mehr Fehlfunde.\n"
+                   "Beim Ziehen rastet die Mitte des Motivs auf der Mitte\n"
+                   "eines Werkstücks ein, sobald sie nah genug ist. Der\n"
+                   "Knopf legt es ohne Ziehen genau dorthin.\n"
+                   "Das kleinste Stück räumt die Wabenplatte weg: ihre\n"
+                   "Waben sind gut zwanzig Millimeter groß und nach jedem\n"
+                   "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
+                   "eigenes Werkstück ist."))).grid(
+            row=8, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._stueck_stand()
         self._kam_zeigen()
 
@@ -1717,7 +1759,7 @@ class App:
         # richtig aus und zeigten auf das, was vorher dalag.
         self.stuecke = []
         self.stuecke_gesucht = False
-        self.stueck_aktiv = self.stueck_zug = None
+        self.stueck_aktiv = self.stueck_zug = self.stueck_fang = None
         d = self._kam_eichung()
         if not d:
             self._log(T("Bild geholt ({b}x{h}) - ohne Eichung nur ein Bild.")
@@ -1784,6 +1826,72 @@ class App:
     STUECK_UNSICHER = "#d9a441"
     STUECK_GRIFF = 7           # Bildpunkte um die Mitte, die sie fassen
 
+    def _fang_sichern(self):
+        self.cfg["stueck_fangen"] = bool(self.v_fang.get())
+        self.cfg["stueck_drehen"] = bool(self.v_fang_drehen.get())
+        self.cfg["stueck_fangradius"] = self._fangradius()
+        P.save_config(self.cfg)
+
+    def _fangradius(self):
+        try:
+            return max(0.5, min(100.0, float(self.v_fangradius.get())))
+        except (tk.TclError, ValueError):
+            return 8.0
+
+    def _stueck_fangen(self, x, y, b, h):
+        """Die Mitte des Motivs auf die Mitte eines Werkstuecks ziehen.
+
+        Gefangen wird in Millimetern und nicht in Bildpunkten: der
+        Fangradius soll am Werkstueck gelten und nicht am Zoom haengen.
+        Zurueck kommt die linke untere Ecke des Motivs - denn genau die
+        steht in den Zahlenfeldern, und nur wenn sie stimmt, faehrt der
+        Kopf auch dorthin.
+        """
+        self.stueck_fang = None
+        if not (self.v_snap.get() and self.v_fang.get()):
+            return x, y
+        if not getattr(self, "stuecke", None):
+            return x, y
+        mx, my = x + b / 2.0, y + h / 2.0
+        best, weit = None, self._fangradius()
+        for i, s in enumerate(self.stuecke):
+            d = math.hypot(s["mitte"][0] - mx, s["mitte"][1] - my)
+            if d <= weit:
+                best, weit = i, d
+        if best is None:
+            return x, y
+        self.stueck_fang = best
+        cx, cy = self.stuecke[best]["mitte"]
+        return cx - b / 2.0, cy - h / 2.0
+
+    def motiv_auf_stueck(self):
+        """Das Motiv ohne Ziehen genau auf das gewaehlte Werkstueck legen.
+
+        Die Maus trifft auf einen halben Millimeter genau, wenn man weit
+        genug hineinzoomt - dieser Knopf trifft immer. Er ist auch der
+        Weg, den die Serie spaeter geht.
+        """
+        i = getattr(self, "stueck_aktiv", None)
+        if i is None or not (0 <= i < len(self.stuecke)):
+            self.lbl_stuecke.configure(text=T("Erst ein Werkstück wählen."))
+            return
+        if self._box() is None:
+            self.lbl_stuecke.configure(text=T("Kein Motiv da."))
+            return
+        s = self.stuecke[i]
+        if self.v_fang_drehen.get() and s.get("winkel"):
+            self.v_rot.set(round(float(s["winkel"]), 2))
+            self._rotated()
+        box = self._box()
+        if box is None:
+            return
+        _, _, b, h = box
+        self._set_box(s["mitte"][0] - b / 2.0, s["mitte"][1] - h / 2.0)
+        self._element_sichern()
+        self.preview_pil = self.preview_img = self.cut_polys = None
+        self._stueck_stand()
+        self._draw()
+
     def _stueck_schwelle(self):
         """Wie deutlich sich etwas abheben muss, in Anteilen von Weiss."""
         try:
@@ -1791,8 +1899,22 @@ class App:
         except (tk.TclError, ValueError):
             return ST.SCHWELLE
 
+    def _stueck_mindest(self):
+        """Wie klein ein Werkstueck sein darf.
+
+        Die Wabenplatte liefert Waben von gut zwanzig Millimetern, und
+        die sind nach jedem Mass ein zusammenhaengendes Stueck. Keine
+        Schwelle trennt sie von einem kleinen Werkstueck - nur die
+        Auskunft, wie klein das kleinste eigene ueberhaupt ist.
+        """
+        try:
+            return max(2.0, min(400.0, float(self.v_stueck_min.get())))
+        except (tk.TclError, ValueError):
+            return ST.MINDEST_MM
+
     def _stueck_schwelle_sichern(self):
         self.cfg["stueck_schwelle"] = self._stueck_schwelle()
+        self.cfg["stueck_mindest"] = self._stueck_mindest()
         P.save_config(self.cfg)
 
     def _stueck_sperren(self):
@@ -1842,8 +1964,8 @@ class App:
         self.stuecke_gesucht = True
         self.stuecke = ST.finden(
             self.kam_bett, 1.0 / self.KAM_PX_JE_MM, 0.0, 0.0,
-            schwelle=self._stueck_schwelle(), sperren=self._stueck_sperren(),
-            abdeckung=self._stueck_abdeckung())
+            schwelle=self._stueck_schwelle(), mindest_mm=self._stueck_mindest(),
+            sperren=self._stueck_sperren(), abdeckung=self._stueck_abdeckung())
         self.stueck_aktiv = 0 if self.stuecke else None
         self.stueck_modus = self.stueck_zug = None
         self._stueck_stand()
@@ -1918,6 +2040,11 @@ class App:
             if aktiv:
                 cv.create_rectangle(mx - 3, my - 3, mx + 3, my + 3,
                                     outline=farbe, tags="stueck")
+            if i == getattr(self, "stueck_fang", None):
+                # Eingerastet: ein Ring um die Mitte. Ohne ihn sieht man
+                # nicht, ob das Motiv wirklich sitzt oder nur fast.
+                cv.create_oval(mx - 11, my - 11, mx + 11, my + 11,
+                               outline=S.ACCENT, width=2, tags="stueck")
             tx, ty = self._mm(s["kasten"][0], s["kasten"][3])
             cv.create_text(tx + 3, ty - 3, anchor="sw", fill=farbe,
                            font=("sans", 8), text=ST.marke(s, Z),
@@ -2009,6 +2136,7 @@ class App:
     def stuecke_loeschen(self):
         self.stuecke = []
         self.stueck_aktiv = self.stueck_modus = self.stueck_zug = None
+        self.stueck_fang = None
         try:
             self.cv.configure(cursor="")
         except tk.TclError:
@@ -6241,6 +6369,9 @@ class App:
               ("move", None): "fleur"}
 
     def _drag_ende(self, e):
+        if getattr(self, "stueck_fang", None) is not None:
+            self.stueck_fang = None
+            self._draw()
         if self.drag and self.drag[0] == "stueck":
             self._stueck_aufziehen_fertig()
         self.drag = None
@@ -6336,6 +6467,9 @@ class App:
             x, y = bx + dx, by + dy
             x = self._snap(x, [self._xmin(), (W - bb) / 2, W - bb], tol)
             y = self._snap(y, [0, (H - bh) / 2, H - bh], tol)
+            # Das Werkstueck gewinnt gegen die Brettkanten: wer ein Motiv
+            # ueber einen Untersetzer zieht, will auf den Untersetzer.
+            x, y = self._stueck_fangen(x, y, bb, bh)
             self._set_box(x, y)
         else:
             links = ecke in ("ul", "ol")

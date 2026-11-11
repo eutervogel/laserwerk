@@ -5,7 +5,7 @@ Laserwerk - Oberflaeche fuer GRBL-Diodenlaser.
 Bild oder SVG laden, skalieren, Material waehlen, Achsen steuern,
 Nullpunkt setzen, Fokus testen, gravieren.
 """
-import base64, bisect, io, math, os, queue, re, sys, threading, time
+import base64, bisect, io, math, os, queue, re, sys, tempfile, threading, time
 import traceback
 import urllib.parse
 from PIL import Image, ImageOps
@@ -999,44 +999,54 @@ class App:
         sp_m.bind("<FocusOut>", lambda e: self._stueck_schwelle_sichern())
         ttk.Label(wf, text="mm").grid(row=2, column=2, sticky="w",
                                       pady=(4, 0))
-        ttk.Label(wf, text=T("Schwelle")).grid(row=7, column=0, sticky="w",
+        ttk.Label(wf, text=T("Schwelle")).grid(row=3, column=0, sticky="w",
                                                pady=(4, 0))
         self.v_stueck_schwelle = tk.DoubleVar(
             value=float(self.cfg.get("stueck_schwelle", ST.SCHWELLE)))
         sp_s = ttk.Spinbox(wf, from_=0.05, to=0.60, increment=0.05, width=6,
                            textvariable=self.v_stueck_schwelle,
                            command=self._stueck_schwelle_sichern)
-        sp_s.grid(row=7, column=1, padx=4, pady=(4, 0), sticky="w")
+        sp_s.grid(row=3, column=1, padx=4, pady=(4, 0), sticky="w")
         sp_s.bind("<Return>", lambda e: self._stueck_schwelle_sichern())
         sp_s.bind("<FocusOut>", lambda e: self._stueck_schwelle_sichern())
+        # Die Liste: im Bild sieht man bei acht Untersetzern nicht mehr,
+        # welcher gewaehlt ist, und ein Fehlfund ist leichter in einer
+        # Zeile zu treffen als in einem Umriss zwischen anderen.
+        self.lb_stuecke = tk.Listbox(wf, height=5, exportselection=False,
+                                     activestyle="none")
+        self.lb_stuecke.grid(row=4, column=0, columnspan=3, sticky="ew",
+                             pady=(4, 0))
+        self.lb_stuecke.bind("<<ListboxSelect>>", self._stueck_aus_liste)
+        wf.columnconfigure(0, weight=1)
+
         self.v_fang = tk.BooleanVar(
             value=bool(self.cfg.get("stueck_fangen", True)))
         ttk.Checkbutton(wf, text=T("auf die Werkstückmitte fangen"),
                         variable=self.v_fang,
                         command=self._fang_sichern).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.v_fangradius = tk.DoubleVar(
             value=float(self.cfg.get("stueck_fangradius", 8.0)))
         sp_f = ttk.Spinbox(wf, from_=1.0, to=50.0, increment=1.0, width=6,
                            textvariable=self.v_fangradius,
                            command=self._fang_sichern)
-        sp_f.grid(row=3, column=2, pady=(4, 0))
+        sp_f.grid(row=6, column=2, pady=(4, 0))
         sp_f.bind("<Return>", lambda e: self._fang_sichern())
         sp_f.bind("<FocusOut>", lambda e: self._fang_sichern())
         ttk.Button(wf, text=T("Motiv auf das Werkstück legen"), width=26,
                    command=self.motiv_auf_stueck).grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=7, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.v_fang_drehen = tk.BooleanVar(
             value=bool(self.cfg.get("stueck_drehen", False)))
         ttk.Checkbutton(wf, text=T("mitdrehen"), variable=self.v_fang_drehen,
                         command=self._fang_sichern).grid(
-            row=4, column=2, sticky="w", pady=(4, 0))
+            row=7, column=2, sticky="w", pady=(4, 0))
         ttk.Button(wf, text=T("auf alle Werkstücke"), width=26,
                    command=self.motiv_auf_alle).grid(
-            row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.lbl_stuecke = ttk.Label(wf, text="", style="Muted.TLabel",
                                      wraplength=360)
-        self.lbl_stuecke.grid(row=6, column=0, columnspan=3, sticky="w",
+        self.lbl_stuecke.grid(row=5, column=0, columnspan=3, sticky="w",
                               pady=(3, 0))
         self._erklaerung(ttk.Label(wf, style="Muted.TLabel", wraplength=360,
             text=T("Bild holen, dann erkennen: Laserwerk misst jedes Stück\n"
@@ -1063,7 +1073,7 @@ class App:
                    "eigenes Werkstück ist.\n"
                    "'Auf alle Werkstücke' legt für jedes eine eigene Kopie\n"
                    "an - jede bleibt danach einzeln bearbeitbar."))).grid(
-            row=8, column=0, columnspan=3, sticky="w", pady=(3, 0))
+            row=9, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._stueck_stand()
         self._kam_zeigen()
 
@@ -1750,10 +1760,32 @@ class App:
         return top, lage, an, stand
 
     def _tkbild(self, bild):
-        """Ein PIL-Bild als PhotoImage - ohne ImageTk, das nicht ueberall da ist."""
-        puffer = io.BytesIO()
-        bild.convert("RGB").save(puffer, format="PNG")
-        return tk.PhotoImage(data=base64.b64encode(puffer.getvalue()))
+        """Ein PIL-Bild als PhotoImage - ohne ImageTk, das nicht ueberall da ist.
+
+        Ueber PPM und eine Datei statt ueber PNG und base64. PNG kostet
+        zlib, und das war beim Untergrund der groesste einzelne Posten:
+        63 von 93 Millisekunden je Neuzeichnen. PPM kostet keine
+        Kompression, nur Tk nimmt es ausgerechnet nicht aus base64
+        entgegen - also ueber eine Datei, immer dieselbe, eine je
+        laufendem Laserwerk.
+
+        Geht das Schreiben nicht - volles oder schreibgeschuetztes
+        Verzeichnis -, bleibt der alte Weg. Ein langsamer Untergrund ist
+        ein Aergernis, kein Grund, gar nichts mehr zu zeigen.
+        """
+        bild = bild.convert("RGB")
+        ziel = getattr(self, "_ppm_datei", None)
+        if ziel is None:
+            ziel = os.path.join(tempfile.gettempdir(),
+                                "laserwerk-%d.ppm" % os.getpid())
+            self._ppm_datei = ziel
+        try:
+            bild.save(ziel, format="PPM")
+            return tk.PhotoImage(file=ziel)
+        except (OSError, tk.TclError):
+            puffer = io.BytesIO()
+            bild.save(puffer, format="PNG")
+            return tk.PhotoImage(data=base64.b64encode(puffer.getvalue()))
 
     def _kamera_uebernehmen(self, roh):
         """Das frische Bild entzerren und merken."""
@@ -1799,7 +1831,18 @@ class App:
         self._draw()
 
     def _kamera_unterlegen(self, x0, y0, x1, y1):
-        """Das entzerrte Bild unter das Raster legen.
+        """Das entzerrte Bild unter das Raster legen - nur den Ausschnitt,
+        der wirklich im Fenster steht.
+
+        Hineingezoomt wird die Zeichenflaeche beliebig gross. Das ganze
+        Bett auf diese Groesse zu skalieren und als PNG zu kodieren waren
+        bei 25facher Vergroesserung zwanzigtausend mal zwanzigtausend
+        Bildpunkte - eine Viertelmilliarde, bei jedem Klick des Mausrads
+        neu. Laserwerk hing dabei nicht, es rechnete; nur sah das von
+        aussen gleich aus, und zumachen ging auch nicht mehr.
+
+        Gezeichnet wird deshalb der sichtbare Ausschnitt in Fenstergroesse.
+        Die Arbeit haengt damit am Fenster und nicht mehr am Zoom.
 
         Tk haelt kein Bild, auf das niemand mehr zeigt - deshalb bleibt
         die PhotoImage in self.kam_tk stehen, sonst ist die Flaeche nach
@@ -1810,19 +1853,42 @@ class App:
         bett = getattr(self, "kam_bett", None)
         if bett is None:
             return
-        b, h = max(1, int(round(x1 - x0))), max(1, int(round(y0 - y1)))
-        if self.kam_tk is None or self._kam_groesse != (b, h):
-            # Ueber PNG und base64 statt ueber ImageTk: das steckt in einem
-            # eigenen Paket (python3-pil.imagetk), das nicht ueberall
-            # mitkommt. Tk liest PNG seit 8.6 selbst, und der Rest von
-            # Laserwerk macht es schon genauso.
-            puffer = io.BytesIO()
-            bett.resize((b, h), Image.LANCZOS).save(puffer, format="PNG")
-            self.kam_tk = tk.PhotoImage(
-                data=base64.b64encode(puffer.getvalue()))
-            self._kam_groesse = (b, h)
-        self.cv.create_image(x0, y1, image=self.kam_tk, anchor="nw",
-                             tags="kamera")
+        bb, bh = float(x1 - x0), float(y0 - y1)
+        if bb < 1.0 or bh < 1.0:
+            return
+        fb, fh = self._cv()
+        # Der sichtbare Teil der Flaeche, in Bildpunkten des Fensters.
+        sx0, sy0 = max(x0, 0.0), max(y1, 0.0)
+        sx1, sy1 = min(x1, float(fb)), min(y0, float(fh))
+        if sx1 - sx0 < 1.0 or sy1 - sy0 < 1.0:
+            return                      # das Bett steht ganz ausserhalb
+        # Derselbe Ausschnitt in Bildpunkten der Quelle, nach aussen
+        # gerundet: lieber eine Reihe zu viel als ein Spalt am Rand.
+        def quelle(a, b, von, spanne, breit):
+            return (max(0, int(math.floor((a - von) / spanne * breit))),
+                    min(breit, int(math.ceil((b - von) / spanne * breit))))
+        qx0, qx1 = quelle(sx0, sx1, x0, bb, bett.width)
+        qy0, qy1 = quelle(sy0, sy1, y1, bh, bett.height)
+        if qx1 <= qx0 or qy1 <= qy0:
+            return
+        # Wohin dieser Ausschnitt auf dem Schirm gehoert.
+        px0 = x0 + qx0 / bett.width * bb
+        py0 = y1 + qy0 / bett.height * bh
+        zb = max(1, int(round((qx1 - qx0) / bett.width * bb)))
+        zh = max(1, int(round((qy1 - qy0) / bett.height * bh)))
+        schluessel = (qx0, qy0, qx1, qy1, zb, zh)
+        if self.kam_tk is None or self._kam_groesse != schluessel:
+            # Beim Vergroessern gibt LANCZOS nichts her, was BILINEAR
+            # nicht auch zeigt - es sind dieselben Bildpunkte, nur
+            # breiter. Beim Verkleinern dagegen entscheidet der Filter,
+            # was von feinen Strukturen uebrigbleibt.
+            fein = (zb * zh) < ((qx1 - qx0) * (qy1 - qy0))
+            self.kam_tk = self._tkbild(
+                bett.crop((qx0, qy0, qx1, qy1)).resize(
+                    (zb, zh), Image.LANCZOS if fein else Image.BILINEAR))
+            self._kam_groesse = schluessel
+        self.cv.create_image(int(round(px0)), int(round(py0)),
+                             image=self.kam_tk, anchor="nw", tags="kamera")
 
     # ---------------------------------------------------------- Werkstuecke
 
@@ -2050,12 +2116,33 @@ class App:
         self._log(T("{n} Werkstücke erkannt.").format(n=len(self.stuecke)))
         self._draw()
 
+    def _stueck_aus_liste(self, _=None):
+        """Eine Zeile anklicken waehlt dasselbe Stueck wie ein Klick ins
+        Bild - und umgekehrt."""
+        wahl = self.lb_stuecke.curselection()
+        if wahl:
+            self._stueck_waehlen(wahl[0])
+
+    def _stuecke_liste(self):
+        """Die Liste auffrischen und die Wahl darin zeigen."""
+        if getattr(self, "lb_stuecke", None) is None:
+            return
+        self.lb_stuecke.delete(0, "end")
+        for s in getattr(self, "stuecke", None) or ():
+            self.lb_stuecke.insert("end", ST.lesbar(s, T, Z))
+        i = getattr(self, "stueck_aktiv", None)
+        if i is not None and 0 <= i < self.lb_stuecke.size():
+            self.lb_stuecke.selection_clear(0, "end")
+            self.lb_stuecke.selection_set(i)
+            self.lb_stuecke.see(i)
+
     def _stuecke_nummern(self):
         for i, s in enumerate(self.stuecke):
             s["nr"] = i + 1
 
     def _stueck_stand(self):
-        """Die Zeile unter den Knoepfen: was gefunden wurde."""
+        """Die Zeile unter der Liste: was gefunden wurde."""
+        self._stuecke_liste()
         if getattr(self, "lbl_stuecke", None) is None:
             return
         if getattr(self, "stueck_modus", None) == "rechteck":
@@ -2080,8 +2167,6 @@ class App:
                  else T("{n} Werkstücke.").format(n=n))
         if unsicher:
             zeile += " " + T("{u} davon unsicher - nachsehen.").format(u=unsicher)
-        if self.stueck_aktiv is not None and 0 <= self.stueck_aktiv < n:
-            zeile += "\n" + ST.lesbar(self.stuecke[self.stueck_aktiv], T, Z)
         self.lbl_stuecke.configure(text=zeile)
 
     def _stuecke_malen(self):
@@ -5690,6 +5775,16 @@ class App:
             pass
         self._poll_id = self.root.after(100, self._poll)
 
+    def _ppm_wegraeumen(self):
+        """Die Zwischendatei fuer die Bilder wieder loeschen."""
+        ziel = getattr(self, "_ppm_datei", None)
+        if ziel:
+            try:
+                os.unlink(ziel)
+            except OSError:
+                pass
+            self._ppm_datei = None
+
     def beenden(self, fragen=True):
         """Sauber zumachen: Abfrage anhalten, Bot stilllegen, Port schliessen.
         Ohne das laeuft die Abfrage in ein zerstoertes Fenster und der
@@ -5726,6 +5821,7 @@ class App:
                 self.grbl.disconnect()
         except Exception:
             pass
+        self._ppm_wegraeumen()
         self.root.destroy()
 
     def _event(self, k, d):

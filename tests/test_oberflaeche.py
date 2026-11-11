@@ -3430,6 +3430,71 @@ class KameraUnterDerZeichenflaeche(Grundlage):
         finally:
             self.L.P.save_config(vorher)
 
+    def test_hineinzoomen_bleibt_bezahlbar(self):
+        """Am 11.11.2026 hat sich Laserwerk beim Zoomen aufgehaengt.
+
+        Es hing nicht, es rechnete: das ganze Bett wurde auf die
+        Zoomgroesse skaliert und als PNG kodiert - bei 25fach zwanzig-
+        tausend mal zwanzigtausend Bildpunkte, bei jedem Klick des
+        Mausrads neu. Gezeichnet werden darf nur, was ins Fenster passt.
+        """
+        self.eichen()
+        self.app._kamera_uebernehmen(self.bild())
+        breit, hoch = self.app._cv()
+        for zoom in (1.0, 5.0, 25.0):
+            self.app.zoom = zoom
+            self.app.kam_tk = None
+            self.app._draw()
+            self.assertIsNotNone(self.app.kam_tk)
+            # Der Ausschnitt wird auf ganze Quellbildpunkte nach aussen
+            # gerundet - lieber eine Reihe zu viel als ein Spalt am Rand.
+            # Je weiter hineingezoomt, desto breiter ist so ein Punkt;
+            # das ist die ganze erlaubte Zugabe.
+            zugabe = self.app._scale() + 4        # ein Quellpunkt je Seite
+            self.assertLessEqual(self.app.kam_tk.width(), breit + zugabe,
+                                 "Zoom %g" % zoom)
+            self.assertLessEqual(self.app.kam_tk.height(), hoch + zugabe,
+                                 "Zoom %g" % zoom)
+        self.app.zoom = 1.0
+
+    def test_die_zwischendatei_bleibt_nicht_liegen(self):
+        """Die Bilder gehen ueber eine PPM-Datei an Tk, weil PNG zlib
+        kostet. Was angelegt wird, muss beim Zumachen auch wieder weg."""
+        self.eichen()
+        self.app._kamera_uebernehmen(self.bild())
+        self.app._draw()
+        ziel = getattr(self.app, "_ppm_datei", None)
+        self.assertIsNotNone(ziel)
+        self.assertTrue(os.path.exists(ziel))
+        self.app._ppm_wegraeumen()
+        self.assertFalse(os.path.exists(ziel))
+
+    def test_ohne_schreibbares_verzeichnis_geht_es_trotzdem(self):
+        """Ein langsamer Untergrund ist ein Aergernis, kein Grund, gar
+        nichts mehr zu zeigen."""
+        self.app._ppm_datei = "/gibtsnicht/laserwerk.ppm"
+        bild = self.app._tkbild(Image.new("RGB", (20, 10), (1, 2, 3)))
+        self.assertEqual((bild.width(), bild.height()), (20, 10))
+
+    def test_das_bild_liegt_beim_zoomen_noch_richtig(self):
+        """Nur den Ausschnitt zu zeichnen ist wertlos, wenn er an der
+        falschen Stelle landet - dann zeigt das Bild woanders hin als die
+        Maschine faehrt."""
+        self.eichen()
+        self.app._kamera_uebernehmen(self.bild())
+        self.app.zoom = 6.0
+        self.app._draw()
+        wo = self.app.cv.find_withtag("kamera")
+        self.assertTrue(wo)
+        ax, ay = self.app.cv.coords(wo[0])
+        # Die Ecke des gezeichneten Ausschnitts muss auf derselben
+        # Maschinenstelle liegen wie vorher - zurueckgerechnet ueber _mm.
+        mx, my = self.app._mm_zurueck(ax, ay)
+        tx, ty = self.app._mm(mx, my)
+        self.assertAlmostEqual(tx, ax, delta=1.0)
+        self.assertAlmostEqual(ty, ay, delta=1.0)
+        self.app.zoom = 1.0
+
     def test_falsche_aufloesung_wird_nicht_stillschweigend_gerechnet(self):
         """Die Eichung steht in Bildpunkten.
 
@@ -4073,11 +4138,40 @@ class WerkstueckeImKamerareiter(Grundlage):
         self.assertAlmostEqual(hinten["mitte"][1], 140.0, delta=1.0)
         self.assertAlmostEqual(hinten["breite"], 50.0, delta=1.0)
 
-    def test_die_zeile_nennt_das_gewaehlte(self):
+    def test_die_zeile_nennt_wie_viele(self):
         self.scheiben()
-        text = self.app.lbl_stuecke.cget("text")
-        self.assertIn("2", text)
-        self.assertIn("rund", text)
+        self.assertIn("2", self.app.lbl_stuecke.cget("text"))
+
+    def test_die_liste_zeigt_jedes_stueck(self):
+        """Im Bild sieht man bei acht Untersetzern nicht mehr, welcher
+        gewaehlt ist."""
+        self.scheiben()
+        self.assertEqual(self.app.lb_stuecke.size(), 2)
+        self.assertIn("rund", self.app.lb_stuecke.get(0))
+        self.assertEqual(self.app.lb_stuecke.curselection(), (0,))
+
+    def test_eine_zeile_anklicken_waehlt_das_stueck(self):
+        self.scheiben()
+        self.app.lb_stuecke.selection_clear(0, "end")
+        self.app.lb_stuecke.selection_set(1)
+        self.app._stueck_aus_liste()
+        self.assertEqual(self.app.stueck_aktiv, 1)
+
+    def test_ein_klick_ins_bild_zeigt_sich_in_der_liste(self):
+        """Beides waehlt dasselbe - sonst zeigen Liste und Bild auf
+        verschiedene Stuecke, und man brennt auf das falsche."""
+        self.scheiben()
+        self.app._press(self.zeiger(140.0, 60.0))
+        self.assertEqual(self.app.lb_stuecke.curselection(),
+                         (self.app.stueck_aktiv,))
+
+    def test_entfernen_raeumt_auch_die_liste(self):
+        self.scheiben()
+        self.app.stueck_aktiv = 0
+        self.app.stueck_entfernen()
+        self.assertEqual(self.app.lb_stuecke.size(), 1)
+        self.app.stuecke_loeschen()
+        self.assertEqual(self.app.lb_stuecke.size(), 0)
 
     def test_nichts_gefunden_sagt_was_hilft(self):
         self.bett([])

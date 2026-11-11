@@ -4396,6 +4396,113 @@ class WerkstueckeImKamerareiter(Grundlage):
         finally:
             self.L.P.save_config(vorher)
 
+    # ------------------------------------------------------------ Serie
+    def test_auf_alle_werkstuecke_legt_je_eine_kopie_an(self):
+        """Keine Serienzahl, die beim Erzeugen etwas vervielfaeltigt:
+        fuer jedes Stueck ein eigenes Element, das man vorher sieht."""
+        self.scheiben()
+        self.fang_motiv(b=30.0, h=30.0)
+        self.app.motiv_auf_alle()
+        self.assertEqual(len(self.app.elemente), 2)
+        for e, s in zip(self.app.elemente, self.app.stuecke):
+            self.assertAlmostEqual(e["v_xoff"] + 15.0, s["mitte"][0], delta=0.05)
+            self.assertAlmostEqual(e["v_yoff"] + 15.0, s["mitte"][1], delta=0.05)
+
+    def test_jede_kopie_bleibt_einzeln_anfassbar(self):
+        self.scheiben()
+        self.fang_motiv(b=30.0, h=30.0)
+        self.app.motiv_auf_alle()
+        self.app._element_laden(1)
+        self.app._set_box(10.0, 10.0)
+        self.app._element_sichern()
+        self.assertAlmostEqual(self.app.elemente[1]["v_xoff"], 10.0, delta=0.05)
+        # das erste darf dabei nicht mitgewandert sein
+        self.assertNotAlmostEqual(self.app.elemente[0]["v_xoff"], 10.0,
+                                  delta=0.05)
+
+    def test_die_namen_sagen_welches_welches_ist(self):
+        self.scheiben()
+        self.fang_motiv()
+        self.app.motiv_auf_alle()
+        namen = [e["anzeige"] for e in self.app.elemente]
+        self.assertTrue(namen[0].endswith("[1]"), namen)
+        self.assertTrue(namen[1].endswith("[2]"), namen)
+
+    def test_nochmal_anwenden_verdoppelt_nicht(self):
+        """Der Name traegt die Nummer, und sie darf sich nicht anhaeufen."""
+        self.scheiben()
+        self.fang_motiv()
+        self.app.motiv_auf_alle()
+        self.app.motiv_auf_alle()
+        self.assertEqual(len(self.app.elemente), 3)
+        self.assertNotIn("[1] [", self.app.elemente[0]["anzeige"])
+
+    def test_der_alte_auftrag_gilt_nicht_mehr(self):
+        """Nach dem Verteilen steht der erzeugte G-Code fuer eine Lage,
+        die es nicht mehr gibt."""
+        self.scheiben()
+        self.fang_motiv()
+        self.app.lines = ["G0 X0 Y0"]
+        self.app.motiv_auf_alle()
+        self.assertIsNone(self.app.lines)
+
+    def test_ohne_werkstuecke_sagt_er_das(self):
+        self.bett([])
+        self.app.stuecke_erkennen()
+        self.fang_motiv()
+        self.app.motiv_auf_alle()
+        self.assertIn("erkennen", self.app.lbl_stuecke.cget("text"))
+        self.assertEqual(len(self.app.elemente), 1)
+
+    def test_ohne_motiv_sagt_er_das(self):
+        self.scheiben()
+        self.app.motiv_auf_alle()
+        self.assertIn("Motiv", self.app.lbl_stuecke.cget("text"))
+
+    def test_abbrechen_legt_nichts_an(self):
+        self.scheiben()
+        self.fang_motiv()
+        self.L.messagebox.askokcancel = lambda t, m: False
+        self.app.motiv_auf_alle()
+        self.assertEqual(len(self.app.elemente), 1)
+
+    def test_unsichere_funde_stehen_in_der_frage(self):
+        """Wer auf einen unsicheren Fund brennt, soll es vorher gelesen
+        haben - nicht hinterher am Werkstueck sehen."""
+        self.scheiben()
+        self.app.stuecke[1]["sicher"] = False
+        self.fang_motiv()
+        gefragt = []
+        self.L.messagebox.askokcancel = lambda t, m: gefragt.append(m) or True
+        self.app.motiv_auf_alle()
+        self.assertTrue(gefragt)
+        self.assertIn("unsicher", gefragt[0])
+
+    def test_ebenen_werden_abgelehnt(self):
+        """Kopien einer Ebenenaufteilung haetten dieselbe Quelle, wuerden
+        als Geschwister erkannt und zoegen sich gegenseitig mit."""
+        self.scheiben()
+        self.fang_motiv()
+        self.app.ebene = "rot"
+        self.app.motiv_auf_alle()
+        self.assertEqual(len(self.app.elemente), 1)
+        self.assertTrue(any("Ebenen" in m for _, m in self.gezeigt))
+
+    def test_mitdrehen_gilt_auch_fuer_die_serie(self):
+        self.bett([("gedreht", 60.0, 140.0, 70.0, 40.0, 18.0),
+                   ("gedreht", 140.0, 50.0, 70.0, 40.0, -25.0)])
+        self.app.stuecke_erkennen()
+        self.assertEqual(len(self.app.stuecke), 2)
+        self.fang_motiv(b=30.0, h=20.0)
+        self.app.v_fang_drehen.set(True)
+        self.app.motiv_auf_alle()
+        self.assertEqual(len(self.app.elemente), 2)
+        for e, s in zip(self.app.elemente, self.app.stuecke):
+            # v_rot zaehlt 0..360, der Winkel eines Stuecks -45..45 -
+            # derselbe Winkel, andere Schreibweise.
+            d = (float(e["v_rot"]) - s["winkel"] + 180.0) % 360.0 - 180.0
+            self.assertAlmostEqual(d, 0.0, delta=0.2)
+
     # ------------------------------------------------------------ Kopf
     def test_der_kopf_wird_gesperrt(self):
         self.app.head = (150.0, 150.0)

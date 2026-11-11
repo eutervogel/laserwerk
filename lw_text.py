@@ -1246,6 +1246,25 @@ EN = {
     "Erst ein Werkstück wählen.": "Pick a workpiece first.",
     "Kein Motiv da.": "No motif there.",
     "kleinstes Stück": "smallest piece",
+    "auf alle Werkstücke": "on every workpiece",
+    "Auf alle Werkstücke": "On every workpiece",
+    "Erst Werkstücke erkennen.": "Find the workpieces first.",
+    "Das Motiv auf {n} Werkstück(e) legen?":
+        "Put the motif on {n} workpiece(s)?",
+    "{u} davon sind unsicher erkannt. Sieh vor dem Brennen in "
+    "der Vorschau nach, wo die Aufträge wirklich liegen.":
+        "{u} of them are uncertain. Check in the preview where the jobs "
+        "really sit before you burn.",
+    "Dieses Motiv ist in Ebenen aufgeteilt. Die Ebenen hängen "
+    "zusammen, und Kopien davon würden sich gegenseitig "
+    "mitziehen.\n\n"
+    "Lege es einzeln auf die Werkstücke - oder nimm eine "
+    "Fassung ohne Ebenen.":
+        "This motif is split into layers. The layers belong together, and "
+        "copies of them would drag each other along.\n\n"
+        "Put it on the workpieces one at a time - or use a version "
+        "without layers.",
+    "Motiv auf {n} Werkstücke gelegt.": "Motif put on {n} workpieces.",
     "entfernen": "remove",
     "Rechteck ziehen": "Drag rectangle",
     "Kreis ziehen": "Drag circle",
@@ -1294,7 +1313,9 @@ EN = {
     "Das kleinste Stück räumt die Wabenplatte weg: ihre\n"
     "Waben sind gut zwanzig Millimeter groß und nach jedem\n"
     "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
-    "eigenes Werkstück ist.":
+    "eigenes Werkstück ist.\n"
+    "'Auf alle Werkstücke' legt für jedes eine eigene Kopie\n"
+    "an - jede bleibt danach einzeln bearbeitbar.":
         "Take a picture, then find: Laserwerk measures every piece\n"
         "in millimetres and shows its centre. The outlines are only\n"
         "a display - they are never burnt.\n"
@@ -1314,5 +1335,7 @@ EN = {
         "it exactly there without dragging.\n"
         "The smallest piece clears away the honeycomb: its cells are a\n"
         "good twenty millimetres across and a piece by every measure.\n"
-        "Enter how small your own smallest workpiece is.",
+        "Enter how small your own smallest workpiece is.\n"
+        "'On every workpiece' makes a separate copy for each one -\n"
+        "every copy stays editable on its own afterwards.",
 }

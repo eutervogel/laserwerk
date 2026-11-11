@@ -1031,9 +1031,12 @@ class App:
         ttk.Checkbutton(wf, text=T("mitdrehen"), variable=self.v_fang_drehen,
                         command=self._fang_sichern).grid(
             row=4, column=2, sticky="w", pady=(4, 0))
+        ttk.Button(wf, text=T("auf alle Werkstücke"), width=26,
+                   command=self.motiv_auf_alle).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.lbl_stuecke = ttk.Label(wf, text="", style="Muted.TLabel",
                                      wraplength=360)
-        self.lbl_stuecke.grid(row=5, column=0, columnspan=3, sticky="w",
+        self.lbl_stuecke.grid(row=6, column=0, columnspan=3, sticky="w",
                               pady=(3, 0))
         self._erklaerung(ttk.Label(wf, style="Muted.TLabel", wraplength=360,
             text=T("Bild holen, dann erkennen: Laserwerk misst jedes Stück\n"
@@ -1057,7 +1060,9 @@ class App:
                    "Das kleinste Stück räumt die Wabenplatte weg: ihre\n"
                    "Waben sind gut zwanzig Millimeter groß und nach jedem\n"
                    "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
-                   "eigenes Werkstück ist."))).grid(
+                   "eigenes Werkstück ist.\n"
+                   "'Auf alle Werkstücke' legt für jedes eine eigene Kopie\n"
+                   "an - jede bleibt danach einzeln bearbeitbar."))).grid(
             row=8, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._stueck_stand()
         self._kam_zeigen()
@@ -1898,6 +1903,79 @@ class App:
             return max(0.02, min(0.9, float(self.v_stueck_schwelle.get())))
         except (tk.TclError, ValueError):
             return ST.SCHWELLE
+
+    def motiv_auf_alle(self):
+        """Dasselbe Motiv auf jedes erkannte Werkstueck legen.
+
+        Fuer jedes Stueck entsteht eine eigene Kopie in der Elementliste -
+        kein Serienschalter, der beim Erzeugen etwas vervielfaeltigt. Das
+        ist der Unterschied, der zaehlt: jede Kopie laesst sich danach
+        einzeln anfassen, verschieben, anders einstellen oder wegwerfen,
+        und man sieht vor dem Brennen, was wirklich entsteht.
+        """
+        if self.grbl.job_running:
+            return
+        if not getattr(self, "stuecke", None):
+            self.lbl_stuecke.configure(text=T("Erst Werkstücke erkennen."))
+            return
+        if self._box() is None:
+            self.lbl_stuecke.configure(text=T("Kein Motiv da."))
+            return
+        if getattr(self, "ebene", None):
+            # Ebenen einer Zeichnung haengen ueber ihre Quelle zusammen.
+            # Eine Kopie bekaeme dieselbe Quelle, wuerde als Geschwister
+            # erkannt und zoege beim Verschieben alle anderen mit. Lieber
+            # nein sagen als etwas anlegen, das sich falsch bewegt.
+            messagebox.showinfo(T("Auf alle Werkstücke"), T(
+                "Dieses Motiv ist in Ebenen aufgeteilt. Die Ebenen hängen "
+                "zusammen, und Kopien davon würden sich gegenseitig "
+                "mitziehen.\n\n"
+                "Lege es einzeln auf die Werkstücke - oder nimm eine "
+                "Fassung ohne Ebenen."))
+            return
+        unsicher = sum(1 for s in self.stuecke if not s["sicher"])
+        frage = T("Das Motiv auf {n} Werkstück(e) legen?").format(
+            n=len(self.stuecke))
+        if unsicher:
+            frage += "\n\n" + T(
+                "{u} davon sind unsicher erkannt. Sieh vor dem Brennen in "
+                "der Vorschau nach, wo die Aufträge wirklich liegen.").format(
+                    u=unsicher)
+        if not messagebox.askokcancel(T("Auf alle Werkstücke"), frage):
+            return
+        self._element_sichern()
+        name = (self.elemente[self.aktiv]["anzeige"].split(" [")[0]
+                if 0 <= self.aktiv < len(self.elemente) else "?")
+        lagen = []
+        for s in self.stuecke:
+            if self.v_fang_drehen.get() and s.get("winkel"):
+                self.v_rot.set(round(float(s["winkel"]), 2))
+                self._rotated()
+            box = self._box()
+            if box is None:
+                break
+            _, _, b, h = box
+            # Ueber _set_box, damit Spiegelung und Mindestrand genauso
+            # gelten wie beim Ziehen mit der Maus.
+            self._set_box(s["mitte"][0] - b / 2.0, s["mitte"][1] - h / 2.0)
+            self._element_sichern()
+            lagen.append(dict(self.elemente[self.aktiv]))
+        if not lagen:
+            return
+        erstes = dict(lagen[0])
+        erstes["anzeige"] = "%s [1]" % name
+        self.elemente[self.aktiv] = erstes
+        for nr, e in enumerate(lagen[1:], start=2):
+            kopie = dict(e)
+            kopie.pop("ergebnis", None)
+            kopie["anzeige"] = "%s [%d]" % (name, nr)
+            self.elemente.append(kopie)
+        self.lines = self.info = None
+        self._element_laden(self.aktiv)
+        self._gen_knopf()
+        self._log(T("Motiv auf {n} Werkstücke gelegt.").format(n=len(lagen)))
+        self._stueck_stand()
+        self._draw()
 
     def _stueck_mindest(self):
         """Wie klein ein Werkstueck sein darf.

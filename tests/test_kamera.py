@@ -139,6 +139,50 @@ class EichungMisstSichSelbst(unittest.TestCase):
             12.0 * skala, delta=0.01)
 
 
+class AusMehrerenAufnahmenDieBeste(unittest.TestCase):
+    """Die Falcon2-Kamera liefert abwechselnd helle und dunkle Bilder.
+
+    Sechs helle, zwei dunkle, wieder helle - und welches davon das erste
+    ist, ist Gluecksache. Mit einer einzigen Aufnahme war das Bildholen
+    deshalb eine Lotterie: am 11.11.2026 einmal eine Eichung auf einem
+    stockdunklen Bild, einmal kein Werkstueck gefunden, und nichts sagte
+    warum. Der Regler fuer die Belichtungszeit hilft dagegen nicht -
+    diese Kamera ignoriert ihn.
+    """
+
+    def feld(self, a, b, verlust=0.0):
+        """Ein Schachbrett aus zwei Helligkeiten, optional mit einem Teil
+        ausgebrannter Flaeche."""
+        f = np.indices((40, 40)).sum(axis=0) % 2
+        aus = np.where(f == 0, a, b).astype(np.uint8)
+        if verlust:
+            aus[:int(40 * verlust)] = 255
+        return Image.fromarray(aus).convert("RGB")
+
+    def test_die_dunkle_verliert(self):
+        dunkel = self.feld(3, 8)
+        gut = self.feld(60, 200)
+        self.assertGreater(K.guete(gut), K.guete(dunkel))
+        self.assertIs(K.beste([dunkel, gut]), gut)
+
+    def test_die_ausgebrannte_verliert_auch(self):
+        """Das hellste Bild hat am meisten Licht und am wenigsten
+        Auskunft - wo alles 255 ist, steht nichts mehr drin."""
+        gut = self.feld(60, 200)
+        hell = self.feld(200, 255, verlust=0.6)
+        self.assertGreater(K.guete(gut), K.guete(hell))
+        self.assertIs(K.beste([hell, gut, hell]), gut)
+
+    def test_ohne_aufnahme_kommt_nichts(self):
+        self.assertIsNone(K.beste([]))
+        self.assertIsNone(K.beste([None]))
+
+    def test_die_reihenfolge_entscheidet_nicht(self):
+        dunkel, gut = self.feld(3, 8), self.feld(60, 200)
+        self.assertIs(K.beste([gut, dunkel]), gut)
+        self.assertIs(K.beste([dunkel, gut]), gut)
+
+
 class EichungSagtWasSieTaugt(unittest.TestCase):
     """Ein Fehler ohne seine Flaeche ist eine Falle.
 

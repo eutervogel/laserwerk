@@ -50,28 +50,71 @@ def kameras():
     return raus
 
 
-def bild_holen(geraet, breite=1280, hoehe=720, timeout=15):
-    """Ein einzelnes Bild von der Kamera holen, als PIL-Bild.
+def guete(bild):
+    """Wie brauchbar ist diese Aufnahme?
+
+    Nicht die hellste gewinnt: ein ausgebranntes Bild hat am meisten
+    Licht und am wenigsten Auskunft. Gewertet wird der Kontrast, und was
+    in Weiss oder Schwarz laeuft, zaehlt dagegen - dort steht nichts
+    mehr, was sich zurueckrechnen liesse.
+    """
+    a = np.asarray(bild.convert("L"), dtype=np.float32)
+    if a.size == 0:
+        return 0.0
+    verloren = float(((a >= 250) | (a <= 5)).mean())
+    return float(a.std()) * (1.0 - verloren)
+
+
+def beste(bilder):
+    """Aus mehreren Aufnahmen die brauchbarste."""
+    bilder = [b for b in bilder if b is not None]
+    return max(bilder, key=guete) if bilder else None
+
+
+BILDER = 5              # so viele Aufnahmen, dann die beste
+
+
+def bild_holen(geraet, breite=1280, hoehe=720, timeout=15, bilder=BILDER):
+    """Ein Bild von der Kamera holen, als PIL-Bild.
 
     ffmpeg statt einer Bibliothek: es kann die Kamera auf MJPEG stellen,
     und genau das brauchen UVC-Kameras fuer die hohen Aufloesungen - in
     YUYV liefern sie die meist nur mit wenigen Bildern je Sekunde.
+
+    Geholt wird nicht eines, sondern eine Handvoll, und davon die beste.
+    Die Falcon2-Kamera liefert abwechselnd helle und dunkle Bilder - sechs
+    helle, zwei dunkle, wieder helle -, und welches das erste ist, ist
+    Glueckssache. Mit "-frames:v 1" war das Bildholen deshalb eine
+    Lotterie: mal die Eichung auf einem stockdunklen Bild, mal gar kein
+    Werkstueck gefunden, und nichts sagte warum. Der Regler fuer die
+    Belichtungszeit hilft dagegen nicht, diese Kamera ignoriert ihn.
     """
-    ziel = os.path.join(tempfile.mkdtemp(prefix="laserwerk-kamera-"), "bild.png")
+    ordner = tempfile.mkdtemp(prefix="laserwerk-kamera-")
+    n = max(1, int(bilder))
+    muster = os.path.join(ordner, "bild_%03d.png")
     for format_ in ("mjpeg", None):
         befehl = ["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "v4l2"]
         if format_:
             befehl += ["-input_format", format_]
         befehl += ["-video_size", "%dx%d" % (breite, hoehe),
-                   "-i", geraet, "-frames:v", "1", "-y", ziel]
+                   "-i", geraet, "-frames:v", str(n), "-y", muster]
         try:
             fertig = subprocess.run(befehl, capture_output=True, text=True,
-                                    timeout=timeout)
+                                    timeout=timeout + n)
         except (OSError, subprocess.SubprocessError) as e:
             raise RuntimeError("ffmpeg nicht ausfuehrbar: %s" % e)
-        if fertig.returncode == 0 and os.path.exists(ziel):
-            with Image.open(ziel) as im:
-                return im.convert("RGB")
+        wege = sorted(glob.glob(os.path.join(ordner, "bild_*.png")))
+        if fertig.returncode == 0 and wege:
+            aufnahmen = []
+            for w in wege:
+                try:
+                    with Image.open(w) as im:
+                        aufnahmen.append(im.convert("RGB"))
+                except (OSError, ValueError):
+                    pass            # ein halb geschriebenes letztes Bild
+            gewaehlt = beste(aufnahmen)
+            if gewaehlt is not None:
+                return gewaehlt
     raise RuntimeError(fertig.stderr.strip().splitlines()[-1]
                        if fertig.stderr.strip() else "kein Bild von " + geraet)
 

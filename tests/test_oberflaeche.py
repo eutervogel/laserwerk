@@ -286,6 +286,12 @@ class Leistung(Grundlage):
         self.assertEqual(self.app._s(50), 13)
 
     def test_eigene_maschine_bleibt_unveraendert(self):
+        # Die Attrappe meldet $130/$131 = 200 x 200. Hier geht es um die
+        # Leistungsskala, nicht um den Verfahrweg - der wird deshalb
+        # passend gesetzt, statt sich darauf zu verlassen, dass ein
+        # frueherer Test ihn zufaellig so hinterlassen hat. Genau das
+        # war er bisher: eine Abhaengigkeit von der Reihenfolge.
+        self.app.cfg["x_max"], self.app.cfg["y_max"] = 200.0, 200.0
         self.app._einstellungen_pruefen(self.app.grbl.settings)
         self.assertEqual(self.app._s(830), 830)
         self.assertEqual(self.gezeigt, [])
@@ -3371,6 +3377,59 @@ class KameraUnterDerZeichenflaeche(Grundlage):
         self.assertTrue(self.app.v_kam_an.get())
         self.assertTrue(self.app.cv.find_withtag("kamera"))
 
+    def test_ohne_maschine_wird_nichts_gefahren(self):
+        """Ohne Verbindung wird das Bild einfach geholt - kein Fehler,
+        kein Warten auf eine Maschine, die nicht da ist."""
+        self.app.v_kam_parken.set(True)
+        self.app.grbl.connected = False
+        self.assertFalse(self.app._kam_parkt())
+
+    def test_waehrend_eines_jobs_wird_nicht_gefahren(self):
+        """Ein Bild zu holen darf nie in einen laufenden Brand greifen."""
+        self.app.v_kam_parken.set(True)
+        self.app.grbl.connected = True
+        self.app.grbl.job_running = True
+        self.assertFalse(self.app._kam_parkt())
+        self.app.grbl.job_running = False
+
+    def test_mit_haken_faehrt_der_kopf_vor_dem_bild_nach_hinten(self):
+        """Die Lampe sitzt am Kopf - steht er ueber dem Werkstueck,
+        brennt er die Stelle darunter aus."""
+        self.eichen()
+        gefahren = {}
+        self.app.v_kam_parken.set(True)
+        self.app.grbl.connected = True
+        self.app.grbl.goto = lambda **kw: gefahren.update(kw)
+        self.app.grbl.wait_idle = lambda timeout=0: gefahren.update(gewartet=True)
+        echt = self.L.KAM.bild_holen
+        self.L.KAM.bild_holen = lambda g, b=0, h=0, **k: (
+            gefahren.update(bild=True) or Image.new("RGB", (b, h)))
+        try:
+            self.app.kamera_holen()
+            for _ in range(300):
+                self.wurzel.update()
+                if "bild" in gefahren:
+                    break
+                time.sleep(0.01)
+        finally:
+            self.L.KAM.bild_holen = echt
+        self.assertEqual(gefahren.get("y"), float(self.app.cfg["y_max"]))
+        self.assertTrue(gefahren.get("gewartet"))
+        self.assertTrue(gefahren.get("bild"))
+
+    def test_der_haken_ueberlebt_die_sitzung(self):
+        """Gespeichert wird in die Wegwerfdatei - und danach wieder
+        zurueck. Sie ueberlebt den Testlauf, und ein Test, der sie
+        stehenlaesst, gibt der naechsten App eine fremde Maschine."""
+        vorher = self.L.P.load_config()
+        try:
+            self.app.v_kam_parken.set(True)
+            self.app._kam_parken_sichern()
+            self.assertTrue(self.app.cfg.get("kam_parken"))
+            self.assertTrue(self.L.P.load_config().get("kam_parken"))
+        finally:
+            self.L.P.save_config(vorher)
+
     def test_falsche_aufloesung_wird_nicht_stillschweigend_gerechnet(self):
         """Die Eichung steht in Bildpunkten.
 
@@ -3960,15 +4019,15 @@ class WerkstueckeImKamerareiter(Grundlage):
 
     def setUp(self):
         super().setUp()
-        self._bett = (self.app.cfg.get("x_max"), self.app.cfg.get("y_max"))
-        self.app.cfg["x_max"] = self.app.cfg["y_max"] = 200.0
         self.app.cfg["kamera"] = dict(KameraUnterDerZeichenflaeche.EICHUNG)
         self.app.v_dicke.set(0.0)
         self.app.v_kam_unterlage.set(0.0)
 
-    def tearDown(self):
-        self.app.cfg["x_max"], self.app.cfg["y_max"] = self._bett
-        super().tearDown()
+    # Der Verfahrweg bleibt, wie er in der Wegwerfkonfiguration steht:
+    # eine Datei ueberlebt den Testlauf, und wer ihn hier umbiegt, gibt
+    # der naechsten App eine Maschine, die es nicht gibt. Die kuenstliche
+    # Draufsicht darf ruhig kleiner sein als das Bett - finden() rechnet
+    # alles aus dem Bild selbst, nicht aus der Einstellung.
 
     def bett(self, stuecke):
         """Eine kuenstliche Draufsicht unterlegen, ohne Kamera.

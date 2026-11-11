@@ -1227,6 +1227,19 @@ EN = {
     # ---- Werkstuecke erkennen
     "Werkstücke": "Workpieces",
     "Werkstücke erkennen": "Find workpieces",
+    "vorher den Kopf nach hinten fahren": "move the head back first",
+    "fahre nach hinten und hole ein Bild von {g}":
+        "moving back and taking a picture from {g}",
+    "Die Lampe sitzt am Kopf: steht er über dem Werkstück,\n"
+    "wirft er seinen Schatten darauf und brennt die Stelle\n"
+    "aus. Ganz hinten leuchtet er flach über die Fläche.\n"
+    "Achtung: der Portalbalken fährt dabei nach hinten -\n"
+    "nichts Hohes in den Weg stellen.":
+        "The lamp sits on the head: standing over the workpiece it\n"
+        "casts its own shadow on it and blows out the spot below.\n"
+        "From the far back it grazes the surface instead.\n"
+        "Careful: the gantry travels backwards for this -\n"
+        "keep anything tall out of its way.",
     "entfernen": "remove",
     "Rechteck ziehen": "Drag rectangle",
     "Kreis ziehen": "Drag circle",
@@ -1264,7 +1277,11 @@ EN = {
     "verbunden ist. Dunkles Material auf dunkler Unterlage\n"
     "ist schwer zu sehen; beim Gravieren hilft ein Blatt\n"
     "weißes Papier darunter - der Strahl verlässt das\n"
-    "Werkstück ja nicht.":
+    "Werkstück ja nicht.\n"
+    "Die Schwelle sagt, wie deutlich sich etwas abheben\n"
+    "muss. Höher: nur klare Kanten, dafür weniger Unsinn\n"
+    "aus Wabenplatte und Lichtschleier. Niedriger: auch\n"
+    "Schwaches, dafür mehr Fehlfunde.":
         "Take a picture, then find: Laserwerk measures every piece\n"
         "in millimetres and shows its centre. The outlines are only\n"
         "a display - they are never burnt.\n"
@@ -1274,5 +1291,9 @@ EN = {
         "The laser head is skipped while the machine is\n"
         "connected. Dark material on a dark base is hard to\n"
         "see; for engraving a sheet of white paper underneath\n"
-        "helps - the beam never leaves the workpiece.",
+        "helps - the beam never leaves the workpiece.\n"
+        "The threshold says how clearly something must stand out.\n"
+        "Higher: only clear edges, less nonsense from the honeycomb\n"
+        "and the glare. Lower: faint things too, at the price of\n"
+        "more false finds.",
 }

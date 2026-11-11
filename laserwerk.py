@@ -884,15 +884,29 @@ class App:
         self.lbl_kam = ttk.Label(kf, text="", style="Muted.TLabel", wraplength=360)
         self.lbl_kam.grid(row=1, column=0, columnspan=3, sticky="w", pady=(3, 0))
 
+        self.v_kam_parken = tk.BooleanVar(
+            value=bool(self.cfg.get("kam_parken", False)))
+        ttk.Checkbutton(kf, text=T("vorher den Kopf nach hinten fahren"),
+                        variable=self.v_kam_parken,
+                        command=self._kam_parken_sichern).grid(
+            row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self._erklaerung(ttk.Label(kf, style="Muted.TLabel", wraplength=360,
+            text=T("Die Lampe sitzt am Kopf: steht er über dem Werkstück,\n"
+                   "wirft er seinen Schatten darauf und brennt die Stelle\n"
+                   "aus. Ganz hinten leuchtet er flach über die Fläche.\n"
+                   "Achtung: der Portalbalken fährt dabei nach hinten -\n"
+                   "nichts Hohes in den Weg stellen."))).grid(
+            row=5, column=0, columnspan=3, sticky="w", pady=(3, 0))
+
         self.v_kam_an = tk.BooleanVar(value=False)
         ttk.Checkbutton(kf, text=T("Bild unter die Zeichenfläche legen"),
                         variable=self.v_kam_an,
                         command=self._kamera_zeigen).grid(
-            row=2, column=0, columnspan=3, sticky="w", pady=(4, 0))
+            row=6, column=0, columnspan=3, sticky="w", pady=(4, 0))
         self._erklaerung(ttk.Label(kf, style="Muted.TLabel", wraplength=360,
             text=T("Das Bild ist dann in Maschinenkoordinaten entzerrt: was\n"
                    "darauf an einer Stelle liegt, liegt dort auch wirklich.")
-            )).grid(row=3, column=0, columnspan=3, sticky="w")
+            )).grid(row=7, column=0, columnspan=3, sticky="w")
 
         hf = ttk.LabelFrame(f, text=T("Höhe"), padding=4)
         hf.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -972,9 +986,19 @@ class App:
         ttk.Button(wf, text=T("alle löschen"), width=11,
                    command=self.stuecke_loeschen).grid(row=1, column=2,
                                                        pady=(4, 0))
+        ttk.Label(wf, text=T("Schwelle")).grid(row=2, column=0, sticky="w",
+                                               pady=(4, 0))
+        self.v_stueck_schwelle = tk.DoubleVar(
+            value=float(self.cfg.get("stueck_schwelle", ST.SCHWELLE)))
+        sp_s = ttk.Spinbox(wf, from_=0.05, to=0.60, increment=0.05, width=6,
+                           textvariable=self.v_stueck_schwelle,
+                           command=self._stueck_schwelle_sichern)
+        sp_s.grid(row=2, column=1, padx=4, pady=(4, 0), sticky="w")
+        sp_s.bind("<Return>", lambda e: self._stueck_schwelle_sichern())
+        sp_s.bind("<FocusOut>", lambda e: self._stueck_schwelle_sichern())
         self.lbl_stuecke = ttk.Label(wf, text="", style="Muted.TLabel",
                                      wraplength=360)
-        self.lbl_stuecke.grid(row=2, column=0, columnspan=3, sticky="w",
+        self.lbl_stuecke.grid(row=3, column=0, columnspan=3, sticky="w",
                               pady=(3, 0))
         self._erklaerung(ttk.Label(wf, style="Muted.TLabel", wraplength=360,
             text=T("Bild holen, dann erkennen: Laserwerk misst jedes Stück\n"
@@ -987,8 +1011,12 @@ class App:
                    "verbunden ist. Dunkles Material auf dunkler Unterlage\n"
                    "ist schwer zu sehen; beim Gravieren hilft ein Blatt\n"
                    "weißes Papier darunter - der Strahl verlässt das\n"
-                   "Werkstück ja nicht."))).grid(
-            row=3, column=0, columnspan=3, sticky="w", pady=(3, 0))
+                   "Werkstück ja nicht.\n"
+                   "Die Schwelle sagt, wie deutlich sich etwas abheben\n"
+                   "muss. Höher: nur klare Kanten, dafür weniger Unsinn\n"
+                   "aus Wabenplatte und Lichtschleier. Niedriger: auch\n"
+                   "Schwaches, dafür mehr Fehlfunde."))).grid(
+            row=4, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._stueck_stand()
         self._kam_zeigen()
 
@@ -1044,6 +1072,19 @@ class App:
         self.lbl_kam.configure(text=KAM.eichung_lesbar(d) if d
                                else T("Noch keine Eichung für diese Maschine."))
 
+    def _kam_parken_sichern(self):
+        self.cfg["kam_parken"] = bool(self.v_kam_parken.get())
+        P.save_config(self.cfg)
+
+    def _kam_parkt(self):
+        """Faehrt der Kopf vor dem Bild nach hinten?
+
+        Nur mit verbundener Maschine und nur, wenn gerade kein Job laeuft -
+        sonst waere das Bildholen ein Eingriff in einen laufenden Brand.
+        """
+        return (bool(self.v_kam_parken.get()) and self.grbl.connected
+                and not self.grbl.job_running)
+
     def kamera_holen(self):
         """Ein Bild holen und, wenn eine Eichung da ist, entzerren."""
         geraet = self.v_kamera.get().strip()
@@ -1053,10 +1094,24 @@ class App:
         # In der Groesse, in der geeicht wurde. Die Eichung steht in
         # Bildpunkten: holt man kleiner, zeigt jeder Koeffizient daneben.
         b, h = self._kam_eichung().get("bild", (2592, 1944))
+        parken = self._kam_parkt()
+        y = float(self.cfg["y_max"])
         def arbeit():
+            if parken:
+                # Die Lampe sitzt am Kopf. Steht er mitten ueber dem Bett,
+                # wirft er seinen eigenen Schatten auf das Werkstueck und
+                # brennt die Stelle darunter weiss aus. Ganz hinten
+                # leuchtet er flach ueber die Flaeche, und das Bild wird
+                # gleichmaessig - mit dem Nebeneffekt, dass er selbst fast
+                # aus dem Bild ist. Gefahren wird nur in Y: der kuerzeste
+                # Weg, und er streift nicht quer ueber das Bett.
+                self.grbl.goto(y=y)
+                self.grbl.wait_idle(timeout=90)
             roh = KAM.bild_holen(geraet, int(b), int(h))
             self.q.put(("kamerabild", roh))
-        self._bg(arbeit, T("hole ein Bild von {g}").format(g=geraet))
+        self._bg(arbeit, T("fahre nach hinten und hole ein Bild von {g}")
+                 .format(g=geraet) if parken
+                 else T("hole ein Bild von {g}").format(g=geraet))
 
     def _kam_zahl(self, name, vorgabe=0.0):
         var = getattr(self, name, None)
@@ -1729,6 +1784,17 @@ class App:
     STUECK_UNSICHER = "#d9a441"
     STUECK_GRIFF = 7           # Bildpunkte um die Mitte, die sie fassen
 
+    def _stueck_schwelle(self):
+        """Wie deutlich sich etwas abheben muss, in Anteilen von Weiss."""
+        try:
+            return max(0.02, min(0.9, float(self.v_stueck_schwelle.get())))
+        except (tk.TclError, ValueError):
+            return ST.SCHWELLE
+
+    def _stueck_schwelle_sichern(self):
+        self.cfg["stueck_schwelle"] = self._stueck_schwelle()
+        P.save_config(self.cfg)
+
     def _stueck_sperren(self):
         """Flaechen, in denen kein Werkstueck liegen kann.
 
@@ -1776,7 +1842,8 @@ class App:
         self.stuecke_gesucht = True
         self.stuecke = ST.finden(
             self.kam_bett, 1.0 / self.KAM_PX_JE_MM, 0.0, 0.0,
-            sperren=self._stueck_sperren(), abdeckung=self._stueck_abdeckung())
+            schwelle=self._stueck_schwelle(), sperren=self._stueck_sperren(),
+            abdeckung=self._stueck_abdeckung())
         self.stueck_aktiv = 0 if self.stuecke else None
         self.stueck_modus = self.stueck_zug = None
         self._stueck_stand()

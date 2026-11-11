@@ -202,27 +202,44 @@ def _marken(m, grenze=MAX_LAEUFE):
     return aus, len(neu)
 
 
-def _loecher_zu(teil):
-    """Innenloecher einer Flaeche zuschlagen.
+def _loecher(teil, mindest_px=0):
+    """Die Innenloecher einer Flaeche: zuschlagen und die grossen melden.
 
-    Gezaehlt wird die Flaeche des Werkstuecks, nicht die seiner Oberseite
-    ohne Astloch. Was vom Rand des Ausschnitts aus erreichbar ist, ist
-    aussen; alles andere ist ein Loch und gehoert dazu. Der Untergrund
-    wird dabei mit derselben 8er-Nachbarschaft verfolgt wie die Flaeche
-    selbst - ein Loch, dessen Ring schraeg einen Bildpunkt offen hat,
-    bleibt deshalb offen. Das ist die harmlose Richtung: lieber ein Loch
-    nicht zugeschlagen als zwei Stuecke zu einem verschmolzen.
+    Zwei Dinge auf einmal, weil es zwei Fragen sind. Die erste: wie gross
+    ist dieses Stueck? Dafuer zaehlt die Flaeche innerhalb des Umrisses,
+    nicht die seiner Oberseite ohne Astloch - alle Loecher werden
+    zugeschlagen.
+
+    Die zweite Frage ist die wichtigere, und an ihr ist der erste Versuch
+    an der echten Maschine gescheitert: ein dunkler Untersetzer auf einem
+    weissen Blatt ist genau das - ein Loch im Blatt. Wer es nur
+    zuschlaegt, fuellt das Werkstueck weg und meldet das Blatt. Was gross
+    genug fuer ein Werkstueck ist, kommt deshalb als eigener Fund heraus.
+    Die Maserung eines Brettchens bleibt ein Loch und wird zugeschlagen.
+
+    Der Untergrund wird mit derselben 8er-Nachbarschaft verfolgt wie die
+    Flaeche selbst - ein Loch, dessen Ring schraeg einen Bildpunkt offen
+    hat, bleibt deshalb offen. Das ist die harmlose Richtung: lieber ein
+    Loch nicht zugeschlagen als zwei Stuecke zu einem verschmolzen.
     """
     frei = ~teil
     marken, n = _marken(frei)
     if not n:
-        return teil
+        return teil, []
     rand = set(marken[0].tolist()) | set(marken[-1].tolist())
     rand |= set(marken[:, 0].tolist()) | set(marken[:, -1].tolist())
     innen = [k for k in range(1, n + 1) if k not in rand]
     if not innen:
-        return teil
-    return teil | np.isin(marken, innen)
+        return teil, []
+    gross = []
+    if mindest_px:
+        for k in innen:
+            wo = marken == k
+            ys, xs = np.nonzero(wo)
+            if min(int(xs.max() - xs.min()) + 1,
+                   int(ys.max() - ys.min()) + 1) >= mindest_px:
+                gross.append(wo)
+    return teil | np.isin(marken, innen), gross
 
 
 def _umriss_px(teil, grenze=200000):
@@ -433,9 +450,16 @@ def _in_umriss(punkt, umriss):
 
 # ----------------------------------------------------------------- Finden
 
-def _eines(teil, versatz, nach_mm, mm_je_px, nr, am_rand):
-    """Aus einer zusammenhaengenden Flaeche ein Werkstueck machen."""
-    voll = _loecher_zu(teil)
+def _eines(teil, versatz, nach_mm, mm_je_px, nr, am_rand, mindest_px=0,
+           loecher=None):
+    """Aus einer zusammenhaengenden Flaeche ein Werkstueck machen.
+
+    Was an grossen Loechern darin steckt, wird in loecher abgelegt - der
+    Aufrufer macht daraus eigene Funde.
+    """
+    voll, gross = _loecher(teil, mindest_px)
+    if loecher is not None:
+        loecher.extend(gross)
     px = _umriss_px(voll)
     if len(px) < 8:
         return None
@@ -525,10 +549,20 @@ def finden(bett, mm_je_px, x0=0.0, y0=0.0, schwelle=SCHWELLE,
         if min(a1 - a0 + 1, b1 - b0 + 1) < mindest_px:
             continue
         am_rand = bool((wo & randfeld).any())
+        loecher = []
         s = _eines(wo[b0:b1 + 1, a0:a1 + 1], (a0, b0), nach_mm, mm_je_px,
-                   0, am_rand)
+                   0, am_rand, mindest_px, loecher)
         if s:
             gefunden.append(s)
+        # Ein grosses Loch liegt mitten im Bild - angeschnitten ist es nie.
+        for loch in loecher:
+            ly, lx = np.nonzero(loch)
+            c0, d0 = int(lx.min()), int(ly.min())
+            k = _eines(loch[d0:int(ly.max()) + 1, c0:int(lx.max()) + 1],
+                       (a0 + c0, b0 + d0), nach_mm, mm_je_px, 0, False,
+                       mindest_px)
+            if k:
+                gefunden.append(k)
     gefunden.sort(key=lambda s: (-round(s["mitte"][1] / 20.0), s["mitte"][0]))
     for i, s in enumerate(gefunden):
         s["nr"] = i + 1

@@ -164,14 +164,33 @@ class FlaechenZusammenfassen(unittest.TestCase):
         self.assertIsNone(marken)
         self.assertEqual(n, 0)
 
-    def test_das_loch_im_ring_zaehlt_mit(self):
-        b = bett([("ring", 100, 100, 40, 15)])
-        s = finden(b)
+    def test_das_kleine_loch_zaehlt_zur_flaeche(self):
+        """Eine Maserung ist kein zweites Werkstueck.
+
+        Ohne Zuschlagen waere die Flaeche um das Loch kleiner und das
+        Stueck nicht mehr rund.
+        """
+        s = finden(bett([("ring", 100, 100, 40, 5)]))
         self.assertEqual(len(s), 1)
         self.assertAlmostEqual(s[0]["breite"], 80.0, delta=1.0)
-        # Ohne Zuschlagen des Loches waere die Flaeche um das Loch kleiner
-        # und das Stueck nicht mehr rund.
         self.assertEqual(s[0]["form"], "rund")
+
+    def test_das_grosse_loch_ist_ein_eigener_fund(self):
+        """Daran ist der erste Versuch an der echten Maschine gescheitert.
+
+        Ein dunkler Untersetzer auf einem weissen Blatt ist genau das -
+        ein Loch im Blatt. Wer es nur zuschlaegt, fuellt das Werkstueck
+        weg und meldet das Blatt.
+        """
+        s = finden(bett([("ring", 100, 100, 70, 30)]))
+        self.assertEqual(len(s), 2)
+        formen = sorted((round(x["breite"]), x["form"]) for x in s)
+        self.assertEqual(formen, [(60, "rund"), (140, "rund")])
+        # Das Blatt misst sich mitsamt dem Loch - sein Umriss ist der
+        # aeussere, und seine Flaeche soll dazu passen.
+        gross = max(s, key=lambda x: x["breite"])
+        self.assertAlmostEqual(gross["flaeche"], math.pi * 70.0 ** 2,
+                               delta=0.05 * math.pi * 70.0 ** 2)
 
 
 class WasDaliegtWirdGemessen(unittest.TestCase):

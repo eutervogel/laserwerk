@@ -333,6 +333,104 @@ def _ebnen(punkte, toleranz):
     return [p for p, j in zip(punkte, behalten) if j]
 
 
+def _abtaster(bett, mm_je_px, x0, y_oben):
+    """Eine Funktion, die die Helligkeit an einer Stelle in Millimetern
+    liefert - zwischen den Bildpunkten linear."""
+    g = np.asarray(bett.convert("L")).astype(np.float32)
+    h, w = g.shape
+
+    def lesen(x, y):
+        c = np.clip((np.asarray(x, dtype=float) - x0) / mm_je_px - 0.5,
+                    0, w - 1.001)
+        r = np.clip((y_oben - np.asarray(y, dtype=float)) / mm_je_px - 0.5,
+                    0, h - 1.001)
+        c0 = np.floor(c).astype(int)
+        r0 = np.floor(r).astype(int)
+        fc, fr = c - c0, r - r0
+        return (g[r0, c0] * (1 - fc) * (1 - fr)
+                + g[r0, c0 + 1] * fc * (1 - fr)
+                + g[r0 + 1, c0] * (1 - fc) * fr
+                + g[r0 + 1, c0 + 1] * fc * fr)
+    return lesen
+
+
+def feinkante(punkte, lesen, spanne=2.0, schritt=0.05, hub=12.0, glatt=None):
+    """Die Kante dort suchen, wo das Bild sie wirklich hat.
+
+    Der verfolgte Rand liegt auf dem Bildpunktraster - in halben
+    Millimetern, und wo genau er liegt, haengt an der Schwelle, die
+    jemand eingestellt hat. Fuer eine Anzeige reicht das. Fuer ein Mass
+    nicht, und fuer eine Mitte schon gar nicht.
+
+    Deshalb wird quer zur Kontur durch das graue Bild geschnitten: innen
+    eine Helligkeit, aussen eine andere, und die Kante liegt dort, wo die
+    Haelfte erreicht ist. Zwischen zwei Abtastpunkten linear - damit
+    endet die Kante nicht mehr auf dem Raster.
+
+    Quer heisst: entlang der Normalen der Kontur, nicht in Richtung
+    Mitte. Ein Kreis haette beides gleich, ein Brettchen nicht, und eine
+    unregelmaessige Form schon gar nicht.
+
+    Wo der Unterschied zwischen innen und aussen kleiner ist als hub,
+    gibt es nichts zu finden - dort bleibt der Punkt, wie er war. Lieber
+    der alte Punkt als ein neuer, der aus Rauschen gerechnet ist.
+    """
+    p = np.asarray(punkte, dtype=float)
+    if len(p) < 8:
+        return [tuple(q) for q in p]
+    # Normale aus weiter entfernten Nachbarn. Der verfolgte Rand ist
+    # eine Treppe auf dem Bildpunktraster: aus den direkten Nachbarn
+    # springt die Richtung um fuenfundvierzig Grad hin und her, und quer
+    # dazu zu schneiden heisst, schraeg durch die Kante zu schneiden.
+    # Ueber ein Stueck Kontur gemittelt steht sie ruhig.
+    k = glatt if glatt else max(2, len(p) // 60)
+    tang = np.roll(p, -k, axis=0) - np.roll(p, k, axis=0)
+    laenge = np.hypot(tang[:, 0], tang[:, 1])
+    laenge[laenge == 0] = 1.0
+    u = np.column_stack([tang[:, 1] / laenge, -tang[:, 0] / laenge])
+    # Vorzeichen so drehen, dass die Normale nach aussen zeigt. Welche
+    # Richtung das ist, haengt am Umlaufsinn - und den auszurechnen ist
+    # umstaendlicher, als ihn einmal zu messen.
+    mitte = p.mean(axis=0)
+    if float(np.sum(u * (p - mitte))) < 0:
+        u = -u
+    ts = np.arange(-spanne, spanne + 1e-9, schritt)
+    prof = np.array([lesen(p[:, 0] + s * u[:, 0], p[:, 1] + s * u[:, 1])
+                     for s in ts])
+    q = max(2, int(len(ts) * 0.15))
+    innen = prof[:q].mean(axis=0)
+    aussen = prof[-q:].mean(axis=0)
+    halb = (innen + aussen) / 2.0
+    aus = []
+    for i in range(prof.shape[1]):
+        if abs(float(aussen[i] - innen[i])) < hub:
+            aus.append((float(p[i, 0]), float(p[i, 1])))
+            continue
+        s = prof[:, i] - halb[i]
+        wechsel = np.nonzero(np.sign(s[:-1]) != np.sign(s[1:]))[0]
+        if not len(wechsel):
+            aus.append((float(p[i, 0]), float(p[i, 1])))
+            continue
+        # Die Kreuzung, die der bisherigen Kante am naechsten liegt: bei
+        # zwei echten Kanten - Werkstueck und Lichtsaum - ist das die,
+        # die gemeint war.
+        j = wechsel[np.argmin(np.abs(ts[wechsel]))]
+        a, b = abs(float(s[j])), abs(float(s[j + 1]))
+        tt = ts[j] + schritt * a / (a + b + 1e-9)
+        aus.append((float(p[i, 0] + tt * u[i, 0]),
+                    float(p[i, 1] + tt * u[i, 1])))
+    return aus
+
+
+def polygonflaeche(punkte):
+    """Flaeche eines geschlossenen Umrisses (Schnuersenkelformel)."""
+    p = np.asarray(punkte, dtype=float)
+    if len(p) < 3:
+        return 0.0
+    x, y = p[:, 0], p[:, 1]
+    return abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))) / 2.0
+
+
 # ------------------------------------------------------------- Geometrie
 
 def huelle(punkte):
@@ -450,12 +548,27 @@ def _in_umriss(punkt, umriss):
 
 # ----------------------------------------------------------------- Finden
 
+# Suchfenster der Kantenverfeinerung, in Millimetern. Erst weit, damit
+# die Kante auch dann gefunden wird, wenn die Maske zwei, drei Millimeter
+# daneben anfaengt, dann enger. An einem echten Kamerabild gemessen: mit
+# nur zwei Runden streut der Durchmesser ueber verschiedene Schwellen um
+# 1,5 mm, mit dreien um 0,7. Eine vierte bringt nichts mehr.
+FEINRUNDEN = (4.0, 2.0, 1.0)
+
+
 def _eines(teil, versatz, nach_mm, mm_je_px, nr, am_rand, mindest_px=0,
-           loecher=None):
+           loecher=None, lesen=None):
     """Aus einer zusammenhaengenden Flaeche ein Werkstueck machen.
 
     Was an grossen Loechern darin steckt, wird in loecher abgelegt - der
     Aufrufer macht daraus eigene Funde.
+
+    Gemessen wird auf dem vollen Rand, gezeichnet auf einem vereinfachten.
+    Das ist kein Geiz, sondern notwendig: Douglas-Peucker behaelt
+    ausgerechnet die Punkte, die am weitesten abweichen. Fuer eine
+    Zeichnung ist das richtig und fuer einen Ausgleich das Schlechteste,
+    was man tun kann - er liefe auf einer Auswahl, die zu den Ausreissern
+    hin verzerrt ist.
     """
     voll, gross = _loecher(teil, mindest_px)
     if loecher is not None:
@@ -471,12 +584,25 @@ def _eines(teil, versatz, nach_mm, mm_je_px, nr, am_rand, mindest_px=0,
     flaeche = float(voll.sum()) * mm_je_px * mm_je_px
     ys, xs = np.nonzero(voll)
     sx, sy = nach_mm(float(xs.mean()) + ax, float(ys.mean()) + ay)
-    kx = [p[0] for p in umriss]
-    ky = [p[1] for p in umriss]
+
+    # Das Mass kommt von der Kante im grauen Bild, nicht vom Raster der
+    # Maske: zweimal nachgefasst, erst grob, dann fein.
+    messrand = roh
+    if lesen is not None and len(roh) >= 32:
+        for spanne in FEINRUNDEN:
+            messrand = feinkante(messrand, lesen, spanne=spanne)
+        f = polygonflaeche(messrand)
+        if f > 0:
+            flaeche = f
+            sx, sy = (float(np.mean([q[0] for q in messrand])),
+                      float(np.mean([q[1] for q in messrand])))
+
+    kx = [p[0] for p in messrand]
+    ky = [p[1] for p in messrand]
     kasten = (min(kx), min(ky), max(kx), max(ky))
 
-    mitte, rb, rh, grad = minrechteck(umriss)
-    cx, cy, r, rest = kreis(umriss)
+    mitte, rb, rh, grad = minrechteck(messrand)
+    cx, cy, r, rest = kreis(messrand)
 
     rund = (r > 0 and rest <= max(0.4, 0.04 * r)
             and 0.88 <= flaeche / (math.pi * r * r) <= 1.12)
@@ -497,6 +623,7 @@ def _eines(teil, versatz, nach_mm, mm_je_px, nr, am_rand, mindest_px=0,
             else None
         guete = 0.6 * min(1.0, max(0.0, fuellung / 0.9))
     return dict(nr=nr, form=form, mitte=mitte, schwerpunkt=(sx, sy),
+                rest=round(float(rest), 3) if rest != float("inf") else None,
                 breite=breite, hoehe=hoehe, winkel=winkel,
                 umriss=umriss, kasten=kasten, flaeche=flaeche,
                 guete=round(float(guete), 3),
@@ -539,6 +666,7 @@ def finden(bett, mm_je_px, x0=0.0, y0=0.0, schwelle=SCHWELLE,
     def nach_mm(px, py):
         return (x0 + (px + 0.5) * mm_je_px, y_oben - (py + 0.5) * mm_je_px)
 
+    lesen = _abtaster(bett, mm_je_px, x0, y_oben)
     mindest_px = max(2, int(round(mindest_mm / mm_je_px)))
     gefunden = []
     for k in range(1, n + 1):
@@ -551,7 +679,7 @@ def finden(bett, mm_je_px, x0=0.0, y0=0.0, schwelle=SCHWELLE,
         am_rand = bool((wo & randfeld).any())
         loecher = []
         s = _eines(wo[b0:b1 + 1, a0:a1 + 1], (a0, b0), nach_mm, mm_je_px,
-                   0, am_rand, mindest_px, loecher)
+                   0, am_rand, mindest_px, loecher, lesen)
         if s:
             gefunden.append(s)
         # Ein grosses Loch liegt mitten im Bild - angeschnitten ist es nie.
@@ -560,7 +688,7 @@ def finden(bett, mm_je_px, x0=0.0, y0=0.0, schwelle=SCHWELLE,
             c0, d0 = int(lx.min()), int(ly.min())
             k = _eines(loch[d0:int(ly.max()) + 1, c0:int(lx.max()) + 1],
                        (a0 + c0, b0 + d0), nach_mm, mm_je_px, 0, False,
-                       mindest_px)
+                       mindest_px, None, lesen)
             if k:
                 gefunden.append(k)
     gefunden.sort(key=lambda s: (-round(s["mitte"][1] / 20.0), s["mitte"][0]))
@@ -581,7 +709,7 @@ def rechteck_stueck(x0, y0, x1, y1, winkel=0.0, nr=0):
                 breite=bx - ax, hoehe=by - ay, winkel=winkel or None,
                 umriss=umriss, kasten=(ax, ay, bx, by),
                 flaeche=(bx - ax) * (by - ay), guete=1.0, sicher=True,
-                randlage=False, herkunft="hand")
+                randlage=False, rest=0.0, herkunft="hand")
 
 
 def kreis_stueck(mx, my, r, nr=0, ecken=48):
@@ -595,7 +723,7 @@ def kreis_stueck(mx, my, r, nr=0, ecken=48):
                 breite=2 * r, hoehe=2 * r, winkel=None, umriss=umriss,
                 kasten=(mx - r, my - r, mx + r, my + r),
                 flaeche=math.pi * r * r, guete=1.0, sicher=True,
-                randlage=False, herkunft="hand")
+                randlage=False, rest=0.0, herkunft="hand")
 
 
 def unter(stuecke, x, y):

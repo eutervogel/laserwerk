@@ -1269,6 +1269,7 @@ EN = {
     "Auftrag nicht gesichert: {e}": "Job not saved: {e}",
     "Auftrag liegt in {p}, zuletzt Zeile {n}.":
         "The job is in {p}, last line {n}.",
+    "Fangradius": "Snap radius",
     "entfernen": "remove",
     "Rechteck ziehen": "Drag rectangle",
     "Kreis ziehen": "Drag circle",
@@ -1312,8 +1313,10 @@ EN = {
     "aus Wabenplatte und Lichtschleier. Niedriger: auch\n"
     "Schwaches, dafür mehr Fehlfunde.\n"
     "Beim Ziehen rastet die Mitte des Motivs auf der Mitte\n"
-    "eines Werkstücks ein, sobald sie nah genug ist. Der\n"
-    "Knopf legt es ohne Ziehen genau dorthin.\n"
+    "eines Werkstücks ein, sobald sie näher herankommt als\n"
+    "der Fangradius - in Millimetern auf dem Werkstück, also\n"
+    "unabhängig vom Zoom. Der Knopf legt es ohne Ziehen\n"
+    "genau dorthin.\n"
     "Das kleinste Stück räumt die Wabenplatte weg: ihre\n"
     "Waben sind gut zwanzig Millimeter groß und nach jedem\n"
     "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
@@ -1334,9 +1337,10 @@ EN = {
         "Higher: only clear edges, less nonsense from the honeycomb\n"
         "and the glare. Lower: faint things too, at the price of\n"
         "more false finds.\n"
-        "While dragging, the centre of the motif snaps onto the centre\n"
-        "of a workpiece as soon as it is close enough. The button puts\n"
-        "it exactly there without dragging.\n"
+        "While dragging, the centre of the motif snaps onto the centre of\n"
+        "a workpiece as soon as it comes closer than the snap radius - in\n"
+        "millimetres on the workpiece, so it does not depend on the zoom.\n"
+        "The button puts it exactly there without dragging.\n"
         "The smallest piece clears away the honeycomb: its cells are a\n"
         "good twenty millimetres across and a piece by every measure.\n"
         "Enter how small your own smallest workpiece is.\n"

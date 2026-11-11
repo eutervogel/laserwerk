@@ -1024,26 +1024,29 @@ class App:
         ttk.Checkbutton(wf, text=T("auf die Werkstückmitte fangen"),
                         variable=self.v_fang,
                         command=self._fang_sichern).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=6, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ttk.Label(wf, text=T("Fangradius")).grid(row=7, column=0, sticky="w",
+                                                 pady=(2, 0))
         self.v_fangradius = tk.DoubleVar(
             value=float(self.cfg.get("stueck_fangradius", 8.0)))
         sp_f = ttk.Spinbox(wf, from_=1.0, to=50.0, increment=1.0, width=6,
                            textvariable=self.v_fangradius,
                            command=self._fang_sichern)
-        sp_f.grid(row=6, column=2, pady=(4, 0))
+        sp_f.grid(row=7, column=1, padx=4, pady=(2, 0), sticky="w")
         sp_f.bind("<Return>", lambda e: self._fang_sichern())
         sp_f.bind("<FocusOut>", lambda e: self._fang_sichern())
+        ttk.Label(wf, text="mm").grid(row=7, column=2, sticky="w", pady=(2, 0))
         ttk.Button(wf, text=T("Motiv auf das Werkstück legen"), width=26,
                    command=self.motiv_auf_stueck).grid(
-            row=7, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.v_fang_drehen = tk.BooleanVar(
             value=bool(self.cfg.get("stueck_drehen", False)))
         ttk.Checkbutton(wf, text=T("mitdrehen"), variable=self.v_fang_drehen,
                         command=self._fang_sichern).grid(
-            row=7, column=2, sticky="w", pady=(4, 0))
+            row=8, column=2, sticky="w", pady=(4, 0))
         ttk.Button(wf, text=T("auf alle Werkstücke"), width=26,
                    command=self.motiv_auf_alle).grid(
-            row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.lbl_stuecke = ttk.Label(wf, text="", style="Muted.TLabel",
                                      wraplength=360)
         self.lbl_stuecke.grid(row=5, column=0, columnspan=3, sticky="w",
@@ -1065,15 +1068,17 @@ class App:
                    "aus Wabenplatte und Lichtschleier. Niedriger: auch\n"
                    "Schwaches, dafür mehr Fehlfunde.\n"
                    "Beim Ziehen rastet die Mitte des Motivs auf der Mitte\n"
-                   "eines Werkstücks ein, sobald sie nah genug ist. Der\n"
-                   "Knopf legt es ohne Ziehen genau dorthin.\n"
+                   "eines Werkstücks ein, sobald sie näher herankommt als\n"
+                   "der Fangradius - in Millimetern auf dem Werkstück, also\n"
+                   "unabhängig vom Zoom. Der Knopf legt es ohne Ziehen\n"
+                   "genau dorthin.\n"
                    "Das kleinste Stück räumt die Wabenplatte weg: ihre\n"
                    "Waben sind gut zwanzig Millimeter groß und nach jedem\n"
                    "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
                    "eigenes Werkstück ist.\n"
                    "'Auf alle Werkstücke' legt für jedes eine eigene Kopie\n"
                    "an - jede bleibt danach einzeln bearbeitbar."))).grid(
-            row=9, column=0, columnspan=3, sticky="w", pady=(3, 0))
+            row=10, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._stueck_stand()
         self._kam_zeigen()
 

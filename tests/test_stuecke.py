@@ -184,13 +184,84 @@ class FlaechenZusammenfassen(unittest.TestCase):
         """
         s = finden(bett([("ring", 100, 100, 70, 30)]))
         self.assertEqual(len(s), 2)
-        formen = sorted((round(x["breite"]), x["form"]) for x in s)
-        self.assertEqual(formen, [(60, "rund"), (140, "rund")])
+        self.assertEqual(sorted(x["form"] for x in s), ["rund", "rund"])
+        masse = sorted(x["breite"] for x in s)
+        # Eine halbe Bildpunktbreite Zugabe ist richtig und nicht Fehler:
+        # bei einer hart gezeichneten Kante liegt die wahre Kante zwischen
+        # dem letzten gefuellten und dem ersten leeren Punkt, und genau
+        # dorthin setzt die Feinkante sie. Am Kamerabild, wo die Kante
+        # weich ist, trifft sie sie wirklich.
+        self.assertAlmostEqual(masse[0], 60.0, delta=0.8)
+        self.assertAlmostEqual(masse[1], 140.0, delta=0.8)
         # Das Blatt misst sich mitsamt dem Loch - sein Umriss ist der
         # aeussere, und seine Flaeche soll dazu passen.
         gross = max(s, key=lambda x: x["breite"])
         self.assertAlmostEqual(gross["flaeche"], math.pi * 70.0 ** 2,
                                delta=0.05 * math.pi * 70.0 ** 2)
+
+
+class DieKanteWirdNachgefasst(unittest.TestCase):
+    """Der verfolgte Rand liegt auf dem Bildpunktraster.
+
+    In halben Millimetern, und wo genau er liegt, haengt an der Schwelle,
+    die jemand eingestellt hat. Fuer eine Anzeige reicht das, fuer ein
+    Mass nicht und fuer eine Mitte schon gar nicht. Deshalb wird quer zur
+    Kontur durch das graue Bild geschnitten und die Kante dort gesucht,
+    wo die Helligkeit auf halber Hoehe steht.
+    """
+
+    def weiche_scheibe(self, mx, my, r, unschaerfe=2.5):
+        """Eine Scheibe mit weicher Kante - so wie eine Kamera sie sieht."""
+        from PIL import ImageFilter
+        b = Image.new("L", (int(BETT * PX), int(BETT * PX)), 90)
+        ImageDraw.Draw(b).ellipse(
+            [(mx - r) * PX, (BETT - my - r) * PX,
+             (mx + r) * PX, (BETT - my + r) * PX], fill=225)
+        return b.filter(ImageFilter.GaussianBlur(unschaerfe)).convert("RGB")
+
+    def test_sie_trifft_die_weiche_kante(self):
+        soll_r = 30.0
+        # PIL malt die Ellipse einschliesslich beider Grenzen - die
+        # gemalte Scheibe ist deshalb einen Bildpunkt breiter als 2*r.
+        soll = 2 * soll_r + 1.0 / PX
+        # ...und sie sitzt deshalb auch eine halbe Bildpunktbreite weiter.
+        soll_x, soll_y = 100.0 + 0.5 / PX, 100.0 - 0.5 / PX
+        bild = self.weiche_scheibe(100.0, 100.0, soll_r)
+        s = finden(bild)
+        self.assertEqual(len(s), 1)
+        self.assertAlmostEqual(s[0]["breite"], soll, delta=0.2)
+        self.assertAlmostEqual(s[0]["mitte"][0], soll_x, delta=0.15)
+        self.assertAlmostEqual(s[0]["mitte"][1], soll_y, delta=0.15)
+
+    def test_sie_haengt_kaum_noch_an_der_schwelle(self):
+        """Das ist der eigentliche Gewinn: das Mass soll nicht davon
+        abhaengen, wie jemand einen Regler gestellt hat."""
+        bild = self.weiche_scheibe(100.0, 100.0, 30.0)
+        masse = [finden(bild, schwelle=s)[0]["breite"]
+                 for s in (0.14, 0.20, 0.26)]
+        self.assertLess(max(masse) - min(masse), 0.5,
+                        "Durchmesser streut ueber die Schwellen: %r" % (masse,))
+
+    def test_ohne_graues_bild_bleibt_der_rand_wie_er_war(self):
+        punkte = [(10.0, 0.0), (0.0, 10.0), (-10.0, 0.0), (0.0, -10.0)]
+        self.assertEqual(ST.feinkante(punkte, lambda x, y: 0.0), punkte)
+
+    def test_wo_nichts_zu_sehen_ist_wird_nichts_erfunden(self):
+        """Ein flaues Stueck Kante hat keine Mitte zwischen zwei Hoehen -
+        dort bleibt der alte Punkt stehen."""
+        import math as _m
+        kreis = [(100 + 20 * _m.cos(a), 100 + 20 * _m.sin(a))
+                 for a in np.linspace(0, 2 * _m.pi, 60, endpoint=False)]
+        aus = ST.feinkante(kreis, lambda x, y: np.full(np.shape(x), 128.0))
+        for a, b in zip(aus, kreis):
+            self.assertAlmostEqual(a[0], b[0], places=6)
+            self.assertAlmostEqual(a[1], b[1], places=6)
+
+    def test_die_flaeche_kommt_aus_dem_umriss(self):
+        p = [(0.0, 0.0), (10.0, 0.0), (10.0, 4.0), (0.0, 4.0)]
+        self.assertAlmostEqual(ST.polygonflaeche(p), 40.0, places=6)
+        self.assertAlmostEqual(ST.polygonflaeche(p[::-1]), 40.0, places=6)
+        self.assertEqual(ST.polygonflaeche([(0.0, 0.0), (1.0, 1.0)]), 0.0)
 
 
 class WasDaliegtWirdGemessen(unittest.TestCase):

@@ -314,6 +314,8 @@ class Grbl:
         while not self.oks.empty():
             self.oks.get_nowait()
         pend, sent, done, errors = [], 0, 0, 0
+        lage = None                   # zuletzt gemeldete Stelle des Kopfes
+        lage_seit = time.time()
         grenze = None                 # bis hierhin senden, dann anhalten
         total = len(lines)
         t0 = time.time()
@@ -366,7 +368,22 @@ class Grbl:
                         pend = []
                         vorwaerts = time.time()
                         gemeldet = False
-                    elif not gemeldet and time.time() - vorwaerts > self.STILL_MELDEN:
+                    # Bewegt sie sich ueberhaupt noch? Der Zustand allein
+                    # taugt dafuer nicht: am 11.11.2026 meldete eine
+                    # Maschine minutenlang "Run" und stand dabei still.
+                    # Laserwerk hat ihr das geglaubt und gewartet - der
+                    # Auftrag blieb bei Zeile 97 von 880 stehen, und die
+                    # Platte war hin. Was zaehlt, ist Fortschritt: eine
+                    # Quittung oder eine andere Stelle. Kommt beides lange
+                    # genug nicht, steht sie, was immer sie behauptet.
+                    jetzt = tuple(self.status.get("mpos") or ())
+                    if jetzt != lage:
+                        lage, lage_seit = jetzt, time.time()
+                    if sent > done and \
+                            time.time() - max(lage_seit, vorwaerts) > self.STILL_ABBRUCH:
+                        self._halt()
+                        return "steht"
+                    if not gemeldet and time.time() - vorwaerts > self.STILL_MELDEN:
                         # Der Strom steht, aber nicht im Leerlauf - dann
                         # greift das Neuaufsetzen oben nicht, und frueher
                         # wartete der Job hier stumm bis in alle Ewigkeit.
@@ -400,6 +417,7 @@ class Grbl:
             self._pause_ende = False
 
     STILL_MELDEN = 10.0         # so lange ohne Quittung, dann sagen warum
+    STILL_ABBRUCH = 120.0       # so lange ohne jeden Fortschritt, dann Schluss
 
     # Warum eine Maschine nichts tut, steht in ihrem Zustand - und bis
     # hierher hat das niemand vorgelesen. Ein Job, der im Door haengt,

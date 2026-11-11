@@ -1265,6 +1265,10 @@ EN = {
         "Put it on the workpieces one at a time - or use a version "
         "without layers.",
     "Motiv auf {n} Werkstücke gelegt.": "Motif put on {n} workpieces.",
+    "steht still - angehalten": "standing still - halted",
+    "Auftrag nicht gesichert: {e}": "Job not saved: {e}",
+    "Auftrag liegt in {p}, zuletzt Zeile {n}.":
+        "The job is in {p}, last line {n}.",
     "entfernen": "remove",
     "Rechteck ziehen": "Drag rectangle",
     "Kreis ziehen": "Drag circle",

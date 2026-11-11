@@ -341,6 +341,78 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class EinJobDerNichtVorankommtHoertAuf(unittest.TestCase):
+    """Am 11.11.2026 meldete eine Maschine minutenlang "Run" und stand.
+
+    Das Neuaufsetzen greift nur im Leerlauf, und die Stillstandsmeldung
+    sagt es einmal und wartet dann weiter. Also stand der Job bei Zeile
+    97 von 880, Laserwerk fuehrte ihn als laufend, und die Schieferplatte
+    darunter war hin. Was zaehlt, ist Fortschritt - eine Quittung oder
+    eine andere Stelle. Kommt beides lange genug nicht, steht sie, was
+    immer sie von sich behauptet.
+    """
+
+    def bauen(self, bewegt=False):
+        import lw_grbl as G
+        g = G.Grbl(lambda *a: None)
+        g.alive = True
+        g.s = object()
+        g.STILL_ABBRUCH = 0.3
+        g.STILL_MELDEN = 0.1
+        g.status = {"state": "Run", "bf": (15, 127), "mpos": (0.0, 0.0, 0.0),
+                    "wco": (0, 0, 0), "wpos": (0, 0, 0), "fs": (1000, 830)}
+        self.echtzeit = []
+        g.realtime = lambda b: self.echtzeit.append(b)
+        self.gesendet = []
+
+        def schreiben(daten):
+            self.gesendet.append(daten.decode().strip())
+            if bewegt:                  # sie faehrt, quittiert aber nicht
+                x = g.status["mpos"][0] + 1.0
+                g.status["mpos"] = (x, 0.0, 0.0)
+        g.write = schreiben
+        return g
+
+    def test_ohne_fortschritt_hoert_er_auf(self):
+        g = self.bauen()
+        erg = g.run_job(["G1 X%d" % i for i in range(40)], lambda *a: None)
+        self.assertEqual(erg, "steht")
+
+    def test_dabei_geht_der_strahl_aus(self):
+        """Angehalten heisst angehalten: Zuspannstopp und Soft-Reset."""
+        g = self.bauen()
+        g.run_job(["G1 X%d" % i for i in range(40)], lambda *a: None)
+        self.assertIn(b"!", self.echtzeit)
+        self.assertIn(b"\x18", self.echtzeit)
+
+    def test_solange_sie_sich_bewegt_wird_gewartet(self):
+        """Eine lange Fahrt ohne Quittung ist kein Stillstand. Wer das
+        verwechselt, bricht mitten in einer sauberen Gravur ab."""
+        g = self.bauen(bewegt=True)
+        # Nach dem ersten Senden bewegt sich die Stelle nicht mehr weiter,
+        # also muss der Abbruch allein daran haengen, dass sie sich
+        # ueberhaupt noch gemeldet hat. Darum hier von Hand weiterruecken.
+        ergebnis = []
+        ende = threading.Event()
+
+        def laufen():
+            ergebnis.append(g.run_job(["G1 X%d" % i for i in range(40)],
+                                      lambda *a: None))
+            ende.set()
+
+        f = threading.Thread(target=laufen, daemon=True)
+        f.start()
+        t0 = time.time()
+        while time.time() - t0 < g.STILL_ABBRUCH * 3 and not ende.is_set():
+            x = g.status["mpos"][0] + 1.0
+            g.status["mpos"] = (x, 0.0, 0.0)
+            time.sleep(0.05)
+        self.assertFalse(ende.is_set(), "abgebrochen, obwohl sie faehrt")
+        g._stop = True
+        ende.wait(5.0)
+        self.assertEqual(ergebnis, ["abgebrochen"])
+
+
 class EineVerloreneQuittungHaeltDenJobNichtAn(unittest.TestCase):
     """Ein Byte auf der Leitung darf keinen Job toeten.
 

@@ -4616,6 +4616,65 @@ class WerkstueckeImKamerareiter(Grundlage):
         self.assertAlmostEqual(self.app.stuecke[0]["mitte"][0], 60.0,
                                delta=1.5)
 
+class DerAuftragLiegtAufDerPlatte(Grundlage):
+    """Ein laufender Auftrag muss auch auf der Festplatte stehen.
+
+    Am 11.11.2026 blieb ein Job bei Zeile 97 von 880 stehen. Er lebte nur
+    im Speicher: kein Fortsetzen, kein zweiter Versuch, die Schieferplatte
+    war hin. Eine Datei kostet nichts und liegt genau dann da, wenn sie
+    gebraucht wird - wenn sonst nichts mehr geht.
+    """
+
+    def datei(self):
+        return os.path.join(self.L.P.DIR, self.app.AUFTRAG)
+
+    def test_vor_dem_start_wird_er_geschrieben(self):
+        zeilen = ["G0 X0 Y0", "M4 S500", "G1 X10 F600", "M5"]
+        self.app._auftrag_sichern(zeilen, "Gravur")
+        with open(self.datei()) as f:
+            self.assertEqual(f.read().splitlines(), zeilen)
+
+    def test_daneben_steht_wozu_er_gehoert(self):
+        self.app.null_wco = (12.5, 7.25, 0.0)
+        self.app._auftrag_sichern(["G1 X1"], "Gravur")
+        with open(self.datei() + ".txt") as f:
+            text = f.read()
+        self.assertIn("Gravur", text)
+        self.assertIn("1 Zeilen", text)
+        self.assertIn("12.500", text)          # ohne Nullpunkt halbe Auskunft
+
+    def test_ohne_nullpunkt_sagt_er_das(self):
+        self.app.null_wco = None
+        self.app.grbl.status["wco"] = ()
+        self.app._auftrag_sichern(["G1 X1"], "Rahmen")
+        with open(self.datei() + ".txt") as f:
+            self.assertIn("unbekannt", f.read())
+
+    def test_ein_schreibfehler_haelt_den_job_nicht_auf(self):
+        """Kein Grund, den Job nicht zu starten - nur einer, es zu sagen."""
+        echt = self.L.P.DIR
+        self.L.P.DIR = "/gibtsnicht/laserwerk"
+        try:
+            self.app._auftrag_sichern(["G1 X1"], "Gravur")
+        finally:
+            self.L.P.DIR = echt
+        self.assertIsNone(self.app._auftrag_pfad)
+
+    def test_nach_einem_abbruch_sagt_er_wo_die_datei_liegt(self):
+        self.app._auftrag_sichern(["G1 X1"], "Gravur")
+        self.app.grbl.job_done = 97
+        self.app._event("jobend", ("Gravur", "steht"))
+        text = self.app.log.get("1.0", "end")
+        self.assertIn(self.app.AUFTRAG, text)
+        self.assertIn("97", text)
+
+    def test_stillstand_heisst_nicht_fertig(self):
+        self.app._auftrag_sichern(["G1 X1"], "Gravur")
+        self.app._event("jobend", ("Gravur", "steht"))
+        self.assertIn("steht", self.app.lbl_prog.cget("text"))
+        self.assertTrue(any(art == "w" for art, _ in self.gezeigt))
+
+
 class GeladenerGcodeIstAuchGcode(Grundlage):
     """Eine geladene .nc hat kein Motiv - sie ist eines.
 

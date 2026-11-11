@@ -5674,6 +5674,7 @@ class App:
         self.marken = (self.info or {}).get("marken") if lines is self.lines else None
         self._marken_idx = [m[0] for m in self.marken] if self.marken else None
         self.prog["value"] = 0
+        self._auftrag_sichern(lines, name)
         self._log(T('{0} gestartet').format(name))
 
         def run():
@@ -5682,6 +5683,41 @@ class App:
                 marken=self._marken_idx)
             self.q.put(("jobend", (name, res)))
         threading.Thread(target=run, daemon=True).start()
+
+    AUFTRAG = "letzter_auftrag.nc"
+
+    def _auftrag_sichern(self, lines, name):
+        """Den Auftrag wegschreiben, bevor er laeuft.
+
+        Am 11.11.2026 blieb ein Job bei Zeile 97 von 880 stehen. Er lebte
+        nur im Speicher - kein Fortsetzen, kein zweiter Versuch, die
+        Schieferplatte war hin. Eine Datei kostet nichts und liegt genau
+        dann da, wenn sie gebraucht wird: wenn sonst nichts mehr geht.
+
+        Daneben eine Zeile, die sagt, wozu sie gehoert und wo der
+        Nullpunkt lag. Ohne den ist der G-Code nur die halbe Auskunft.
+        """
+        try:
+            pfad = os.path.join(P.DIR, self.AUFTRAG)
+            with open(pfad, "w") as f:
+                f.write("\n".join(lines) + "\n")
+            # Ein Versatz aus lauter Nullen ist keiner: genau das meldet
+            # der Statusbericht nach einem Alarm. Dieselbe Regel wie in
+            # stop() - sonst steht in der Datei ein Nullpunkt, den es
+            # nicht gibt, und beim Fortsetzen landet der Rest woanders.
+            wco = self.null_wco
+            if not (wco and any(wco)):
+                st = tuple(self.grbl.status.get("wco") or ())
+                wco = st if any(st) else ()
+            with open(pfad + ".txt", "w") as f:
+                f.write("%s\n%s\n%d Zeilen\nNullpunkt %s\n" % (
+                    name, time.strftime("%Y-%m-%d %H:%M:%S"), len(lines),
+                    " ".join("%.3f" % v for v in wco) if wco else "unbekannt"))
+            self._auftrag_pfad = pfad
+        except OSError as e:
+            # Kein Grund, den Job nicht zu starten - nur einer, es zu sagen.
+            self._auftrag_pfad = None
+            self._log(T("Auftrag nicht gesichert: {e}").format(e=e))
 
     def pause(self):
         """Anhalten - entweder sofort oder am Ende der laufenden Zeile.
@@ -5868,6 +5904,7 @@ class App:
                    "abgebrochen": T("abgebrochen (Laser aus)"),
                    "alarm": T("ALARM - gestoppt"),
                    "verbindung": T("Verbindung verloren"),
+                   "steht": T("steht still - angehalten"),
                    "fehler": T("zu viele Übertragungsfehler")}.get(res, res)
             er = getattr(self.grbl, "job_errors", 0)
             gesendet = getattr(self.grbl, "job_done", 0)
@@ -5882,6 +5919,11 @@ class App:
             # die eine ausgelassene Zeile erklaeren koennte.
             self._log(T("Übertragung: {n} Fehler in {g} Befehlen").format(
                 n=er, g=gesendet))
+            if res != "fertig" and getattr(self, "_auftrag_pfad", None):
+                # Jetzt ist die Datei etwas wert: sie und die erreichte
+                # Zeile sind alles, was ein Fortsetzen braucht.
+                self._log(T("Auftrag liegt in {p}, zuletzt Zeile {n}.").format(
+                    p=self._auftrag_pfad, n=gesendet))
             self._melde(f"{name}: {txt}"
                         + (T("\n{n} Übertragungsfehler").format(n=er) if er else ""))
             if res == "fertig" and self.job_t0 and self.job_schaetzung:

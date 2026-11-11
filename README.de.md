@@ -222,6 +222,27 @@ Materialwerte als Preset, Achsensteuerung und die Tests:
 
 ![Tests](bilder/05-tests.png)
 
+## Die Kamera weiß, wo das Werkstück liegt
+
+Im Deckel sitzt eine Kamera. Laserwerk eicht sie nicht an einem Ausdruck,
+sondern an der Maschine selbst: sie brennt ein Raster aus fünfundzwanzig
+Kreuzen, von dem sie auf Hundertstel weiß, wo es liegt, sucht sie im Bild
+wieder und rechnet daraus Objektivverzeichnung, Lage und Maßstab. Auf einem
+Falcon2 Pro bleiben davon 0,45 mm im Mittel über das ganze Bett.
+
+Danach liegt das Bild in Maschinenkoordinaten unter der Zeichenfläche: was
+darauf an einer Stelle liegt, liegt dort auch wirklich. Ein Knopf findet die
+Werkstücke darin — Umriss, Mitte, Breite und Höhe in Millimetern, Drehwinkel,
+Form. Das Motiv rastet beim Ziehen auf der Mitte ein, und *auf alle
+Werkstücke* legt für jedes eine eigene Kopie an.
+
+![Werkstücke erkennen](bilder/06-kamera.png)
+
+Die Umrisse sind eine Anzeige und kein Motiv: sie stehen nicht in der
+Elementliste und geraten in keinen Auftrag. Was unsicher erkannt wurde, sagt
+es selbst, statt eine Zahl auszugeben, die nur so aussieht wie eine Antwort —
+und wem die Erkennung nicht passt, der zieht den Umriss selbst auf.
+
 Während eines Laufs steht in der Statuszeile, bei welcher Zeile von wie
 vielen der Kopf gerade ist — wie der Schichtzähler am 3D-Drucker. Beim
 Schneiden zählt es Konturen statt Zeilen.
@@ -407,7 +428,7 @@ weitere Sprache die Tabelle kopieren und `SPRACHEN` ergänzen.
 python3 -m unittest discover -s tests -t tests
 ```
 
-913 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
+931 Tests mit Bordmitteln, ohne Installation. Die Oberflächentests brauchen
 eine Anzeige und werden ohne eine solche übersprungen; `xvfb-run -a` davor
 lässt sie auf einem unsichtbaren Bildschirm laufen. Einzelheiten in
 [tests/README.md](tests/README.md).

@@ -212,6 +212,27 @@ Material values as a preset, jogging, and the tests:
 
 ![Tests](bilder/en-05-tests.png)
 
+## The camera knows where the workpiece lies
+
+There is a camera in the lid. Laserwerk does not calibrate it against a
+printout but against the machine itself: it burns a grid of twenty-five
+crosses whose position it knows to a hundredth of a millimetre, finds them
+again in the picture, and works out lens distortion, position and scale from
+that. On a Falcon2 Pro 0.45 mm mean error over the whole bed is left.
+
+After that the picture lies in machine coordinates under the drawing area:
+whatever sits somewhere on it really sits there. A button finds the
+workpieces in it — outline, centre, width and height in millimetres, angle,
+shape. While dragging, the motif snaps onto the centre, and *on every
+workpiece* makes a separate copy for each one.
+
+![Finding the workpieces](bilder/en-06-kamera.png)
+
+The outlines are a display, not a motif: they are not in the element list and
+never end up in a job. Anything recognised with doubt says so instead of
+handing out a number that merely looks like an answer - and if you do not
+like what it found, you draw the outline yourself.
+
 While a job runs, the status line says which row out of how many the head
 is on — like a 3D printer's layer counter. For cutting it counts contours
 instead of rows.
@@ -390,7 +411,7 @@ language, copy the table and extend `SPRACHEN`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-913 tests on stdlib only, nothing to install. The interface tests need a
+931 tests on stdlib only, nothing to install. The interface tests need a
 display and are skipped without one; prefix `xvfb-run -a` to run them on a
 hidden screen. Details in [tests/README.md](tests/README.md).
 

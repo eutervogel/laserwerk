@@ -1270,6 +1270,59 @@ EN = {
     "Auftrag liegt in {p}, zuletzt Zeile {n}.":
         "The job is in {p}, last line {n}.",
     "Fangradius": "Snap radius",
+    "Umriss als Schablone": "Outline as a template",
+    "Schablone": "Template",
+    "Schablone, {n} Stück": "Template, {n} pieces",
+    "{n} Werkstücke erkannt.\n\n"
+    "Alle als Schablone nehmen?\n"
+    "Nein nimmt nur das gewählte.":
+        "{n} workpieces found.\n\n"
+        "Take all of them as the template?\n"
+        "No takes only the selected one.",
+    "Schablone aus {n} Umriss(en) angelegt. Achtung: mit Schnittwerten "
+    "schneidet sie durch - für eine Schablone Leistung und Vorschub auf "
+    "Anritzen stellen.":
+        "Template made from {n} outline(s). Careful: with cutting values it "
+        "cuts right through - for a template set power and feed to scoring.",
+    "Schnittspalt": "Kerf",
+    "Kantenlänge": "Edge length",
+    "Streifen": "Strips",
+    "gemessene Breite": "measured width",
+    "Schnittspalttest anlegen": "Make a kerf test",
+    "Schnittspalt berechnen": "Work out the kerf",
+    "Schnittspalttest {b:g} mm, {n} Streifen":
+        "Kerf test {b:g} mm, {n} strips",
+    "Kantenlänge ab 5 mm, zwischen 2 und 100 Streifen.":
+        "Edge length from 5 mm, between 2 and 100 strips.",
+    "Schnittspalttest angelegt: {n} Streifen aus {b:g} mm. "
+    "Nach dem Schneiden die Streifen dicht zusammenschieben "
+    "und die Gesamtbreite messen.":
+        "Kerf test made: {n} strips out of {b:g} mm. After cutting, push "
+        "the strips tightly together and measure the total width.",
+    "Erst messen, dann rechnen.": "Measure first, then work it out.",
+    "Die Streifen können nicht breiter sein als das Quadrat - "
+    "stimmen Kantenlänge und Streifenzahl?":
+        "The strips cannot be wider than the square - are the edge length "
+        "and the number of strips right?",
+    "Schnittspalt {k:.3f} mm  ({b:g} − {w:g} = {d:.2f} mm auf {n} Streifen)":
+        "Kerf {k:.3f} mm  ({b:g} - {w:g} = {d:.2f} mm over {n} strips)",
+    "Gilt für dieses Material mit diesen Werten. Laserwerk "
+    "rechnet damit noch nichts - der Wert ist zum Notieren.":
+        "Holds for this material with these settings. Laserwerk does not "
+        "use it for anything yet - the number is for your notes.",
+    "Ein Quadrat, in Streifen geschnitten. Die Streifen\n"
+    "danach dicht zusammenschieben und die Gesamtbreite\n"
+    "messen - was fehlt, hat der Strahl weggenommen.\n"
+    "Durch zehn Streifen geteilt wird aus einem Messfehler\n"
+    "von einem Zwanzigstel Millimeter einer von fünf\n"
+    "Tausendsteln. An einem einzelnen Schnitt gemessen ist\n"
+    "der Fehler so groß wie das Gesuchte.":
+        "A square, cut into strips. Push the strips tightly together\n"
+        "afterwards and measure the total width - what is missing is\n"
+        "what the beam took away. Divided by ten strips, a measuring\n"
+        "error of a twentieth of a millimetre becomes one of five\n"
+        "thousandths. Measured on a single cut the error is as large\n"
+        "as what you are looking for.",
     "entfernen": "remove",
     "Rechteck ziehen": "Drag rectangle",
     "Kreis ziehen": "Drag circle",
@@ -1322,7 +1375,12 @@ EN = {
     "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
     "eigenes Werkstück ist.\n"
     "'Auf alle Werkstücke' legt für jedes eine eigene Kopie\n"
-    "an - jede bleibt danach einzeln bearbeitbar.":
+    "an - jede bleibt danach einzeln bearbeitbar.\n"
+    "'Umriss als Schablone' macht aus den Umrissen ein\n"
+    "Motiv zum Brennen: einmal auf die Unterlage, und das\n"
+    "nächste Stück kommt ohne Bild an dieselbe Stelle.\n"
+    "Mit Schnittwerten schneidet es durch - für eine\n"
+    "Schablone will man eine angeritzte Linie.":
         "Take a picture, then find: Laserwerk measures every piece\n"
         "in millimetres and shows its centre. The outlines are only\n"
         "a display - they are never burnt.\n"
@@ -1345,5 +1403,9 @@ EN = {
         "good twenty millimetres across and a piece by every measure.\n"
         "Enter how small your own smallest workpiece is.\n"
         "'On every workpiece' makes a separate copy for each one -\n"
-        "every copy stays editable on its own afterwards.",
+        "every copy stays editable on its own afterwards.\n"
+        "'Outline as a template' turns the outlines into a motif to burn:\n"
+        "once onto the base, and the next piece goes to the same spot\n"
+        "without a picture. With cutting values it cuts right through -\n"
+        "for a template you want a scored line.",
 }

@@ -1047,6 +1047,9 @@ class App:
         ttk.Button(wf, text=T("auf alle Werkstücke"), width=26,
                    command=self.motiv_auf_alle).grid(
             row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Button(wf, text=T("Umriss als Schablone"), width=26,
+                   command=self.schablone).grid(
+            row=10, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.lbl_stuecke = ttk.Label(wf, text="", style="Muted.TLabel",
                                      wraplength=360)
         self.lbl_stuecke.grid(row=5, column=0, columnspan=3, sticky="w",
@@ -1077,8 +1080,13 @@ class App:
                    "Maß ein Stück. Trag ein, wie klein dein kleinstes\n"
                    "eigenes Werkstück ist.\n"
                    "'Auf alle Werkstücke' legt für jedes eine eigene Kopie\n"
-                   "an - jede bleibt danach einzeln bearbeitbar."))).grid(
-            row=10, column=0, columnspan=3, sticky="w", pady=(3, 0))
+                   "an - jede bleibt danach einzeln bearbeitbar.\n"
+                   "'Umriss als Schablone' macht aus den Umrissen ein\n"
+                   "Motiv zum Brennen: einmal auf die Unterlage, und das\n"
+                   "nächste Stück kommt ohne Bild an dieselbe Stelle.\n"
+                   "Mit Schnittwerten schneidet es durch - für eine\n"
+                   "Schablone will man eine angeritzte Linie."))).grid(
+            row=11, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self._stueck_stand()
         self._kam_zeigen()
 
@@ -1975,6 +1983,56 @@ class App:
         except (tk.TclError, ValueError):
             return ST.SCHWELLE
 
+    def schablone(self):
+        """Die Umrisse der erkannten Werkstuecke als Motiv zum Brennen.
+
+        Einmal auf die Unterlage gebrannt, kommt jedes weitere Stueck
+        ohne Bild und ohne Erkennung an dieselbe Stelle. Die Kamera ist
+        genauer, aber sie braucht jedesmal eine Aufnahme; eine Schablone
+        braucht nur Augen. Bei fuenfzig Untersetzern ist das der
+        Unterschied zwischen fuenfzig Aufnahmen und einer.
+
+        Die Umrisse liegen schon in Maschinenmillimetern vor - es ist
+        dieselbe Kontur, die auf der Zeichenflaeche zu sehen ist.
+        """
+        if self.grbl.job_running:
+            return
+        if not getattr(self, "stuecke", None):
+            self.lbl_stuecke.configure(text=T("Erst Werkstücke erkennen."))
+            return
+        i = getattr(self, "stueck_aktiv", None)
+        gewaehlt = self.stuecke[i] if (i is not None and
+                                       0 <= i < len(self.stuecke)) else None
+        stuecke = self.stuecke
+        if len(self.stuecke) > 1 and gewaehlt is not None:
+            if not messagebox.askyesno(T("Umriss als Schablone"), T(
+                    "{n} Werkstücke erkannt.\n\n"
+                    "Alle als Schablone nehmen?\n"
+                    "Nein nimmt nur das gewählte.").format(n=len(self.stuecke))):
+                stuecke = [gewaehlt]
+        polys = [{"pts": [(float(a), float(b)) for a, b in s["umriss"]],
+                  "closed": True, "farbe": "#000000"}
+                 for s in stuecke if len(s.get("umriss") or ()) >= 3]
+        if not polys:
+            return
+        xs = [p[0] for pl in polys for p in pl["pts"]]
+        ys = [p[1] for pl in polys for p in pl["pts"]]
+        x0, y0 = min(xs), min(ys)
+        # Auf die linke untere Ecke schieben: so liegen Konturen im
+        # Programm, und die Lage steht danach in den Zahlenfeldern.
+        for pl in polys:
+            pl["pts"] = [(a - x0, b - y0) for a, b in pl["pts"]]
+        name = (T("Schablone, {n} Stück").format(n=len(polys)) if len(polys) > 1
+                else T("Schablone"))
+        if not self._polys_anlegen(polys, name, breite=max(xs) - x0,
+                                   hoehe=max(ys) - y0, x=x0, y=y0):
+            return
+        self._log(T("Schablone aus {n} Umriss(en) angelegt. Achtung: mit "
+                    "Schnittwerten schneidet sie durch - für eine Schablone "
+                    "Leistung und Vorschub auf Anritzen stellen.").format(
+                        n=len(polys)))
+        self._stueck_stand()
+
     def motiv_auf_alle(self):
         """Dasselbe Motiv auf jedes erkannte Werkstueck legen.
 
@@ -2585,6 +2643,33 @@ class App:
             v.trace_add("write", lambda *a: self._gt_vorschau())
         self._gt_vorschau()
 
+        kb = ttk.LabelFrame(f, text=T("Schnittspalt"), padding=6)
+        kb.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+        self.v_ks_b = tk.DoubleVar(value=50.0)
+        self.v_ks_n = tk.IntVar(value=10)
+        self.v_ks_w = tk.DoubleVar(value=0.0)
+        self._row(kb, 0, "Kantenlänge", self.v_ks_b, unit="mm")
+        self._row(kb, 1, "Streifen", self.v_ks_n)
+        ttk.Button(kb, text=T("Schnittspalttest anlegen"),
+                   command=self.schnittspalt_test).grid(
+            row=2, column=0, columnspan=3, sticky="ew", pady=4)
+        self._row(kb, 3, "gemessene Breite", self.v_ks_w, unit="mm")
+        ttk.Button(kb, text=T("Schnittspalt berechnen"),
+                   command=self.schnittspalt_rechnen).grid(
+            row=4, column=0, columnspan=3, sticky="ew", pady=4)
+        self.lbl_ks = ttk.Label(kb, text="", style="Muted.TLabel",
+                                wraplength=360)
+        self.lbl_ks.grid(row=5, column=0, columnspan=3, sticky="w")
+        self._erklaerung(ttk.Label(kb, style="Muted.TLabel", wraplength=360,
+            text=T("Ein Quadrat, in Streifen geschnitten. Die Streifen\n"
+                   "danach dicht zusammenschieben und die Gesamtbreite\n"
+                   "messen - was fehlt, hat der Strahl weggenommen.\n"
+                   "Durch zehn Streifen geteilt wird aus einem Messfehler\n"
+                   "von einem Zwanzigstel Millimeter einer von fünf\n"
+                   "Tausendsteln. An einem einzelnen Schnitt gemessen ist\n"
+                   "der Fehler so groß wie das Gesuchte."))).grid(
+            row=6, column=0, columnspan=3, sticky="w")
+
     # ================================================================ Motiv
     def open_image(self):
         pfade = filedialog.askopenfilenames(
@@ -2796,6 +2881,22 @@ class App:
         except (ValueError, KeyError) as e:
             messagebox.showerror(T("Form"), str(e))
             return False
+        return self._polys_anlegen(polys, anzeige, form=form,
+                                   breite=float(form["b"]),
+                                   hoehe=float(form["h"]))
+
+    def _polys_anlegen(self, polys, anzeige, form=None, breite=None,
+                       hoehe=None, x=None, y=None):
+        """Fertige Konturen als Element anlegen.
+
+        Derselbe Weg, den eine gezeichnete Form nimmt - nur dass die
+        Punkte schon dastehen, statt aus Parametern gebaut zu werden.
+        Damit ist eine Schablone ein ganz normales Element: Vorschau,
+        Werte, Rahmenfahrt und Erzeugen greifen unveraendert.
+        """
+        if self.grbl.job_running:
+            messagebox.showinfo(T("Motiv"), T("Während eines Jobs nicht möglich."))
+            return False
         self._element_sichern()
         self._verwerfen()
         im = V.render_preview(polys)
@@ -2812,12 +2913,18 @@ class App:
         self.lbl_src.configure(text=anzeige)
         self.elemente.append({"anzeige": anzeige, "src": im, "vec": polys,
                               "vec_voll": polys, "vec_bb": self.vec_bb,
-                              "pfad": None, "quelle": None, "form": dict(form)})
+                              "pfad": None, "quelle": None,
+                              "form": dict(form) if form else None})
         self.aktiv = len(self.elemente) - 1
         self._neu_gekoppelt()
         # 1:1, nicht einpassen: ein Rechteck von 80 x 50 soll 80 x 50 sein.
-        self.v_w.set(round(float(form["b"]), 2))
-        self.v_h.set(round(float(form["h"]), 2))
+        x0, y0, x1, y1 = self.vec_bb
+        self.v_w.set(round(float(breite if breite is not None else x1 - x0), 2))
+        self.v_h.set(round(float(hoehe if hoehe is not None else y1 - y0), 2))
+        if x is not None and y is not None:
+            # Eine Schablone gehoert genau dorthin, wo das Werkstueck
+            # liegt - sonst ist sie keine.
+            self._set_box(float(x), float(y))
         self._element_sichern()
         self._liste_auffrischen()
         self._gen_knopf()
@@ -4459,6 +4566,69 @@ class App:
         self._gen_knopf()
         self._draw()
 
+
+    def schnittspalt_test(self):
+        """Ein Quadrat in Streifen schneiden, um den Schnittspalt zu messen.
+
+        Ein einzelner Schnitt gibt die Zahl nicht her: der Spalt liegt in
+        der Groessenordnung eines Zehntelmillimeters, und so genau misst
+        niemand eine einzelne Kante. Zehn Streifen nebeneinandergelegt
+        verzehnfachen ihn, und der Messfehler bleibt derselbe.
+        """
+        try:
+            b = float(self.v_ks_b.get())
+            n = int(self.v_ks_n.get())
+        except (tk.TclError, ValueError):
+            self.lbl_ks.configure(text=T("Zahlenfeld ungültig."))
+            return
+        if b < 5.0 or n < 2 or n > 100:
+            self.lbl_ks.configure(text=T(
+                "Kantenlänge ab 5 mm, zwischen 2 und 100 Streifen."))
+            return
+        polys = [{"pts": [(0.0, 0.0), (b, 0.0), (b, b), (0.0, b)],
+                  "closed": True, "farbe": "#000000"}]
+        for i in range(1, n):
+            x = b * i / n
+            polys.append({"pts": [(x, 0.0), (x, b)], "closed": False,
+                          "farbe": "#000000"})
+        if not self._polys_anlegen(
+                polys, T("Schnittspalttest {b:g} mm, {n} Streifen").format(
+                    b=b, n=n), breite=b, hoehe=b):
+            return
+        self._log(T("Schnittspalttest angelegt: {n} Streifen aus {b:g} mm. "
+                    "Nach dem Schneiden die Streifen dicht zusammenschieben "
+                    "und die Gesamtbreite messen.").format(b=b, n=n))
+
+    def schnittspalt_rechnen(self):
+        """Aus der gemessenen Gesamtbreite den Schnittspalt.
+
+        Das Quadrat verliert an seinem eigenen Umriss einen halben Spalt
+        je Seite, also zusammen einen - und je Innenschnitt einen
+        weiteren. Bei n Streifen sind das n Spalte, und die Rechnung ist
+        deshalb so einfach wie moeglich: fehlende Breite durch Streifen.
+        """
+        try:
+            b = float(self.v_ks_b.get())
+            n = int(self.v_ks_n.get())
+            w = float(self.v_ks_w.get())
+        except (tk.TclError, ValueError):
+            self.lbl_ks.configure(text=T("Zahlenfeld ungültig."))
+            return
+        if n < 2 or w <= 0:
+            self.lbl_ks.configure(text=T("Erst messen, dann rechnen."))
+            return
+        if w >= b:
+            self.lbl_ks.configure(text=T(
+                "Die Streifen können nicht breiter sein als das Quadrat - "
+                "stimmen Kantenlänge und Streifenzahl?"))
+            return
+        k = (b - w) / float(n)
+        text = T("Schnittspalt {k:.3f} mm  ({b:g} − {w:g} = {d:.2f} mm "
+                 "auf {n} Streifen)").format(k=k, b=b, w=w, d=b - w, n=n)
+        self.lbl_ks.configure(text=text)
+        self._log(text)
+        self._log(T("Gilt für dieses Material mit diesen Werten. Laserwerk "
+                    "rechnet damit noch nichts - der Wert ist zum Notieren."))
 
     def materialtest_anlegen(self):
         """Ein Materialtest-Element anlegen - schiebbar wie ein Motiv."""

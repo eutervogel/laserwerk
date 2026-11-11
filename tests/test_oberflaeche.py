@@ -4597,6 +4597,64 @@ class WerkstueckeImKamerareiter(Grundlage):
             d = (float(e["v_rot"]) - s["winkel"] + 180.0) % 360.0 - 180.0
             self.assertAlmostEqual(d, 0.0, delta=0.2)
 
+    # -------------------------------------------------------- Schablone
+    def test_die_schablone_liegt_wo_das_werkstueck_liegt(self):
+        """Eine Schablone, die woanders liegt, ist keine."""
+        self.scheiben()
+        self.app.stueck_aktiv = 1
+        s = self.app.stuecke[1]
+        self.L.messagebox.askyesno = lambda t, m: False   # nur das gewählte
+        self.app.schablone()
+        x, y, b, h = self.app._box()
+        self.assertAlmostEqual(x + b / 2.0, s["mitte"][0], delta=0.6)
+        self.assertAlmostEqual(y + h / 2.0, s["mitte"][1], delta=0.6)
+        self.assertAlmostEqual(b, s["breite"], delta=0.6)
+
+    def test_sie_ist_ein_ganz_normales_element(self):
+        """Kein Sonderweg: Vorschau, Werte, Rahmenfahrt und Erzeugen
+        sollen unveraendert greifen."""
+        self.scheiben()
+        self.L.messagebox.askyesno = lambda t, m: False
+        self.app.schablone()
+        e = self.app.elemente[self.app.aktiv]
+        self.assertTrue(e["vec"])
+        self.assertEqual(self.app.v_job.get(), "schnitt")
+        self.assertIn("Schablone", e["anzeige"])
+
+    def test_alle_stuecke_in_einer_schablone(self):
+        self.scheiben()
+        self.L.messagebox.askyesno = lambda t, m: True
+        self.app.schablone()
+        e = self.app.elemente[self.app.aktiv]
+        self.assertEqual(len(e["vec"]), 2)
+        # Sie umspannt beide Stücke.
+        x, y, b, h = self.app._box()
+        for s in self.app.stuecke:
+            self.assertGreater(s["mitte"][0], x - 1)
+            self.assertLess(s["mitte"][0], x + b + 1)
+
+    def test_die_umrisse_bleiben_daneben_stehen(self):
+        """Die Schablone ist eine Kopie - die Erkennung behaelt ihre
+        Umrisse, sonst waere nach dem Anlegen nichts mehr zu fangen."""
+        self.scheiben()
+        self.L.messagebox.askyesno = lambda t, m: True
+        self.app.schablone()
+        self.assertEqual(len(self.app.stuecke), 2)
+
+    def test_ohne_werkstuecke_sagt_er_das(self):
+        self.bett([])
+        self.app.stuecke_erkennen()
+        self.app.schablone()
+        self.assertIn("erkennen", self.app.lbl_stuecke.cget("text"))
+        self.assertEqual(self.app.elemente, [])
+
+    def test_sie_warnt_vor_den_schnittwerten(self):
+        """Mit Schnittwerten schneidet sie durch die Unterlage."""
+        self.scheiben()
+        self.L.messagebox.askyesno = lambda t, m: True
+        self.app.schablone()
+        self.assertIn("schneidet", self.app.log.get("1.0", "end"))
+
     # ------------------------------------------------------------ Kopf
     def test_der_kopf_wird_gesperrt(self):
         self.app.head = (150.0, 150.0)
@@ -4673,6 +4731,74 @@ class DerAuftragLiegtAufDerPlatte(Grundlage):
         self.app._event("jobend", ("Gravur", "steht"))
         self.assertIn("steht", self.app.lbl_prog.cget("text"))
         self.assertTrue(any(art == "w" for art, _ in self.gezeigt))
+
+
+class DerSchnittspaltWirdGemessen(Grundlage):
+    """Ein einzelner Schnitt gibt die Zahl nicht her.
+
+    Der Spalt liegt bei einem Zehntelmillimeter, und so genau misst
+    niemand eine einzelne Kante mit der Schieblehre. Zehn Streifen
+    nebeneinander verzehnfachen ihn, der Messfehler bleibt derselbe.
+    """
+
+    def test_der_test_wird_ein_ganz_normales_element(self):
+        self.app.v_ks_b.set(50.0)
+        self.app.v_ks_n.set(10)
+        self.app.schnittspalt_test()
+        e = self.app.elemente[self.app.aktiv]
+        # Ein Quadrat und neun Innenschnitte ergeben zehn Streifen.
+        self.assertEqual(len(e["vec"]), 10)
+        self.assertEqual(self.app.v_job.get(), "schnitt")
+        self.assertAlmostEqual(float(self.app.v_w.get()), 50.0, places=2)
+
+    def test_die_schnitte_liegen_gleichmaessig(self):
+        self.app.v_ks_b.set(40.0)
+        self.app.v_ks_n.set(4)
+        self.app.schnittspalt_test()
+        linien = [pl for pl in self.app.elemente[self.app.aktiv]["vec"]
+                  if not pl["closed"]]
+        self.assertEqual([round(pl["pts"][0][0], 3) for pl in linien],
+                         [10.0, 20.0, 30.0])
+
+    def test_unsinnige_masse_legen_nichts_an(self):
+        for b, n in ((2.0, 10), (50.0, 1), (50.0, 500)):
+            self.app.v_ks_b.set(b)
+            self.app.v_ks_n.set(n)
+            self.app.schnittspalt_test()
+        self.assertEqual(self.app.elemente, [])
+
+    def test_aus_der_fehlenden_breite_wird_der_spalt(self):
+        self.app.v_ks_b.set(50.0)
+        self.app.v_ks_n.set(10)
+        self.app.v_ks_w.set(49.0)
+        self.app.schnittspalt_rechnen()
+        # 1,0 mm fehlen auf zehn Streifen -> 0,1 mm je Schnitt
+        self.assertIn("0.100", self.app.lbl_ks.cget("text").replace(",", "."))
+
+    def test_ohne_messung_rechnet_er_nicht(self):
+        self.app.v_ks_b.set(50.0)
+        self.app.v_ks_n.set(10)
+        self.app.v_ks_w.set(0.0)
+        self.app.schnittspalt_rechnen()
+        self.assertIn("messen", self.app.lbl_ks.cget("text"))
+
+    def test_breiter_als_das_quadrat_kann_nicht_sein(self):
+        """Dann stimmt etwas an den Eingaben - und eine Zahl, die aus
+        falschen Eingaben faellt, ist schlimmer als keine."""
+        self.app.v_ks_b.set(50.0)
+        self.app.v_ks_n.set(10)
+        self.app.v_ks_w.set(51.0)
+        self.app.schnittspalt_rechnen()
+        self.assertIn("nicht breiter", self.app.lbl_ks.cget("text"))
+
+    def test_er_sagt_dass_laserwerk_damit_nichts_rechnet(self):
+        """Eine Zahl, von der man glaubt, sie wirke irgendwo, ist eine
+        Falle - solange die Korrektur nicht gebaut ist."""
+        self.app.v_ks_b.set(50.0)
+        self.app.v_ks_n.set(10)
+        self.app.v_ks_w.set(49.0)
+        self.app.schnittspalt_rechnen()
+        self.assertIn("noch nichts", self.app.log.get("1.0", "end"))
 
 
 class GeladenerGcodeIstAuchGcode(Grundlage):

@@ -3685,6 +3685,76 @@ class EichenImKamerareiter(Grundlage):
             time.sleep(0.01)
         self.fail("die Hintergrundarbeit wurde nicht fertig")
 
+    # ----------------------------------------------------- Nachversatz
+    def test_der_nachversatz_verschiebt_bild_und_auftrag_zugleich(self):
+        """Er gehoert in die Eichung, nicht in den G-Code.
+
+        Ein Versatz, der nur den Auftrag verschiebt, waere im naechsten
+        Kamerabild wieder da: das Werkstueck saesse scheinbar woanders,
+        und beim naechsten Platzieren finge es von vorn an.
+        """
+        self.app.cfg["kamera"] = dict(KameraUnterDerZeichenflaeche.EICHUNG)
+        d = self.app._kam_eichung()
+        punkt = [[1200.0, 900.0]]
+        vorher = self.L.KAM.bild_nach_maschine(punkt, d)[0]
+        self.app.v_nach_x.set(0.46)
+        self.app.v_nach_y.set(0.74)
+        self.app._nachversatz_sichern()
+        nachher = self.L.KAM.bild_nach_maschine(punkt, self.app._kam_eichung())[0]
+        self.assertAlmostEqual(nachher[0] - vorher[0], 0.46, places=6)
+        self.assertAlmostEqual(nachher[1] - vorher[1], 0.74, places=6)
+        # und zurueck: derselbe Maschinenpunkt landet wieder am selben Bildpunkt
+        zurueck = self.L.KAM.maschine_nach_bild([nachher],
+                                                self.app._kam_eichung())[0]
+        self.assertAlmostEqual(zurueck[0], 1200.0, places=4)
+        self.assertAlmostEqual(zurueck[1], 900.0, places=4)
+
+    def test_null_nimmt_ihn_wieder_heraus(self):
+        self.app.cfg["kamera"] = dict(KameraUnterDerZeichenflaeche.EICHUNG)
+        self.app.v_nach_x.set(0.5)
+        self.app.v_nach_y.set(-0.3)
+        self.app._nachversatz_sichern()
+        self.assertIn("nachversatz", self.app._kam_eichung())
+        self.app.v_nach_x.set(0.0)
+        self.app.v_nach_y.set(0.0)
+        self.app._nachversatz_sichern()
+        self.assertNotIn("nachversatz", self.app._kam_eichung())
+
+    def test_er_gehoert_zur_maschine_und_kommt_beim_wechseln_mit(self):
+        self.app.cfg["kamera"] = dict(KameraUnterDerZeichenflaeche.EICHUNG,
+                                      nachversatz=[0.3, -0.2])
+        self.app._kam_zeigen()
+        self.assertAlmostEqual(float(self.app.v_nach_x.get()), 0.3, places=3)
+        self.assertAlmostEqual(float(self.app.v_nach_y.get()), -0.2, places=3)
+
+    def test_ohne_eichung_wird_nichts_geschrieben(self):
+        self.app.cfg.pop("kamera", None)
+        self.app.v_nach_x.set(1.0)
+        self.app._nachversatz_sichern()        # darf nicht werfen
+        self.assertFalse(self.app._kam_eichung())
+
+    # ------------------------------------------------------ Rasterweite
+    def test_mehr_kreuze_geben_mehr_punkte(self):
+        self.app.v_eich_n.set(5)
+        self.assertEqual(len(self.app._eich_punkte()), 25)
+        self.app.v_eich_n.set(7)
+        self.assertEqual(len(self.app._eich_punkte()), 49)
+
+    def test_die_zahl_bleibt_im_rahmen(self):
+        """Unter drei Kreuzen je Achse ist das Modell nicht zu stuetzen,
+        ueber neun wird das Brennen laenger als die Geduld."""
+        for wert, soll in ((1, 3), (3, 3), (9, 9), (20, 9)):
+            self.app.v_eich_n.set(wert)
+            self.assertEqual(self.app._eich_n(), soll)
+
+    def test_das_dichtere_raster_bleibt_auf_dem_bett(self):
+        self.app.v_eich_n.set(9)
+        for x, y in self.app._eich_punkte():
+            self.assertGreaterEqual(x, 0.0)
+            self.assertGreaterEqual(y, 0.0)
+            self.assertLessEqual(x, float(self.app.cfg["x_max"]))
+            self.assertLessEqual(y, float(self.app.cfg["y_max"]))
+
     # ---------------------------------------------------------- Raster
     def test_das_raster_wird_ein_ganz_normaler_job(self):
         """Kein eigener Brennweg: derselbe Knopf, dieselben Warnungen,

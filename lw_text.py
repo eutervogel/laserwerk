@@ -486,8 +486,8 @@ EN = {
     'Eichen': 'Calibrate',
     'Raster erzeugen': 'Make grid',
     'Prüfen': 'Check',
-    'Die Maschine ist das bessere Lineal als ein Ausdruck:\nsie brennt ein Raster aus Kreuzen, von dem sie auf\nHundertstel weiß, wo es liegt.\nEtwas Flaches und Helles einlegen und ein Bild holen -\ndann liegt die Unterlage unter dem blauen Raster, und\nman sieht vorher, ob sie reicht. Brennen, wieder ein\nBild holen, eichen. Prüfen sagt an einem frischen Bild,\nwas die Eichung noch taugt.':
-        'The machine is a better ruler than a printout:\nit burns a grid of crosses and knows to a hundredth\nof a millimetre where it put them.\nLay in something flat and light and take a picture -\nthen the support lies under the blue grid and you see\nbeforehand whether it reaches. Burn, take another\npicture, calibrate. Check tells you on a fresh picture\nwhat the calibration is still worth.',
+    'Die Maschine ist das bessere Lineal als ein Ausdruck:\nsie brennt ein Raster aus Kreuzen, von dem sie auf\nHundertstel weiß, wo es liegt.\nEtwas Flaches und Helles einlegen und ein Bild holen -\ndann liegt die Unterlage unter dem blauen Raster, und\nman sieht vorher, ob sie reicht. Brennen, wieder ein\nBild holen, eichen. Prüfen sagt an einem frischen Bild,\nwas die Eichung noch taugt.\nMehr Kreuze stützen das Modell besser, dauern aber\nlänger und brauchen eine größere Unterlage.\nDer Nachversatz ist der Rest, den die Eichung an\ndeiner Arbeitsstelle übrig lässt: etwas brennen, Bild\nholen, nachsehen wie weit es danebenliegt, Differenz\nhier eintragen. Er gilt für Bild und Auftrag zugleich.':
+        'The machine is a better ruler than a printout:\nit burns a grid of crosses and knows to a hundredth\nof a millimetre where it put them.\nLay in something flat and light and take a picture -\nthen the support lies under the blue grid and you see\nbeforehand whether it reaches. Burn, take another\npicture, calibrate. Check tells you on a fresh picture\nwhat the calibration is still worth.\nMore crosses support the model better, but take longer\nand need a larger sheet underneath.\nThe fine offset is the remainder the calibration leaves\nat the spot where you work: burn something, take a\npicture, see how far off it sits, enter the difference\nhere. It applies to the picture and the job alike.',
     'Das blau gezeichnete Raster wird ein ganz normaler Job: OK legt ihn nur bereit, gebrannt wird er wie jeder andere mit Start.\n\nVorher etwas Flaches und Helles einlegen, das die blaue Fläche deckt - {b:.0f} x {h:.0f} mm, Papier oder dünne Pappe. Der Laser brennt {n} Kreuze mit S{s} bei F{f}; das markiert Papier und brennt nicht durch. Auf Holz wäre es fünfmal zu viel.\n\nDie Kreuze liegen {d:.1f} mm über dem Bett (Materialstärke {m:.1f} + Unterlage {u:.1f}). Stimmt das nicht, erst im Reiter Material ändern.\n\nDer Nullpunkt muss dabei dort stehen, wo er auch beim Arbeiten steht - die Eichung gilt für genau diese Koordinaten.':
         'The grid drawn in blue becomes an ordinary job: OK only makes it ready, it is burnt like any other with Start.\n\nBefore that, lay in something flat and light that covers the blue area - {b:.0f} x {h:.0f} mm, paper or thin card. The laser burns {n} crosses with S{s} at F{f}; that marks paper and does not burn through. On wood it would be five times too much.\n\nThe crosses will sit {d:.1f} mm above the bed (material thickness {m:.1f} + support {u:.1f}). If that is wrong, change it in the Material tab first.\n\nThe zero point must sit where it sits when you work - the calibration holds for exactly those coordinates.',
     'Eichraster erzeugt: {n} Kreuze über {b:.0f} x {h:.0f} mm. Brennen, dann ein Bild holen und auf Eichen drücken.':
@@ -1323,6 +1323,12 @@ EN = {
         "error of a twentieth of a millimetre becomes one of five\n"
         "thousandths. Measured on a single cut the error is as large\n"
         "as what you are looking for.",
+    "Kreuze je Achse": "Crosses per axis",
+    "{k} Kreuze": "{k} crosses",
+    "Nachversatz X": "Fine offset X",
+    "Nachversatz Y": "Fine offset Y",
+    "Nachversatz {x:+.2f} / {y:+.2f} mm übernommen.":
+        "Fine offset {x:+.2f} / {y:+.2f} mm applied.",
     "entfernen": "remove",
     "Rechteck ziehen": "Drag rectangle",
     "Kreis ziehen": "Drag circle",

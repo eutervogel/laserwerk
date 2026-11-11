@@ -265,8 +265,31 @@ def bild_nach_maschine(punkte, eichung):
     ideal = entzerren_punkte(punkte, eichung)
     ebene = _anwenden(np.linalg.inv(np.asarray(eichung["homographie"])), ideal)
     R = _dreh(eichung.get("drehung", 0.0))
-    return (eichung.get("massstab", 1.0) * (ebene @ R.T)
-            + np.asarray(eichung.get("versatz", (0.0, 0.0)), dtype=float))
+    return eichung.get("massstab", 1.0) * (ebene @ R.T) + versatz(eichung)
+
+
+def versatz(eichung):
+    """Die Verschiebung zwischen Eichebene und Maschine, in Millimetern.
+
+    Dazu kommt der Nachversatz: was beim Eichen uebrigblieb und was die
+    Maschine an dieser Stelle danebenfaehrt, zusammen gemessen. Die
+    Eichung mittelt ueber das ganze Bett und laesst an jeder einzelnen
+    Stelle einen Rest - bei 25 Kreuzen 0,45 mm im Mittel und knapp einen
+    Millimeter im schlimmsten Fall. Wer einen Schnitt mit einem
+    Millimeter Luft setzen will, dem ist das zu viel.
+
+    Gemessen wird er dort, wo gearbeitet wird: etwas brennen, ein Bild
+    holen, nachsehen wie weit es danebenliegt. Dieser Rest faellt dann
+    heraus - und zwar aus beiden Richtungen zugleich, weil beide hier
+    durchgehen. Das ist der Grund, warum er hier steht und nicht im
+    erzeugten G-Code: ein Versatz, der nur den Auftrag verschiebt, waere
+    im naechsten Kamerabild wieder da.
+    """
+    t = np.asarray(eichung.get("versatz", (0.0, 0.0)), dtype=float)
+    n = eichung.get("nachversatz")
+    if n is not None:
+        t = t + np.asarray(n, dtype=float)
+    return t
 
 
 def _nadir(eichung):
@@ -286,8 +309,7 @@ def maschine_nach_bild(punkte, eichung, dicke=0.0):
     p = np.atleast_2d(np.asarray(punkte, dtype=float))
     R = _dreh(eichung.get("drehung", 0.0))
     s = eichung.get("massstab", 1.0) or 1.0
-    t = np.asarray(eichung.get("versatz", (0.0, 0.0)), dtype=float)
-    ebene = ((p - t) / s) @ R
+    ebene = ((p - versatz(eichung)) / s) @ R
     h = float(eichung.get("hoehe", 0.0) or 0.0)
     if dicke and h > dicke:
         n = _nadir(eichung)

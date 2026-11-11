@@ -956,9 +956,36 @@ class App:
                    command=self.eichen).grid(row=0, column=1, padx=4)
         ttk.Button(ef, text=T("Prüfen"), width=11,
                    command=self.eichung_pruefen).grid(row=0, column=2)
+        ttk.Label(ef, text=T("Kreuze je Achse")).grid(
+            row=1, column=0, sticky="w", pady=(4, 0))
+        self.v_eich_n = tk.IntVar(
+            value=int(self.cfg.get("eich_kreuze", self.EICH_N)))
+        sp_n = ttk.Spinbox(ef, from_=3, to=9, increment=1, width=5,
+                           textvariable=self.v_eich_n,
+                           command=self._eich_n_sichern)
+        sp_n.grid(row=1, column=1, sticky="w", padx=4, pady=(4, 0))
+        sp_n.bind("<Return>", lambda e: self._eich_n_sichern())
+        sp_n.bind("<FocusOut>", lambda e: self._eich_n_sichern())
+        self.lbl_eich_n = ttk.Label(ef, text="", style="Muted.TLabel")
+        self.lbl_eich_n.grid(row=1, column=2, sticky="w", pady=(4, 0))
+
+        ttk.Label(ef, text=T("Nachversatz X")).grid(
+            row=2, column=0, sticky="w", pady=(4, 0))
+        self.v_nach_x = tk.DoubleVar(value=0.0)
+        self.v_nach_y = tk.DoubleVar(value=0.0)
+        for i, (v, zeile) in enumerate(((self.v_nach_x, 2), (self.v_nach_y, 3))):
+            sp = ttk.Spinbox(ef, from_=-20.0, to=20.0, increment=0.05, width=7,
+                             textvariable=v, command=self._nachversatz_sichern)
+            sp.grid(row=zeile, column=1, sticky="w", padx=4, pady=(4, 0))
+            sp.bind("<Return>", lambda e: self._nachversatz_sichern())
+            sp.bind("<FocusOut>", lambda e: self._nachversatz_sichern())
+            ttk.Label(ef, text="mm").grid(row=zeile, column=2, sticky="w",
+                                          pady=(4, 0))
+        ttk.Label(ef, text=T("Nachversatz Y")).grid(
+            row=3, column=0, sticky="w", pady=(4, 0))
         self.lbl_eich = ttk.Label(ef, text="", style="Muted.TLabel",
                                   wraplength=360)
-        self.lbl_eich.grid(row=1, column=0, columnspan=3, sticky="w",
+        self.lbl_eich.grid(row=4, column=0, columnspan=3, sticky="w",
                            pady=(3, 0))
         self._erklaerung(ttk.Label(ef, style="Muted.TLabel", wraplength=360,
             text=T("Die Maschine ist das bessere Lineal als ein Ausdruck:\n"
@@ -968,8 +995,14 @@ class App:
                    "dann liegt die Unterlage unter dem blauen Raster, und\n"
                    "man sieht vorher, ob sie reicht. Brennen, wieder ein\n"
                    "Bild holen, eichen. Prüfen sagt an einem frischen Bild,\n"
-                   "was die Eichung noch taugt."))
-            ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(3, 0))
+                   "was die Eichung noch taugt.\n"
+                   "Mehr Kreuze stützen das Modell besser, dauern aber\n"
+                   "länger und brauchen eine größere Unterlage.\n"
+                   "Der Nachversatz ist der Rest, den die Eichung an\n"
+                   "deiner Arbeitsstelle übrig lässt: etwas brennen, Bild\n"
+                   "holen, nachsehen wie weit es danebenliegt, Differenz\n"
+                   "hier eintragen. Er gilt für Bild und Auftrag zugleich."))
+            ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(3, 0))
 
         wf = ttk.LabelFrame(f, text=T("Werkstücke"), padding=4)
         wf.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -1141,6 +1174,16 @@ class App:
         d = self._kam_eichung()
         self.lbl_kam.configure(text=KAM.eichung_lesbar(d) if d
                                else T("Noch keine Eichung für diese Maschine."))
+        # Der Nachversatz gehoert zur Eichung und damit zur Maschine -
+        # beim Wechseln muss er mitkommen, sonst rechnet die eine mit dem
+        # Rest der anderen.
+        if getattr(self, "v_nach_x", None) is not None:
+            n = (d or {}).get("nachversatz") or (0.0, 0.0)
+            self.v_nach_x.set(round(float(n[0]), 3))
+            self.v_nach_y.set(round(float(n[1]), 3))
+        if getattr(self, "lbl_eich_n", None) is not None:
+            self.lbl_eich_n.configure(
+                text=T("{k} Kreuze").format(k=self._eich_n() ** 2))
 
     def _kam_parken_sichern(self):
         self.cfg["kam_parken"] = bool(self.v_kam_parken.get())
@@ -1246,10 +1289,59 @@ class App:
     EICH_N = 5                 # Kreuze je Achse
     EICH_DATEI = "eichraster.nc"
 
+    def _eich_n(self):
+        """Wie viele Kreuze je Achse - zwischen 3 und 9."""
+        try:
+            return max(3, min(9, int(self.v_eich_n.get())))
+        except (tk.TclError, ValueError, AttributeError):
+            return self.EICH_N
+
+    def _eich_n_sichern(self):
+        n = self._eich_n()
+        self.cfg["eich_kreuze"] = n
+        P.save_config(self.cfg)
+        if getattr(self, "lbl_eich_n", None) is not None:
+            self.lbl_eich_n.configure(
+                text=T("{k} Kreuze").format(k=n * n))
+        if getattr(self, "eich_umriss", None):
+            self.eich_umriss = self._eich_punkte()
+            self._draw()
+
+    def _nachversatz_sichern(self):
+        """Den Nachversatz in die Eichung schreiben.
+
+        Er gehoert dorthin und nicht in den erzeugten G-Code: ein
+        Versatz, der nur den Auftrag verschiebt, waere im naechsten
+        Kamerabild wieder da - das Werkstueck saesse dann scheinbar
+        woanders, und beim naechsten Platzieren faengt es von vorn an.
+        In der Eichung wirkt er auf beide Richtungen zugleich.
+        """
+        d = self._kam_eichung()
+        if not d:
+            return
+        try:
+            x = max(-20.0, min(20.0, float(self.v_nach_x.get())))
+            y = max(-20.0, min(20.0, float(self.v_nach_y.get())))
+        except (tk.TclError, ValueError):
+            return
+        alt = list(d.get("nachversatz") or (0.0, 0.0))
+        if abs(alt[0] - x) < 1e-9 and abs(alt[1] - y) < 1e-9:
+            return
+        if x or y:
+            d["nachversatz"] = [round(x, 3), round(y, 3)]
+        else:
+            d.pop("nachversatz", None)
+        self._maschine_sichern()
+        self._log(T("Nachversatz {x:+.2f} / {y:+.2f} mm übernommen.").format(
+            x=x, y=y))
+        if getattr(self, "kam_roh", None) is not None:
+            self._kam_bett_rechnen()
+            self._kamera_zeigen()
+
     def _eich_punkte(self):
         return EI.raster_punkte(float(self.cfg["x_max"]),
                                 float(self.cfg["y_max"]),
-                                self.EICH_RAND, self.EICH_N)
+                                self.EICH_RAND, self._eich_n())
 
     def _eich_dicke(self):
         """Wie hoch die Kreuze ueber dem nackten Bett liegen.
@@ -1516,7 +1608,7 @@ class App:
         fuer eine Homographie; die Verzeichnung fehlt darin, aber als
         Suchfenster ist es genau genug.
         """
-        n = self.EICH_N
+        n = self._eich_n()
         ziele = [punkte[0], punkte[n - 1], punkte[-n], punkte[-1]]
         top, gefunden = self._eich_ecken_fenster(roh, ziele)
         top.grab_set()
